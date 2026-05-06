@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Swarnim Bagre</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="icon" href="../assets/favicon.svg" />
+<link rel="stylesheet" href="../colors_and_type.css" />
+<style>
+  html, body { margin: 0; padding: 0; background: var(--bg); min-height: 100vh; }
+  #root { min-height: 100vh; }
+  button:focus-visible, a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+  /* Slim scrollbar that respects the warm dark palette */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 0; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--hairline-2); }
+  /* Hidden scrollbar (still scrollable) — used by the home projects scroller */
+  .no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+  .no-scrollbar::-webkit-scrollbar { width: 0; height: 0; display: none; }
+</style>
+</head>
+<body>
+  <template id="__bundler_thumbnail" data-bg-color="#1C1712">
+    <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+      <rect width="1200" height="800" fill="#1C1712"/>
+      <text x="120" y="430"
+            font-family="Georgia, serif"
+            font-style="italic"
+            font-weight="300"
+            font-size="220"
+            letter-spacing="-6"
+            fill="#F4ECDC">
+        sb.
+      </text>
+      <line x1="120" y1="500" x2="320" y2="500" stroke="#C9A84C" stroke-width="3"/>
+    </svg>
+  </template>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="components.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="pages/Home.jsx"></script>
+  <script type="text/babel" src="pages/Projects.jsx"></script>
+  <script type="text/babel" src="pages/Writing.jsx"></script>
+  <script type="text/babel" src="pages/Other.jsx"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function App() {
+      // Light hash-routing so refresh + deep links work.
+      const valid = ["home", "projects", "writing", "other"];
+      const fromHash = () => {
+        const h = (window.location.hash || "").replace(/^#\/?/, "");
+        return valid.includes(h) ? h : "home";
+      };
+      const [view, setView] = useState(fromHash());
+
+      useEffect(() => {
+        const onHash = () => setView(fromHash());
+        window.addEventListener("hashchange", onHash);
+        return () => window.removeEventListener("hashchange", onHash);
+      }, []);
+
+      const onNav = (id) => {
+        const next = valid.includes(id) ? id : "home";
+        setView(next);
+        const target = next === "home" ? "" : "#/" + next;
+        if (window.location.hash !== target) {
+          history.pushState(null, "", target || window.location.pathname);
+        }
+        window.scrollTo({ top: 0, behavior: "instant" });
+      };
+
+      const screenLabels = {
+        home: "01 Home", projects: "02 Projects", writing: "03 Writing",
+        other: "04 Other",
+      };
+
+      return (
+        <div data-screen-label={screenLabels[view]}>
+          {view === "home"     && <Home     onNav={onNav} />}
+          {view === "projects" && <Projects onNav={onNav} />}
+          {view === "writing"  && <Writing  onNav={onNav} />}
+          {view === "other"    && <Other    onNav={onNav} />}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
