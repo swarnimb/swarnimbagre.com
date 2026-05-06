@@ -34,3 +34,16 @@ yarn-error.log*
 docs/design-source/**/*.bundled.html
 docs/design-source/personal-site-web/project/Swarnim Bagre.html
 docs/design-source/personal-site-web/project/Swarnim Bagre - Personal Site.html
+
+# Claude framework — never commit
+CLAUDE.md
+manifest.md
+profile.md
+content/
+docs/testing-setup.md
+docs/session-log.md
+docs/session-handoff.md
+docs/framework-issues.md
+
+# Environment variables — .env.example is allowed (no real values)
+# .env, .env.local, .env.*.local already excluded above
