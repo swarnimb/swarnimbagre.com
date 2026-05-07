@@ -1,0 +1,173 @@
+/* ============================================================
+   Swarnim Bagre — Colors & Type
+   Dark mode only. Warm, editorial, opinionated.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* ---------- Color tokens ---------- */
+  --bg:            #1C1712;   /* page background — very dark warm brown */
+  --surface:       #252018;   /* cards, raised surfaces */
+  --surface-2:     #2E2820;   /* hover / pressed surface */
+  --hairline:      #3A3328;   /* borders, dividers */
+  --hairline-2:    #4A4135;   /* stronger border on hover */
+
+  --fg:            #E8E0D0;   /* body text — warm off-white */
+  --fg-strong:     #F4ECDC;   /* headlines, max emphasis */
+  --fg-muted:      #7A7060;   /* dates, metadata, labels */
+  --fg-faint:      #5A5246;   /* very low emphasis */
+
+  --accent:        #C9A84C;   /* aged gold / mustard */
+  --accent-soft:   #8C7530;   /* darker gold, used sparingly */
+  --accent-glow:   rgba(201, 168, 76, 0.18);
+
+  /* Semantic colors — same warm family, no blues */
+  --positive:      #8AA361;   /* sage */
+  --warning:       #C9A84C;   /* same gold as accent */
+  --danger:        #B85C3C;   /* burnt sienna */
+
+  /* ---------- Type families ---------- */
+  --font-serif:    "Fraunces", "Iowan Old Style", "Charter", Georgia, serif;
+  --font-sans:     "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono:     "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* ---------- Type scale (semantic) ---------- */
+  /* Display & headlines lean into Fraunces with optical size + soft */
+  --display:       400 clamp(56px, 9vw, 128px) / 0.95 var(--font-serif);
+  --display-soft:  300 clamp(56px, 9vw, 128px) / 0.95 var(--font-serif);
+  --h1:            400 clamp(40px, 5vw, 64px) / 1.05 var(--font-serif);
+  --h2:            500 32px / 1.15 var(--font-serif);
+  --h3:            600 22px / 1.3 var(--font-serif);
+  --h4:            600 18px / 1.35 var(--font-sans);
+
+  --body-lg:       400 19px / 1.55 var(--font-sans);
+  --body:          400 16px / 1.6 var(--font-sans);
+  --body-sm:       400 14px / 1.5 var(--font-sans);
+
+  --meta:          500 12px / 1.4 var(--font-mono);    /* dates, tags */
+  --meta-sm:       500 11px / 1.3 var(--font-mono);
+  --code:          400 14px / 1.55 var(--font-mono);
+
+  /* ---------- Spacing ---------- */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  24px;
+  --space-6:  32px;
+  --space-7:  48px;
+  --space-8:  64px;
+  --space-9:  96px;
+  --space-10: 144px;
+
+  /* ---------- Borders / radii ---------- */
+  --radius-0: 0;
+  --radius-1: 2px;
+  --radius-2: 4px;        /* default — small, restrained */
+  --border:   1px solid var(--hairline);
+  --border-strong: 1px solid var(--hairline-2);
+
+  /* ---------- Motion ---------- */
+  --ease:        cubic-bezier(.2, .7, .2, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --dur-fast:   140ms;
+  --dur:        220ms;
+  --dur-slow:   420ms;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+html, body {
+  background: var(--bg);
+  color: var(--fg);
+  font: var(--body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/* ============================================================
+   Semantic element styles
+   Use these as defaults; override with utility classes if needed.
+   ============================================================ */
+.display      { font: var(--display); color: var(--fg-strong); letter-spacing: -0.02em; }
+.display-soft { font: var(--display-soft); color: var(--fg-strong); letter-spacing: -0.025em; font-variation-settings: "SOFT" 100, "WONK" 1; }
+
+h1, .h1 { font: var(--h1); color: var(--fg-strong); letter-spacing: -0.015em; margin: 0; }
+h2, .h2 { font: var(--h2); color: var(--fg-strong); letter-spacing: -0.01em; margin: 0; }
+h3, .h3 { font: var(--h3); color: var(--fg-strong); margin: 0; }
+h4, .h4 { font: var(--h4); color: var(--fg-strong); margin: 0; }
+
+p, .body  { font: var(--body); color: var(--fg); margin: 0; text-wrap: pretty; }
+.body-lg  { font: var(--body-lg); color: var(--fg); text-wrap: pretty; }
+.body-sm  { font: var(--body-sm); color: var(--fg); }
+
+.meta     { font: var(--meta); color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.meta-sm  { font: var(--meta-sm); color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.1em; }
+code, .code {
+  font: var(--code);
+  color: var(--fg);
+  background: var(--surface);
+  padding: 1px 6px;
+  border-radius: var(--radius-2);
+}
+
+/* ============================================================
+   Links — accent gold, never blue.
+   The signature interaction: underline draws in left-to-right.
+   ============================================================ */
+a, .link {
+  color: var(--fg-strong);
+  text-decoration: none;
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  background-size: 0% 1px;
+  transition: background-size var(--dur) var(--ease), color var(--dur) var(--ease);
+  padding-bottom: 2px;
+}
+a:hover, .link:hover {
+  background-size: 100% 1px;
+  color: var(--accent);
+}
+
+/* Nav variant — slightly thicker underline */
+.nav-link {
+  color: var(--fg);
+  text-decoration: none;
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  background-size: 0% 2px;
+  transition: background-size var(--dur) var(--ease), color var(--dur) var(--ease);
+  padding-bottom: 4px;
+  font: var(--body);
+}
+.nav-link:hover, .nav-link[aria-current="page"] {
+  background-size: 100% 2px;
+  color: var(--accent);
+}
+
+/* ============================================================
+   Surfaces — flat. No shadows, no gradients.
+   ============================================================ */
+.card {
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--radius-2);
+  padding: var(--space-5);
+  transition: border-color var(--dur) var(--ease);
+}
+.card:hover { border-color: var(--hairline-2); }
+
+hr, .rule {
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  margin: var(--space-6) 0;
+}

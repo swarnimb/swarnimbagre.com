@@ -17,11 +17,11 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 **Functions to implement:** [setup task]
 
 **Acceptance criteria:**
-- [ ] Vercel project created and linked to the GitHub repo `swarnimbagre.com`. Production branch set to `main`. (DS-05: documented in README setup section once code lands.)
-- [ ] Supabase free-tier project created. Project ref recorded in a private note (not in repo — SEC-01).
-- [ ] DNS plan: apex `swarnimbagre.com` and `www` subdomain configured to point at Vercel. Action recorded but actual cutover deferred until Phase 4 (T39).
-- [ ] OpenClaw shared-secret coordination: noted as deferred to Phase 3 (T29). No secret generated yet.
-- [ ] No code commits at this stage. Repo remains empty (or has only `.gitignore`, README placeholder, and existing `docs/`).
+- [x] Vercel project created and linked to the GitHub repo `swarnimbagre.com`. Production branch set to `main`. (DS-05: documented in README setup section once code lands.)
+- [x] Supabase free-tier project created. Project ref recorded in a private note (not in repo — SEC-01).
+- [x] DNS plan: apex `swarnimbagre.com` and `www` subdomain configured to point at Vercel. Action recorded but actual cutover deferred until Phase 4 (T39).
+- [x] OpenClaw shared-secret coordination: noted as deferred to Phase 3 (T29). No secret generated yet.
+- [x] No code commits at this stage. Repo remains empty (or has only `.gitignore`, README placeholder, and existing `docs/`).
 
 **Tests required:** [setup task — no automated test]
 
@@ -47,14 +47,14 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 **Functions to implement:** [setup task]
 
 **Acceptance criteria:**
-- [ ] Next.js 15 + React 19 + TypeScript installed. App Router only. No Pages Router.
-- [ ] Root `app/layout.tsx` imports the public bundle's fonts (Fraunces, JetBrains Mono via `next/font`) and `styles/colors_and_type.css` + `styles/base.css`. No Tailwind import.
-- [ ] `app/(admin)/layout.tsx` exists as a route group with placeholder content (Tailwind import added in Phase 2 T15).
-- [ ] `npm run dev` starts cleanly with no console errors.
-- [ ] `npm run build` succeeds with no warnings (CQ-05).
-- [ ] `.gitignore` contains every entry listed in SEC-07.
-- [ ] `.env.example` lists `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` with no values (SEC-01).
-- [ ] `README.md` documents: project description (one paragraph), setup (`cp .env.example .env.local`, `npm install`, `npm run dev`), env vars (names only — reference `.env.example`), test command (`npm test`) (DS-05).
+- [x] Next.js 15 + React 19 + TypeScript installed. App Router only. No Pages Router.
+- [x] Root `app/layout.tsx` imports the public bundle's fonts (Fraunces, JetBrains Mono via `next/font`) and `styles/colors_and_type.css` + `styles/base.css`. No Tailwind import.
+- [x] `app/(admin)/layout.tsx` exists as a route group with placeholder content (Tailwind import added in Phase 2 T15).
+- [x] `npm run dev` starts cleanly with no console errors.
+- [x] `npm run build` succeeds with no warnings (CQ-05).
+- [x] `.gitignore` contains every entry listed in SEC-07.
+- [x] `.env.example` lists `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` with no values (SEC-01).
+- [x] `README.md` documents: project description (one paragraph), setup (`cp .env.example .env.local`, `npm install`, `npm run dev`), env vars (names only — reference `.env.example`), test command (`npm test`) (DS-05).
 
 **Tests required:**
 - `should render root layout without errors` — Next.js dev server smoke (TS-04: critical path).
@@ -74,12 +74,12 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 **Functions to implement:** [database migration — SQL only]
 
 **Acceptance criteria:**
-- [ ] Migration creates the four tables defined in `architecture.md` §2: `projects`, `posts`, `stats`, `images`.
-- [ ] Enum types `project_status` and `post_status` with values `'draft'`, `'published'` are created and used.
-- [ ] All columns with NOT NULL, UNIQUE, CHECK constraints exactly as specified in architecture.md (CQ-04: no magic values; constraints are named).
-- [ ] Indexes: `(status, created_at DESC)` on `projects` and `posts`; `(category, created_at DESC)` on `stats`. UNIQUE on `slug` for `projects` and `posts`.
-- [ ] Migration is idempotent — uses `CREATE TABLE IF NOT EXISTS` and `DO $$ ... $$` blocks for enum creation.
-- [ ] Migration includes a header comment stating purpose, date, and that RLS is added in subsequent migrations.
+- [x] Migration creates the four tables defined in `architecture.md` §2: `projects`, `posts`, `stats`, `images`.
+- [x] Enum types `project_status` and `post_status` with values `'draft'`, `'published'` are created and used.
+- [x] All columns with NOT NULL, UNIQUE, CHECK constraints exactly as specified in architecture.md (CQ-04: no magic values; constraints are named).
+- [x] Indexes: `(status, created_at DESC)` on `projects` and `posts`; `(category, created_at DESC)` on `stats`. UNIQUE on `slug` for `projects` and `posts`.
+- [x] Migration is idempotent — uses `CREATE TABLE IF NOT EXISTS` and `DO $$ ... $$` blocks for enum creation.
+- [x] Migration includes a header comment stating purpose, date, and that RLS is added in subsequent migrations.
 
 **Tests required:**
 - `migration applies cleanly to a fresh database` — apply, verify table list and column types via `information_schema` (TS-04: data layer is critical path).

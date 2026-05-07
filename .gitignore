@@ -1,27 +1,35 @@
 # Dependencies
 node_modules/
 
-# Environment / secrets
+# Environment / secrets (SEC-07)
 .env
-.env.local
-.env.*.local
+.env*
+!.env.example
 
-# Build / deploy
-.vercel/
+# Next.js / build output
 .next/
 out/
-dist/
-build/
+*.tsbuildinfo
+next-env.d.ts
 
-# OS
-.DS_Store
-Thumbs.db
+# Vercel
+.vercel/
 
 # Logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Coverage
+coverage/
+
+# Certs
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db
 
 # Editor
 .vscode/
@@ -35,7 +43,7 @@ docs/design-source/**/*.bundled.html
 docs/design-source/personal-site-web/project/Swarnim Bagre.html
 docs/design-source/personal-site-web/project/Swarnim Bagre - Personal Site.html
 
-# Claude framework — never commit
+# Claude framework — never commit (SEC-07)
 CLAUDE.md
 manifest.md
 profile.md
@@ -44,6 +52,3 @@ docs/testing-setup.md
 docs/session-log.md
 docs/session-handoff.md
 docs/framework-issues.md
-
-# Environment variables — .env.example is allowed (no real values)
-# .env, .env.local, .env.*.local already excluded above

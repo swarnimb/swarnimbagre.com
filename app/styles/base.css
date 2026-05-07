@@ -1,0 +1,15 @@
+html, body { margin: 0; padding: 0; background: var(--bg); min-height: 100vh; }
+#root { min-height: 100vh; }
+button:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+/* Slim scrollbar that respects the warm dark palette */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: var(--hairline-2); }
+/* Hidden scrollbar (still scrollable) — used by the home projects scroller */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { width: 0; height: 0; display: none; }
