@@ -99,12 +99,12 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 **Functions to implement:** [SQL only]
 
 **Acceptance criteria:**
-- [ ] `ALTER TABLE projects ENABLE ROW LEVEL SECURITY` is the first statement.
-- [ ] Policy `projects_public_select` — role `anon`, FOR SELECT, USING `(status = 'published')`.
-- [ ] Policy `projects_admin_all` — role `authenticated`, FOR ALL, USING `true`, WITH CHECK `true`.
-- [ ] No other policies. Default-deny for every other role and every other operation (SEC-04: explicit authorization per resource; CONSTRAINT-08).
-- [ ] Header comment explains: "Public can read published. Admin can do anything. Default-deny for everything else."
-- [ ] Migration is idempotent (uses `DROP POLICY IF EXISTS` then `CREATE POLICY`).
+- [x] `ALTER TABLE projects ENABLE ROW LEVEL SECURITY` is the first statement.
+- [x] Policy `projects_public_select` — role `anon`, FOR SELECT, USING `(status = 'published')`.
+- [x] Policy `projects_admin_all` — role `authenticated`, FOR ALL, USING `true`, WITH CHECK `true`.
+- [x] No other policies. Default-deny for every other role and every other operation (SEC-04: explicit authorization per resource; CONSTRAINT-08).
+- [x] Header comment explains: "Public can read published. Admin can do anything. Default-deny for everything else."
+- [x] Migration is idempotent (uses `DROP POLICY IF EXISTS` then `CREATE POLICY`).
 
 **Tests required:**
 - `anon should see only published projects` — query as anon, assert no draft rows in result (TS-04).
@@ -125,10 +125,10 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 **Functions to implement:** [SQL only]
 
 **Acceptance criteria:**
-- [ ] `ALTER TABLE posts ENABLE ROW LEVEL SECURITY` first.
-- [ ] Policy `posts_public_select` — role `anon`, FOR SELECT, USING `(status = 'published')`.
-- [ ] Policy `posts_admin_all` — role `authenticated`, FOR ALL, USING `true`, WITH CHECK `true`.
-- [ ] Same naming, comment, and idempotency rules as T4.
+- [x] `ALTER TABLE posts ENABLE ROW LEVEL SECURITY` first.
+- [x] Policy `posts_public_select` — role `anon`, FOR SELECT, USING `(status = 'published')`.
+- [x] Policy `posts_admin_all` — role `authenticated`, FOR ALL, USING `true`, WITH CHECK `true`.
+- [x] Same naming, comment, and idempotency rules as T4.
 
 **Tests required:**
 - `anon should see only published posts` (TS-04).
@@ -149,11 +149,11 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 **Functions to implement:** [SQL only]
 
 **Acceptance criteria:**
-- [ ] `ALTER TABLE stats ENABLE ROW LEVEL SECURITY` first.
-- [ ] Policy `stats_public_select` — role `anon`, FOR SELECT, USING `true`.
-- [ ] Policy `stats_admin_all` — role `authenticated`, FOR ALL, USING `true`, WITH CHECK `true`.
-- [ ] **No INSERT policy for `anon`.** Programmatic INSERTs go through the Edge Function in Phase 3 using the service role, which bypasses RLS (CONSTRAINT-04).
-- [ ] Header comment: "Public can read all stats (append-only display). Programmatic INSERTs come via the stats-ingest Edge Function in Phase 3, using the service role. Admin can do anything."
+- [x] `ALTER TABLE stats ENABLE ROW LEVEL SECURITY` first.
+- [x] Policy `stats_public_select` — role `anon`, FOR SELECT, USING `true`.
+- [x] Policy `stats_admin_all` — role `authenticated`, FOR ALL, USING `true`, WITH CHECK `true`.
+- [x] **No INSERT policy for `anon`.** Programmatic INSERTs go through the Edge Function in Phase 3 using the service role, which bypasses RLS (CONSTRAINT-04).
+- [x] Header comment: "Public can read all stats (append-only display). Programmatic INSERTs come via the stats-ingest Edge Function in Phase 3, using the service role. Admin can do anything."
 
 **Tests required:**
 - `anon should read all stats` (TS-04).
@@ -175,11 +175,11 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 **Functions to implement:** [SQL only + bucket configuration]
 
 **Acceptance criteria:**
-- [ ] `ALTER TABLE images ENABLE ROW LEVEL SECURITY` first.
-- [ ] Policy `images_public_select` — role `anon`, FOR SELECT, USING a join condition that returns true only when the parent (project or post) has `status='published'`. Implemented via subqueries on `projects` and `posts` keyed by `parent_id` and `parent_type`.
-- [ ] Policy `images_admin_all` — role `authenticated`, FOR ALL, USING `true`, WITH CHECK `true`.
-- [ ] Storage bucket `images` created (private). Bucket policy enforces 2 MB max file size (SEC-02: validate at boundary).
-- [ ] Header comment explains the parent-status gating.
+- [x] `ALTER TABLE images ENABLE ROW LEVEL SECURITY` first.
+- [x] Policy `images_public_select` — role `anon`, FOR SELECT, USING a join condition that returns true only when the parent (project or post) has `status='published'`. Implemented via subqueries on `projects` and `posts` keyed by `parent_id` and `parent_type`.
+- [x] Policy `images_admin_all` — role `authenticated`, FOR ALL, USING `true`, WITH CHECK `true`.
+- [x] Storage bucket `images` created (private). Bucket policy enforces 2 MB max file size (SEC-02: validate at boundary).
+- [x] Header comment explains the parent-status gating.
 
 **Tests required:**
 - `anon should see images for published parents` (TS-04).
@@ -201,10 +201,10 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 - PL/pgSQL trigger function `prevent_slug_change_after_publish()` (≤50 lines — CQ-01).
 
 **Acceptance criteria:**
-- [ ] Trigger function raises an exception when `OLD.slug != NEW.slug AND OLD.status = 'published'` (CONSTRAINT-12).
-- [ ] BEFORE UPDATE triggers attached to `projects` and `posts`.
-- [ ] Function name and trigger names are explicit and descriptive (CQ-06).
-- [ ] Header comment: "Slugs are immutable once published. This is a contract with anyone who has linked to a published page."
+- [x] Trigger function raises an exception when `OLD.slug != NEW.slug AND OLD.status = 'published'` (CONSTRAINT-12).
+- [x] BEFORE UPDATE triggers attached to `projects` and `posts`.
+- [x] Function name and trigger names are explicit and descriptive (CQ-06).
+- [x] Header comment: "Slugs are immutable once published. This is a contract with anyone who has linked to a published page."
 
 **Tests required:**
 - `slug change on published row should raise exception` (TS-04: data write critical path).
@@ -227,11 +227,11 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 **Functions to implement:** [setup task]
 
 **Acceptance criteria:**
-- [ ] Email provider enabled in Supabase Auth. All other providers disabled (CONSTRAINT-09).
-- [ ] Single user `swarnim.build@gmail.com` created in Supabase Auth dashboard.
-- [ ] JWT expiry: 1 hour (default). Refresh expiry: 30 days inactivity (default). No customization (CONSTRAINT-09).
-- [ ] `docs/auth-flow.md` documents: (1) admin clicks Login, (2) enters email, (3) receives magic link, (4) clicks link → callback → session set, (5) redirects to `/admin`, (6) logout clears session, (7) lockout fallback = manual session invalidation in Supabase dashboard (DS-02).
-- [ ] `.env.example` confirms `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (SEC-01).
+- [x] Email provider enabled in Supabase Auth. All other providers disabled (CONSTRAINT-09).
+- [x] Single user `swarnim.build@gmail.com` created in Supabase Auth dashboard.
+- [x] JWT expiry: 1 hour (default). Refresh expiry: 30 days inactivity (default). No customization (CONSTRAINT-09).
+- [x] `docs/auth-flow.md` documents: (1) admin clicks Login, (2) enters email, (3) receives magic link, (4) clicks link → callback → session set, (5) redirects to `/admin`, (6) logout clears session, (7) lockout fallback = manual session invalidation in Supabase dashboard (DS-02).
+- [x] `.env.example` confirms `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (SEC-01).
 
 **Tests required:** [setup; flow tested in Phase 2 T17]
 
