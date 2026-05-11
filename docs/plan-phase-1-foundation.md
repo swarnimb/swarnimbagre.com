@@ -243,6 +243,10 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 
 ## T10 — Public site pages (Home, Projects, Writing, Other) ported verbatim from bundle
 
+Sub-phased on 2026-05-07 into T10a–T10d. Track progress at sub-phase level. Original acceptance criteria roll up across all four sub-phases.
+
+**Roll-up reference (original T10 spec — not directly trackable; trackable items live on T10a–T10d):**
+
 **Files:**
 - `app/page.tsx` (Home)
 - `app/projects/page.tsx`
@@ -257,12 +261,12 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 - `isMobileUserAgent(ua: string): boolean` (≤50 lines, CQ-01) — checks the request's User-Agent against the bundle's mobile detection rules.
 
 **Acceptance criteria:**
-- [ ] All four pages render the bundle's components verbatim — same hex codes, same px values, same fonts, same 220ms `cubic-bezier(.2, .7, .2, 1)` timing (CONSTRAINT-05).
-- [ ] No Tailwind utility classes anywhere in `app/` or `components/public/` — verified by grep for `@apply`, `text-`, `w-`, `h-`, `bg-`, `rounded-` (CONSTRAINT-03).
-- [ ] Server-side UA detection in `middleware.ts` decides which variant (desktop or mobile components) to render. Single canonical URL per page.
-- [ ] All pages have static placeholder content for now — DB wiring in T11.
-- [ ] Tweaks panel gated by `NEXT_PUBLIC_TWEAKS=1` env var (not querystring).
-- [ ] All four pages have `<title>`, `<meta description>`, and `<link rel="canonical">` set.
+- All four pages render the bundle's components verbatim — same hex codes, same px values, same fonts, same 220ms `cubic-bezier(.2, .7, .2, 1)` timing (CONSTRAINT-05).
+- No Tailwind utility classes anywhere in `app/` or `components/public/` — verified by grep for `@apply`, `text-`, `w-`, `h-`, `bg-`, `rounded-` (CONSTRAINT-03).
+- Server-side UA detection in `middleware.ts` decides which variant (desktop or mobile components) to render. Single canonical URL per page.
+- All pages have static placeholder content for now — DB wiring in T11.
+- Tweaks panel gated by `NEXT_PUBLIC_TWEAKS=1` env var (not querystring).
+- All four pages have `<title>`, `<meta description>`, and `<link rel="canonical">` set.
 
 **Tests required:**
 - `each public page renders without errors` — Playwright snapshot per page (TS-04).
@@ -272,6 +276,123 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 **Depends on:** T2
 
 **Specialist:** `@ui-swarnimbagre`
+
+---
+
+## T10a — Port 22 bundle components verbatim to TypeScript
+
+**Files:**
+- `components/public/` (16 .tsx files ported from `site/components.jsx`): Wordmark, SocialIcon, Nav, Footer, TypoIcon, StatusPill, ProjectThumb, ProjectRow, SectionHead, MorePointer, Page, ProjectCard, ProjectMedia, DemoLoop, BeforeAfterMedia, StillMedia
+- `components/public/mobile/` (6 .tsx files ported from `site/mobile-components.jsx`): MobilePage, MobileNav, MobileFooter, MobilePageTitle, MobileProjectCard, MobileProjectRow
+- `styles/colors_and_type.css` (copy from `site/colors_and_type.css`)
+- `styles/base.css` (copy from `site/base.css` if present)
+- Skipped: `site/ios-frame.jsx` (design-time only), `site/tweaks-panel.jsx` (deferred to T10d)
+
+**Conversion rules per file:** (1) `'use client'` at top. (2) Replace `const useState = React.useState` with `import { useState, useEffect } from 'react'`. (3) Convert `function Foo({ x })` → `export function Foo({ x }: FooProps)` with minimal `interface FooProps`. (4) Preserve verbatim: inline styles, hex codes, px values, SVG paths, 220ms `cubic-bezier(.2,.7,.2,1)` timing, defaults, prop names.
+
+**Acceptance criteria:**
+- [x] All 22 components ported with conversion rules applied uniformly.
+- [x] No Tailwind utility classes anywhere (`@apply`, `text-`, `w-`, `h-`, `bg-`, `rounded-`) — verified by grep.
+- [x] No `any` types — every component has `interface FooProps`.
+- [x] `onNav` prop interface preserved verbatim (not wired to router — deferred to T10c).
+- [x] `href="#"` + `e.preventDefault()` preserved verbatim in SocialIcon (real URLs deferred to T10c).
+- [x] Hex codes, px values, SVG paths, animation timing match source byte-for-byte.
+- [x] CSS files copied to `styles/` with no modification.
+
+**Tests required:** None at this stage — Vitest/Playwright don't exist until T10.5. Visual verification deferred until T10c when pages render.
+
+**Depends on:** T2
+
+**Specialist:** `@ui-swarnimbagre`
+
+---
+
+## T10b — UA-detect middleware
+
+**Files:** `middleware.ts` (create — UA detection for desktop vs. mobile component selection)
+
+**Functions:** `isMobileUserAgent(ua: string): boolean` (≤50 lines, CQ-01)
+
+**Acceptance criteria:**
+- [x] Server-side UA detection in `middleware.ts` decides desktop vs mobile variant per request.
+- [x] Single canonical URL per page (no redirects or path forking).
+- [x] Function ≤ 50 lines, no external deps beyond Next.js built-ins.
+
+**Tests required:** Backfilled at T10.5 (mobile UA test, desktop UA test).
+
+**Depends on:** T10a
+
+**Specialist:** `@ui-swarnimbagre`
+
+---
+
+## T10c — Build 4 page files and wire navigation
+
+**Files:** `app/page.tsx` (Home), `app/projects/page.tsx`, `app/writing/page.tsx`, `app/other/page.tsx`. Plus implicit: the 8 bundle page-level components ported into `components/public/pages/` and `components/public/mobile/pages/`, plus `lib/nav-targets.ts` and `lib/social-links.ts` foundation constants, plus `global.d.ts` (React 19 JSX workaround). Doc gap surfaced 2026-05-11 — original Files list was incomplete.
+
+**Acceptance criteria:**
+- [x] All four pages render the bundle's components verbatim — same hex codes, same px values, same fonts, same 220ms `cubic-bezier(.2, .7, .2, 1)` timing (CONSTRAINT-05).
+- [x] Static placeholder content only — DB wiring is T11.
+- [x] `onNav` wired to `next/navigation` `router.push` (resolves Conflict 1 from sub-phasing).
+- [x] `SocialIcon` real URLs wired (mailto, x.com, etc.) — replaces `href="#"` placeholders (resolves Conflict 2). YouTube href kept as `#` placeholder pending URL from builder.
+
+**Tests required:** Backfilled at T10.5 (`each public page renders without errors` Playwright snapshots).
+
+**Depends on:** T10a, T10b
+
+**Specialist:** `@ui-swarnimbagre`
+
+---
+
+## T10d — Tweaks panel + SEO meta
+
+**Files:** Port `site/tweaks-panel.jsx` → `components/public/TweaksPanel.tsx`. Add `<title>`, `<meta description>`, `<link rel="canonical">` to all 4 pages.
+
+**Acceptance criteria:**
+- [x] Tweaks panel gated by `NEXT_PUBLIC_TWEAKS=1` env var (not querystring).
+- [x] All four pages have `<title>`, `<meta description>`, and `<link rel="canonical">` set.
+
+**Tests required:** None.
+
+**Depends on:** T10c
+
+**Specialist:** `@ui-swarnimbagre`
+
+---
+
+## T10.5 — Testing infrastructure (Vitest + Playwright)
+
+> **Inserted 2026-05-07** between T10 and T11. T10 sub-phases (10a–10d) run untested first; T10.5 installs the harness; T10's listed tests are then backfilled here, and T11 onwards write tests against real infra. Logged in `docs/framework-issues.md` — neither `@modify-plan` nor `@create-plan` fits non-feature plan additions (both gate on PRD presence).
+
+**Files:**
+- `package.json` (modify — add devDeps and scripts)
+- `vitest.config.ts` (create)
+- `playwright.config.ts` (create)
+- `tests/setup.ts` (create — Vitest setup, jsdom)
+- `tests/smoke.test.ts` (create — one trivial passing unit test)
+- `tests/e2e/smoke.spec.ts` (create — one trivial passing e2e test)
+- `.gitignore` (modify — add `/test-results/`, `/playwright-report/`, `/playwright/.cache/`) (SEC-07)
+
+**Functions to implement:** [setup task]
+
+**Acceptance criteria:**
+- [x] Vitest installed (latest stable). `npm test` runs the unit harness cleanly.
+- [x] Playwright installed. `npm run test:e2e` runs the browser harness against the dev server.
+- [x] One trivial unit test passes (sanity check that Vitest is wired).
+- [x] One trivial e2e test passes (navigates to `/` and asserts a stable element renders).
+- [x] No CI step added — CI is Phase 4 territory.
+- [x] `.gitignore` updated to ignore Playwright artifacts (SEC-07).
+- [x] Backfill the three T10 tests once infra is in place (see Backfill below).
+
+**Backfill after T10.5 lands (these are T10 acceptance that couldn't be written until now):**
+- `each public page renders without errors` — Playwright snapshot per page (TS-04)
+- `mobile UA serves mobile component variant` — middleware test
+- `desktop UA serves desktop component variant` — middleware test
+
+**Tests required:**
+- The two trivial passing tests above are the acceptance test for this task.
+
+**Depends on:** T10d
 
 ---
 
@@ -296,12 +417,12 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 - `getStatsByCategory(): Promise<Record<string, Stat[]>>` (≤50 lines, CQ-01) — groups stats by `category`.
 
 **Acceptance criteria:**
-- [ ] All queries use Supabase's query builder with `.eq()` / `.order()` — never string concatenation (SEC-03).
-- [ ] No hardcoded Supabase URL or key — all from `process.env.NEXT_PUBLIC_*` (SEC-01, CQ-04).
-- [ ] Errors are caught, logged with context (operation, sanitized inputs, stack) (EH-01, EH-02, EH-03), and re-thrown as `ServiceError` (EH-05).
-- [ ] User-facing pages render a clean error state if the DB query fails (EH-04). The full error detail goes to the log only.
-- [ ] No PII (email, etc.) in logs — only operation and presence flags (SEC-05).
-- [ ] All public functions have doc comments stating params, return, throws (DS-01).
+- [x] All queries use Supabase's query builder with `.eq()` / `.order()` — never string concatenation (SEC-03).
+- [x] No hardcoded Supabase URL or key — all from `process.env.NEXT_PUBLIC_*` (SEC-01, CQ-04).
+- [x] Errors are caught, logged with context (operation, sanitized inputs, stack) (EH-01, EH-02, EH-03), and re-thrown as `ServiceError` (EH-05).
+- [x] User-facing pages render a clean error state if the DB query fails (EH-04). The full error detail goes to the log only.
+- [x] No PII (email, etc.) in logs — only operation and presence flags (SEC-05).
+- [x] All public functions have doc comments stating params, return, throws (DS-01).
 
 **Tests required:**
 - `getPublishedProjects returns rows when DB returns data` — happy path (TS-01).
@@ -328,12 +449,12 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 - `<MarkdownContent md={string} />` (≤200 lines, CQ-02) — client component that calls `renderMarkdown` and injects via `dangerouslySetInnerHTML`.
 
 **Acceptance criteria:**
-- [ ] Whitelist is exactly: `p, ul, ol, li, blockquote, code, pre, em, strong, a, h1, h2, h3, h4, img` (CONSTRAINT-06).
-- [ ] Allowed attributes: `a[href]` (no `javascript:` protocol), `img[src, alt]`. Everything else stripped (SEC-02).
-- [ ] No inline event handlers reach the DOM. DOMPurify default profile is augmented with the whitelist; result is verified by tests.
-- [ ] `MarkdownContent` accepts a `className` prop (CQ-06: explicit naming).
-- [ ] Public function has a doc comment listing the whitelist (DS-01).
-- [ ] No `console.log` or debug artifact (CQ-05).
+- [x] Whitelist is exactly: `p, ul, ol, li, blockquote, code, pre, em, strong, a, h1, h2, h3, h4, img` (CONSTRAINT-06).
+- [x] Allowed attributes: `a[href]` (no `javascript:` protocol), `img[src, alt]`. Everything else stripped (SEC-02).
+- [x] No inline event handlers reach the DOM. DOMPurify default profile is augmented with the whitelist; result is verified by tests.
+- [x] `MarkdownContent` accepts a `className` prop (CQ-06: explicit naming).
+- [x] Public function has a doc comment listing the whitelist (DS-01).
+- [x] No `console.log` or debug artifact (CQ-05).
 
 **Tests required:**
 - `renderMarkdown parses basic Markdown` — input `**bold**` → output contains `<strong>bold</strong>` (TS-01 happy).
@@ -349,33 +470,39 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 
 ---
 
-## T13 — Image read layer (Storage URL helpers + components)
+## T13 — Image read layer (Storage URL helpers + components) [x]
 
 **Files:**
-- `lib/images.ts` (create)
-- `components/public/ProjectImage.tsx` (create)
-- `components/public/PostImage.tsx` (create)
+- `lib/images.ts` (create) [x]
+- `components/public/ProjectImage.tsx` (create) [x]
+- `components/public/PostImage.tsx` (create) [x]
+- `lib/db.ts` (modify — add `getImageById`) [x]
 
 **Functions to implement:**
-- `getImageUrl(bucketPath: string): string` (≤50 lines, CQ-01) — constructs a public URL via Supabase Storage SDK. No hardcoded URLs (SEC-01, CQ-04).
-- `<ProjectImage imageId?: string, alt: string />` (≤200 lines, CQ-02).
-- `<PostImage imageId?: string, alt: string />` (≤200 lines, CQ-02).
+- `getImageUrl(bucketPath: string, client?: SupabaseClient): Promise<string>` (≤50 lines, CQ-01) — resolves to a Supabase Storage **signed** URL (TTL 3600s). No hardcoded URLs (SEC-01, CQ-04). **Signature changed from sync `string` to async `Promise<string>` during build**: the `images` bucket is private per migration 005 RLS spec, so URLs must be signed at request time. See session 8 log + handoff for rationale.
+- `getImageById(id: string, client?: SupabaseClient): Promise<ImageRecord | null>` (≤50 lines, CQ-01) — resolves an `images.id` to its row. Added to `lib/db.ts` (mirrors `getProjectBySlug` pattern). Not in original spec; needed because components take `imageId` but `getImageUrl` takes `bucketPath`.
+- `<ProjectImage imageId?: string, alt: string />` async Server Component (≤200 lines, CQ-02).
+- `<PostImage imageId?: string, alt: string />` async Server Component (≤200 lines, CQ-02).
 
 **Acceptance criteria:**
-- [ ] Components render `<img>` with `loading="lazy"`, `alt={alt}` (alt is required by prop type — `alt: string` not `alt?: string`).
-- [ ] No image case: components render nothing or a typographic placeholder (no broken-image icon).
-- [ ] Image URLs come from the `images` table's `bucket_path` column, resolved via Supabase Storage (CONSTRAINT-07).
-- [ ] Errors fetching the image URL are caught and logged with context (EH-01, EH-02). Component degrades to no-image silently (EH-04 client side).
+- [x] Components render `<img>` with `loading="lazy"`, `alt={alt}` (alt is required by prop type — `alt: string` not `alt?: string`).
+- [x] No image case: components render nothing or a typographic placeholder (no broken-image icon).
+- [x] Image URLs come from the `images` table's `bucket_path` column, resolved via Supabase Storage (CONSTRAINT-07).
+- [x] Errors fetching the image URL are caught and logged with context (EH-01, EH-02). Component degrades to no-image silently (EH-04 client side).
 
 **Tests required:**
-- `getImageUrl returns valid URL for a known path` (TS-01 happy).
-- `getImageUrl throws when path is empty` (TS-01 error).
-- `ProjectImage renders <img> with alt when imageId resolves` (TS-01).
-- `ProjectImage renders nothing when imageId is undefined` (TS-01 edge).
+- [x] `getImageUrl returns valid URL for a known path` (TS-01 happy) — `tests/images.test.ts`.
+- [x] `getImageUrl throws when path is empty` (TS-01 error) — `tests/images.test.ts`.
+- [x] `ProjectImage renders <img> with alt when imageId resolves` (TS-01) — `tests/ProjectImage.test.tsx`.
+- [x] `ProjectImage renders nothing when imageId is undefined` (TS-01 edge) — `tests/ProjectImage.test.tsx`.
+
+**New devDeps added (T13):** `@testing-library/react ^16.1.0`, `@testing-library/jest-dom ^6.6.3`. Required for component render tests. `tests/setup.ts` now imports `@testing-library/jest-dom/vitest`.
 
 **Depends on:** T7, T11
 
 **Specialist:** `@supabase`
+
+**Status:** Complete in session 8 (2026-05-11). 32 Vitest tests pass.
 
 ---
 

@@ -125,7 +125,7 @@ Design decisions with technical implications that need `@cto` resolution during 
 
 1. **Viewport routing strategy.** Bundle ships two independent files (`index.html` desktop, `mobile.html` mobile). Visitors at `/` need to land on the right one. Options: (a) client-side viewport redirect, (b) server-side UA detection, (c) separate URL paths. Has SEO and shareability implications.
 
-2. **`tweaks-panel.jsx` production strategy.** Design-time overlay used during bundle development. For production: (a) gate behind `?tweaks=1` querystring, (b) strip from production bundle entirely, or (c) keep but locked. Default recommendation: gate behind `?tweaks=1` so it stays accessible for future tweaks without exposure to public visitors.
+2. **`tweaks-panel.jsx` production strategy.** ✅ **RESOLVED 2026-05-07** — gated behind `NEXT_PUBLIC_TWEAKS=1` env var (preview-only, never production), per architecture §5.3 and confirmed at session 2 of 2026-05-07. The earlier proposal to use `?tweaks=1` querystring is rejected — env var is locked at build time, so visitors cannot summon the panel on production no matter what URL they craft. Implementation lands in T10d.
 
 3. **Next.js migration timing.** Kickoff decision: ship initial site as React-via-CDN + Babel-standalone from `site/`, migrate to Next.js App Router when the admin panel is built. `@cto` should confirm this still holds during `@plan`, or revisit if there's a reason to migrate earlier (e.g., SEO for writing posts).
 

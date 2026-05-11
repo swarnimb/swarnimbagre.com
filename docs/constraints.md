@@ -1,7 +1,7 @@
 # Constraints: swarnimbagre.com
 
 **Date seeded:** 2026-05-06 (by `@plan` Phase 4)
-**Last updated:** 2026-05-06
+**Last updated:** 2026-05-11 (session 7 — CONSTRAINT-14 added)
 
 > Loaded by `@session-start` every session. Active binding decisions only — not history, not options considered. New constraints are added when `@plan`, `@cto`, or the builder makes a binding decision. A constraint is removed only when the decision is explicitly reversed, with the reversal noted in `docs/session-log.md`.
 
@@ -64,6 +64,8 @@
 **Decision:** The design bundle at `docs/design-source/personal-site-web/` is the source of truth for every public-site visual decision. No Tailwind, no shadcn, no Aceternity, no Magic UI on the public site. New public components extend `site/components.jsx` / `site/mobile-components.jsx`; tokens come from `site/colors_and_type.css`.
 
 **What it means in practice:** A new public-site visual pattern requires either (a) finding the matching pattern in the bundle, or (b) stopping work and consulting `@designer`. No improvisation, no "close enough" substitutes, no library defaults. Same hex codes, same px values, same 220ms `cubic-bezier(.2, .7, .2, 1)` timing.
+
+**Additive prop extensions to bundle-ported components are permitted** when (a) the component renders byte-identically with the new prop omitted — i.e., the default value equals the existing hardcoded content, so the bundle still renders verbatim at design time — and (b) interactive behavior (link `href`, form actions, navigation targets) is wired to real destinations. The verbatim rule governs rendered visual output: pixels, motion, typography. It does not govern prop interfaces or runtime behavior. A new *visual* pattern (different layout, new component, off-bundle styling) still requires (a) match in bundle or (b) `@designer` consult per above.
 
 **Who decided and when:** Kickoff + `@designer`, 2026-05-05. Reaffirmed at `@plan`, 2026-05-06.
 
@@ -167,6 +169,26 @@
 
 ---
 
+### [CONSTRAINT-14] Server-Component data loads must go through `lib/safe-load.ts`
+
+**Decision:** Any public-route Server Component that calls a `lib/db.ts` read function MUST wrap the call in `safeLoad(load, fallback, context)` from `lib/safe-load.ts`. The wrapper catches thrown `ServiceError`s (and any other error), logs structured context (operation, error code, error message, stack) to stderr in the same shape as `logDbError`, then returns the caller-supplied fallback. Pages with no row to render return an empty-state UI, not a 500.
+
+**What it means in practice:** Every list page (`app/projects/page.tsx`, `app/writing/page.tsx`, `app/other/page.tsx`) and every detail page's `generateMetadata` + page body load uses `safeLoad`. A DB failure (env misconfigured, RLS denying, network blip) becomes "empty content, logged error" rather than "Application error" 500 in the user's face. Detail pages still dispatch `notFound()` on null result — that path is `safeLoad` + `if (!row) notFound()`.
+
+**Carve-out:** `safeLoad` is the UI-boundary catch. It is NOT a generic silent-catch — its JSDoc explicitly documents that calling it from non-boundary call sites (inside `lib/`, in mid-render helpers) is a violation of EH-01. Boundary-only.
+
+**Who decided and when:** `@dev` Targeted Fix (BLOCKING-01 from `docs/qa-report.md`), 2026-05-11 session 7.
+
+**What this closes off:** Letting `ServiceError` bubble to Next.js's default error UI on user-facing pages. Reversing means accepting that a transient DB issue, an env-var typo, or an RLS misconfiguration crashes the page rather than degrading. Detail pages had this latent bug for two sessions before seed data exposed it.
+
+---
+
+### [CONSTRAINT-15] Image reads use signed URLs (TTL 3600s), not public URLs
+
+Image URLs are generated at request time via Supabase Storage `createSignedUrl(bucketPath, 3600)`. `getPublicUrl` must not be used for the `images` bucket — the bucket is private per migration `005_rls_images.sql` and public URLs return 404. Signed-URL generation is centralized in `lib/images.ts::getImageUrl`. TTL is fixed at 3600 seconds: long enough for a typical reading session, short enough to limit leaked-URL exposure. Components consuming images (`ProjectImage`, `PostImage`) must call `getImageUrl` rather than constructing URLs directly.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -184,3 +206,4 @@
 | 11 | Status enum: draft \| published | Binary visibility, no scheduling | `@plan` | 2026-05-06 |
 | 12 | Slug locked at DB level after publish | URLs permanent on publish | `@plan` | 2026-05-06 |
 | 13 | Voice — dry, anti-LinkedIn, no emoji | Applies to public copy AND admin labels | Kickoff + `@plan` | 2026-05-06 |
+| 14 | Server-Component data loads via `lib/safe-load.ts` | Page-level catch + log + fallback; no 500 on DB failure | `@dev` Targeted Fix | 2026-05-11 |

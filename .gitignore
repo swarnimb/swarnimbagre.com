@@ -52,3 +52,13 @@ docs/testing-setup.md
 docs/session-log.md
 docs/session-handoff.md
 docs/framework-issues.md
+
+# Test artifacts
+/test-results/
+/playwright-report/
+/playwright/.cache/
+.playwright-mcp/
+
+# QA screenshots (transient, not source)
+/qa-*.png
+/t12-*.png

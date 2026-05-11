@@ -22,6 +22,7 @@ This document cannot change without a corresponding update to [`founder-brief.md
 - **Public site:** raw React + custom components from `site/components.jsx` and `site/mobile-components.jsx`. Styling is exclusively CSS variables in `site/colors_and_type.css` plus inline styles. No Tailwind, no component library.
 - **Admin panel:** shadcn/ui + Tailwind CSS, scoped to `/admin/*` only.
 - **Markdown renderer:** `marked` + DOMPurify (see Section 6).
+- **Component testing:** `@testing-library/react` ^16.1.0 + `@testing-library/jest-dom` ^6.6.3 (required for React 19 / Next 15 compatibility).
 
 ### 1.3 Why Next.js from day one (Decision 1)
 
@@ -179,6 +180,10 @@ swarnimbagre.com/
 │   ├── writing/page.tsx
 │   ├── writing/[slug]/page.tsx
 │   ├── other/page.tsx
+│   ├── styles/                       # CSS files for the public site + admin
+│   │   ├── colors_and_type.css       # public bundle tokens, imported by root layout
+│   │   ├── base.css                  # public site base, imported by root layout
+│   │   └── admin.css                 # Tailwind + scoped-preflight, imported only by admin layout
 │   └── (admin)/                      # route group — admin layout owns Tailwind import
 │       ├── layout.tsx                # admin-only Tailwind/shadcn CSS, Inter font
 │       ├── page.tsx                  # admin home
@@ -199,10 +204,6 @@ swarnimbagre.com/
 │   ├── markdown.ts                   # marked + DOMPurify whitelist
 │   ├── auth.ts                       # session helpers, signOut
 │   └── images.ts                     # Storage URL helpers
-├── styles/
-│   ├── colors_and_type.css           # public bundle tokens, imported by root layout
-│   ├── base.css                      # public site base, imported by root layout
-│   └── admin.css                     # Tailwind + scoped-preflight, imported only by admin layout
 ├── supabase/
 │   ├── migrations/                   # SQL migrations, sequentially numbered
 │   └── functions/
@@ -213,11 +214,74 @@ swarnimbagre.com/
 
 ### 4.2 Tailwind scoping (Decision 3 — resolves ASSUMPTION-04)
 
-Tailwind is imported in exactly one place: `styles/admin.css`, which is in turn imported only by `app/(admin)/layout.tsx`. The plugin `tailwindcss-scoped-preflight` wraps Tailwind's Preflight reset under the `.admin-root` selector. Every admin page renders inside `<div className="admin-root">...</div>`.
+Tailwind is imported in exactly one place: `app/styles/admin.css`, which is in turn imported only by `app/(admin)/layout.tsx`. The plugin `tailwindcss-scoped-preflight` wraps Tailwind's Preflight reset under the `.admin-root` selector. Every admin page renders inside `<div className="admin-root">...</div>`.
 
 The Tailwind config's `content` glob includes only `./app/(admin)/**/*` and `./components/admin/**/*` and `./components/ui/**/*`. Public components are excluded. The public bundle never sees a Tailwind utility class, and the Preflight reset never reaches public route HTML.
 
 **Founder Brief:** "Tailwind scoping" in [`founder-brief.md`](founder-brief.md).
+
+### 4.4 UI-boundary error handling — `lib/safe-load.ts`
+
+Every Server Component that calls a `lib/db.ts` read function MUST wrap the call in `safeLoad(load, fallback, context)` from [`lib/safe-load.ts`](../lib/safe-load.ts). The wrapper:
+
+1. Awaits `load()`. On success: returns the value.
+2. On any throw: invokes `logLoadFailure(context, error)`, which emits a structured `console.error` with operation, error code, error message, and stack — the same shape as `logDbError` in `lib/db.ts`.
+3. Returns the caller-supplied `fallback` (typically `[]` for list queries, `null` for single-row queries, `{}` for grouped queries).
+
+```ts
+// app/projects/page.tsx — example shape
+const projects = await safeLoad<Project[]>(
+  () => getPublishedProjects(),
+  [],
+  'page:projects',
+);
+```
+
+The wrapper exists to convert data-layer throws into degraded UI states at the page boundary. Detail-page metadata + body both use it; the body adds `if (!row) notFound()` after the call so a null fallback dispatches Next.js's 404 path. List pages render an empty state on `[]`.
+
+**EH-01 carve-out (explicit):** This is the only catch-and-degrade pattern permitted in the codebase outside narrow data-layer error mapping. Using `safeLoad` inside `lib/` modules or mid-render helpers is an EH-01 violation. Boundary-only.
+
+**Founder Brief:** "UI-boundary error handling" in [`founder-brief.md`](founder-brief.md).
+
+### 4.5 Server / Client prop boundary — `Nav` / `MobileNav`
+
+Next.js 15 RSC forbids passing function props from a Server Component to a Client Component (`Event handlers cannot be passed to Client Component props.`). `Nav` and `MobileNav` are `'use client'` components used by both Server Component detail pages (`app/projects/[slug]/page.tsx`, `app/writing/[slug]/page.tsx`) and Client Component list-render components (`components/public/pages/{Projects,Writing,Other}.tsx`).
+
+Both Nav components accept two parallel ways to specify link targets:
+
+| Prop | Type | Caller boundary | Use when |
+|---|---|---|---|
+| `hrefs?: Record<string, string>` | plain data | Server Component OK | Detail pages pass `hrefs={NAV_PATHS}` (exported as a static const from `lib/nav-targets.ts`). |
+| `resolveHref?: (id: string) => string` | function | Client Component only | List-render components pass `resolveHref={resolveNavPath}`. |
+| `onNav?: (target: string) => void` | function | Client Component only | When SPA navigation via `router.push` is desired. Detail pages do NOT pass this — they let the browser navigate via the `href`. |
+
+`hrefs` takes precedence over `resolveHref`. When neither is passed, the default `() => '#'` preserves byte-identical bundle render per CONSTRAINT-05's additive-prop carve-out.
+
+**Founder Brief:** "Server-safe Nav props" in [`founder-brief.md`](founder-brief.md).
+
+### 4.6 Image read pattern
+
+Image rendering for public content uses async Server Components that resolve image IDs to signed Storage URLs at request time. The pipeline:
+
+1. Page (Server Component) loads project/post data via `getProjectBySlug` / `getPostBySlug`, wrapped in `safeLoad` (CONSTRAINT-14). The data includes `image_id`.
+2. Page renders `<ProjectImage imageId={...} alt={...} />` or `<PostImage imageId={...} alt={...} />`.
+3. The image component (also a Server Component) calls `getImageById(imageId)` to resolve the `images` row, then `getImageUrl(bucket_path)` to produce a signed URL with TTL 3600s.
+4. The component returns `<img src=... alt=... loading="lazy" />`. On any error in the resolution chain it logs with context and returns `null` — visitors never see a broken-image icon (EH-04).
+
+**Why async Server Components, not client components:**
+- SEO: search engines see the rendered `<img>` in the initial HTML.
+- First paint: the URL is present at hydration, no extra round trip.
+- Existing `components/public/` is mostly `'use client'` for interactive UI (cards, nav, demos). Image components are pure data loaders — different concern, different runtime.
+
+**Why signed URLs, not public:**
+- The `images` bucket is private (migration `005_rls_images.sql`). Public URLs would 404. See CONSTRAINT-15.
+- TTL 3600s: long enough for a typical reading session; short enough that a leaked URL expires quickly.
+
+**Public surface (functions added in T13):**
+- `getImageUrl(bucketPath: string, client?: SupabaseClient): Promise<string>` — `lib/images.ts`. Throws `ServiceError` on empty path or storage failure.
+- `getImageById(id: string, client?: SupabaseClient): Promise<ImageRecord | null>` — `lib/db.ts`. Mirrors `getProjectBySlug` pattern (DI for tests, throws `ServiceError` on DB error).
+
+**Tests:** Vitest + `@testing-library/react` for React component rendering. React 19 / Next 15 require testing-library v16+. See `tests/images.test.ts` and `tests/ProjectImage.test.tsx`.
 
 ### 4.3 File and function size budgets
 

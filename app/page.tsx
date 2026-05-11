@@ -1,8 +1,18 @@
-export default function Home() {
-  return (
-    <main>
-      <h1>Swarnim Bagre</h1>
-      <p>Site under construction. The dry voice will return shortly.</p>
-    </main>
-  );
+import type { Metadata } from 'next';
+import { headers } from 'next/headers';
+import { Home as HomeDesktop } from '@/components/public/pages/Home';
+import { Home as HomeMobile } from '@/components/public/mobile/pages/Home';
+
+export const metadata: Metadata = {
+  title: 'Swarnim Bagre',
+  description: 'Personal site — projects, writing, and assorted hobby stats. Built by someone figuring it out in public.',
+  alternates: {
+    canonical: 'https://swarnimbagre.com/',
+  },
+};
+
+export default async function HomePage() {
+  const h = await headers();
+  const variant = h.get('x-device-variant');
+  return variant === 'mobile' ? <HomeMobile /> : <HomeDesktop />;
 }

@@ -1,0 +1,242 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  getPublishedProjects,
+  getPublishedPosts,
+  getProjectBySlug,
+  getPostBySlug,
+  getStatsByCategory,
+} from '@/lib/db';
+import { ServiceError } from '@/lib/errors';
+import type { Project, Post, Stat } from '@/lib/types';
+
+/**
+ * Build a stub Supabase client whose chained query terminal resolves with the
+ * given `{ data, error }` payload. Works for both list queries (awaited at the
+ * end of the chain — `.order()` is the last call) and single-row queries
+ * (terminated with `.maybeSingle()`). The PostgREST builder is thenable, so we
+ * implement `then` to make the chain itself awaitable.
+ */
+function makeStub(result: { data: unknown; error: unknown }): SupabaseClient {
+  const chain: Record<string, unknown> = {};
+  chain.select = () => chain;
+  chain.eq = () => chain;
+  chain.order = () => chain;
+  chain.maybeSingle = () => Promise.resolve(result);
+  chain.then = (onFulfilled: (v: typeof result) => unknown) =>
+    Promise.resolve(result).then(onFulfilled);
+  return { from: () => chain } as unknown as SupabaseClient;
+}
+
+/** Sample DB error shape returned by PostgREST. */
+const DB_ERROR = { code: 'PGRST500', message: 'database boom' };
+
+/** Sample project row that satisfies the Project type. */
+const SAMPLE_PROJECT: Project = {
+  id: 'p1',
+  title: 'OpenClaw',
+  slug: 'openclaw',
+  description: 'Telegram agent that scrapes stats.',
+  status: 'published',
+  image_id: null,
+  created_at: '2026-01-01T00:00:00.000Z',
+  updated_at: '2026-01-02T00:00:00.000Z',
+};
+
+/** Sample post row that satisfies the Post type. */
+const SAMPLE_POST: Post = {
+  id: 'po1',
+  title: 'On building in the open',
+  slug: 'building-in-the-open',
+  content: 'A short post body.',
+  status: 'published',
+  image_id: null,
+  created_at: '2026-02-01T00:00:00.000Z',
+  updated_at: '2026-02-02T00:00:00.000Z',
+};
+
+/** Sample stat rows spanning two categories, for grouping tests. */
+const SAMPLE_STATS: Stat[] = [
+  {
+    id: 's1',
+    category: 'reading',
+    label: 'Books finished',
+    value: '12',
+    unit: null,
+    created_at: '2026-03-10T00:00:00.000Z',
+  },
+  {
+    id: 's2',
+    category: 'reading',
+    label: 'Pages this week',
+    value: '210',
+    unit: 'pages',
+    created_at: '2026-03-09T00:00:00.000Z',
+  },
+  {
+    id: 's3',
+    category: 'running',
+    label: 'Weekly distance',
+    value: '24',
+    unit: 'km',
+    created_at: '2026-03-08T00:00:00.000Z',
+  },
+];
+
+/** Silence `console.error` noise emitted by `logDbError` on error-path tests. */
+let consoleErrorSpy: ReturnType<typeof vi.spyOn> | undefined;
+
+beforeEach(() => {
+  consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  consoleErrorSpy?.mockRestore();
+});
+
+describe('getPublishedProjects', () => {
+  it('returns rows when the database returns data', async () => {
+    const stub = makeStub({ data: [SAMPLE_PROJECT], error: null });
+    const result = await getPublishedProjects(stub);
+    expect(result).toEqual([SAMPLE_PROJECT]);
+  });
+
+  it('returns an empty array when the database returns zero rows', async () => {
+    const stub = makeStub({ data: [], error: null });
+    const result = await getPublishedProjects(stub);
+    expect(result).toEqual([]);
+  });
+
+  it('throws a ServiceError tagged with the operation when the database fails', async () => {
+    const stub = makeStub({ data: null, error: DB_ERROR });
+    await expect(getPublishedProjects(stub)).rejects.toBeInstanceOf(ServiceError);
+    await expect(getPublishedProjects(stub)).rejects.toMatchObject({
+      operation: 'getPublishedProjects',
+    });
+  });
+});
+
+describe('getPublishedPosts', () => {
+  it('returns rows when the database returns data', async () => {
+    const stub = makeStub({ data: [SAMPLE_POST], error: null });
+    const result = await getPublishedPosts(stub);
+    expect(result).toEqual([SAMPLE_POST]);
+  });
+
+  it('throws a ServiceError tagged with the operation when the database fails', async () => {
+    const stub = makeStub({ data: null, error: DB_ERROR });
+    await expect(getPublishedPosts(stub)).rejects.toBeInstanceOf(ServiceError);
+    await expect(getPublishedPosts(stub)).rejects.toMatchObject({
+      operation: 'getPublishedPosts',
+    });
+  });
+});
+
+describe('getProjectBySlug', () => {
+  it('returns the project when a matching slug is found', async () => {
+    const stub = makeStub({ data: SAMPLE_PROJECT, error: null });
+    const result = await getProjectBySlug('openclaw', stub);
+    expect(result).toEqual(SAMPLE_PROJECT);
+  });
+
+  it('returns null when no project matches the slug', async () => {
+    const stub = makeStub({ data: null, error: null });
+    const result = await getProjectBySlug('does-not-exist', stub);
+    expect(result).toBeNull();
+  });
+
+  it('throws a ServiceError tagged with the operation when the database fails', async () => {
+    const stub = makeStub({ data: null, error: DB_ERROR });
+    await expect(getProjectBySlug('openclaw', stub)).rejects.toBeInstanceOf(ServiceError);
+    await expect(getProjectBySlug('openclaw', stub)).rejects.toMatchObject({
+      operation: 'getProjectBySlug',
+    });
+  });
+
+  it('throws a ServiceError when the slug is an empty string', async () => {
+    const stub = makeStub({ data: null, error: null });
+    await expect(getProjectBySlug('', stub)).rejects.toBeInstanceOf(ServiceError);
+    await expect(getProjectBySlug('', stub)).rejects.toMatchObject({
+      operation: 'getProjectBySlug',
+    });
+  });
+
+  it('throws a ServiceError when the slug is not a string', async () => {
+    const stub = makeStub({ data: null, error: null });
+    await expect(
+      getProjectBySlug(null as unknown as string, stub),
+    ).rejects.toBeInstanceOf(ServiceError);
+    await expect(
+      getProjectBySlug(null as unknown as string, stub),
+    ).rejects.toMatchObject({ operation: 'getProjectBySlug' });
+  });
+});
+
+describe('getPostBySlug', () => {
+  it('returns the post when a matching slug is found', async () => {
+    const stub = makeStub({ data: SAMPLE_POST, error: null });
+    const result = await getPostBySlug('building-in-the-open', stub);
+    expect(result).toEqual(SAMPLE_POST);
+  });
+
+  it('returns null when no post matches the slug', async () => {
+    const stub = makeStub({ data: null, error: null });
+    const result = await getPostBySlug('does-not-exist', stub);
+    expect(result).toBeNull();
+  });
+
+  it('throws a ServiceError tagged with the operation when the database fails', async () => {
+    const stub = makeStub({ data: null, error: DB_ERROR });
+    await expect(
+      getPostBySlug('building-in-the-open', stub),
+    ).rejects.toBeInstanceOf(ServiceError);
+    await expect(
+      getPostBySlug('building-in-the-open', stub),
+    ).rejects.toMatchObject({ operation: 'getPostBySlug' });
+  });
+
+  it('throws a ServiceError when the slug is an empty string', async () => {
+    const stub = makeStub({ data: null, error: null });
+    await expect(getPostBySlug('', stub)).rejects.toBeInstanceOf(ServiceError);
+    await expect(getPostBySlug('', stub)).rejects.toMatchObject({
+      operation: 'getPostBySlug',
+    });
+  });
+
+  it('throws a ServiceError when the slug is not a string', async () => {
+    const stub = makeStub({ data: null, error: null });
+    await expect(
+      getPostBySlug(null as unknown as string, stub),
+    ).rejects.toBeInstanceOf(ServiceError);
+    await expect(
+      getPostBySlug(null as unknown as string, stub),
+    ).rejects.toMatchObject({ operation: 'getPostBySlug' });
+  });
+});
+
+describe('getStatsByCategory', () => {
+  it('groups stats by category preserving query order within each category', async () => {
+    const stub = makeStub({ data: SAMPLE_STATS, error: null });
+    const result = await getStatsByCategory(stub);
+    expect(Object.keys(result).sort()).toEqual(['reading', 'running']);
+    expect(result.reading).toHaveLength(2);
+    expect(result.reading[0].id).toBe('s1');
+    expect(result.reading[1].id).toBe('s2');
+    expect(result.running).toHaveLength(1);
+    expect(result.running[0].id).toBe('s3');
+  });
+
+  it('returns an empty object when there are no stat rows', async () => {
+    const stub = makeStub({ data: [], error: null });
+    const result = await getStatsByCategory(stub);
+    expect(result).toEqual({});
+  });
+
+  it('throws a ServiceError tagged with the operation when the database fails', async () => {
+    const stub = makeStub({ data: null, error: DB_ERROR });
+    await expect(getStatsByCategory(stub)).rejects.toBeInstanceOf(ServiceError);
+    await expect(getStatsByCategory(stub)).rejects.toMatchObject({
+      operation: 'getStatsByCategory',
+    });
+  });
+});
