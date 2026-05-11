@@ -6,6 +6,8 @@ import { getStatsByCategory } from '@/lib/db';
 import { safeLoad } from '@/lib/safe-load';
 import type { Stat } from '@/lib/types';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Everything else — Swarnim Bagre',
   description: 'Hobbies, sports I am mediocre at, and things I track just to feel slightly less unobserved.',

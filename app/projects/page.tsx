@@ -6,6 +6,8 @@ import { getPublishedProjects } from '@/lib/db';
 import { safeLoad } from '@/lib/safe-load';
 import type { Project } from '@/lib/types';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: 'Projects — Swarnim Bagre',
   description: 'Things I made when I should have been doing something else. A few are even useful — to me, mostly.',
