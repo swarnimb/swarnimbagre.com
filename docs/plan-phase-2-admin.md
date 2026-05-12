@@ -42,7 +42,7 @@ End state: admin can log in via magic link, do full CRUD on projects and posts (
 
 ---
 
-## T16 — shadcn/ui install + admin component primitives
+## T16 — shadcn/ui install + admin component primitives [x]
 
 **Files:**
 - `components/ui/` (created by shadcn CLI)
@@ -53,18 +53,20 @@ End state: admin can log in via magic link, do full CRUD on projects and posts (
 **Functions to implement:** [setup + thin wrappers]
 
 **Acceptance criteria:**
-- [ ] shadcn initialized; the following components installed: `Button`, `Input`, `Label`, `Form`, `Table`, `Dialog`, `Select`, `Checkbox`, `Textarea`, `Badge`, `Sonner` (toast).
-- [ ] `components/ui/` files are not modified (they are generated). Customizations go through wrappers in `components/admin/`.
-- [ ] No emoji in any default label, placeholder, or button text used by the wrappers (CONSTRAINT-13).
-- [ ] No SaaS phrases anywhere — labels use direct nouns ("Save", "Delete", not "Save now", not "Powerful editor") (CONSTRAINT-13).
-- [ ] Button variants: default, destructive (red, used for delete confirmation), ghost.
-- [ ] Toast component is imported in `app/(admin)/layout.tsx`.
+- [x] shadcn initialized; the following components installed: `Button`, `Input`, `Label`, `Form`, `Table`, `Dialog`, `Select`, `Checkbox`, `Textarea`, `Badge`, `Sonner` (toast).
+- [x] `components/ui/` files are not modified (they are generated). Customizations go through wrappers in `components/admin/`.
+- [x] No emoji in any default label, placeholder, or button text used by the wrappers (CONSTRAINT-13).
+- [x] No SaaS phrases anywhere — labels use direct nouns ("Save", "Delete", not "Save now", not "Powerful editor") (CONSTRAINT-13).
+- [x] Button variants: default, destructive (red, used for delete confirmation), ghost.
+- [x] Toast component is imported in `app/(admin)/layout.tsx`.
 
 **Tests required:** [setup; visual verification covered by smoke test in T28]
 
 **Depends on:** T15
 
 **Specialist:** `@ui-swarnimbagre`
+
+_Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mapping (`bg-primary` → `--admin-accent`) deferred to T19 prerequisite — components compile but render colorless until tokens are wired._
 
 ---
 

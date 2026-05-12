@@ -1,5 +1,6 @@
 import { Inter } from 'next/font/google';
 import '../styles/admin.css';
+import { AdminToaster } from '@/components/admin/AdminToast';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -13,6 +14,9 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className={`admin-root ${inter.variable}`}>{children}</div>
+    <div className={`admin-root ${inter.variable}`}>
+      {children}
+      <AdminToaster />
+    </div>
   );
 }
