@@ -1,7 +1,7 @@
 # Constraints: swarnimbagre.com
 
 **Date seeded:** 2026-05-06 (by `@plan` Phase 4)
-**Last updated:** 2026-05-11 (T15 — CONSTRAINT-16 added)
+**Last updated:** 2026-05-12 (pre-T16 — CONSTRAINT-17 added)
 
 > Loaded by `@session-start` every session. Active binding decisions only — not history, not options considered. New constraints are added when `@plan`, `@cto`, or the builder makes a binding decision. A constraint is removed only when the decision is explicitly reversed, with the reversal noted in `docs/session-log.md`.
 
@@ -195,6 +195,18 @@ The four borrowed color tokens are defined in admin as `--admin-bg`, `--admin-su
 
 ---
 
+### [CONSTRAINT-17] Admin URL pattern locked to `/admin/*` (path-prefixed)
+
+**Decision:** All admin routes live under `/admin/*`. Login at `/admin/login`. Dashboard at `/admin`. CRUD at `/admin/{projects,posts,stats,images}/...`. Magic-link callback at `/admin/auth/callback`. Middleware matcher: `['/admin/:path*']`. Public site never uses `/login`, `/dashboard`, or other admin-shaped root-level URLs.
+
+**Rationale:** Single boundary alignment — URL boundary = layout boundary = Tailwind-scope boundary = middleware boundary = robots.txt boundary. Matches T17–T28 plan specs (already nested) and T15 implementation (`app/(admin)/admin/page.tsx`). Industry convention (Vercel, Supabase, GitHub, Linear all path-prefix).
+
+**Who decided and when:** `@cto` consultation pre-T16, 2026-05-12.
+
+**What this closes off:** Root-level admin URLs (`/login`, `/dashboard`). Does NOT close off future subdomain split (`admin.swarnimbagre.com`) — the `/admin/*` tree maps there trivially.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -215,3 +227,4 @@ The four borrowed color tokens are defined in admin as `--admin-bg`, `--admin-su
 | 14 | Server-Component data loads via `lib/safe-load.ts` | Page-level catch + log + fallback; no 500 on DB failure | `@dev` Targeted Fix | 2026-05-11 |
 | 15 | Image reads use signed URLs (TTL 3600s) | `getImageUrl` centralized; no `getPublicUrl` for private bucket | `@plan` + T14 | 2026-05-11 |
 | 16 | Admin color tokens namespaced as `--admin-*` | Prevents cascade collisions with public `:root` tokens | T15 | 2026-05-11 |
+| 17 | Admin URL pattern locked to `/admin/*` | URL = layout = Tailwind = middleware = robots boundary | `@cto` pre-T16 | 2026-05-12 |

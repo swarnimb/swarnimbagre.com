@@ -238,6 +238,20 @@ This file is the plain-language record of every architectural decision. The audi
 
 ---
 
+## 2026-05-12 — Admin URL pattern — locked to `/admin/*`
+
+**Architecture reference:** §4.1 (admin route structure) + CONSTRAINT-17
+
+**Decided:** Admin lives under `/admin/*` (path-prefixed). Login is `/admin/login`, dashboard is `/admin`, edit screens are `/admin/projects/[id]/edit`, etc. Public site never uses `/login` or `/dashboard`.
+
+**Means for your product:** The admin panel and the public site live at clearly separate URLs. You'll never bookmark `/login` and forget whether it's admin or public. SEO crawlers see one rule (`Disallow: /admin`) and skip the entire admin tree. If you later add a public dashboard for hobby stats, the slug `/dashboard` is still available.
+
+**Check before approving:** None at this point — this is a plumbing decision, not a product call. The URLs you'll type are slightly longer (`/admin/projects` vs `/projects-edit`); that's the only thing you'll feel as a user.
+
+**What this closes off:** Root-level admin URLs (`/login`, `/dashboard`). Does NOT close off a future subdomain split (`admin.swarnimbagre.com`) — the `/admin/*` tree maps to a subdomain trivially.
+
+---
+
 ## How to update this file
 
 When `@cto` or any session changes a decision in [`architecture.md`](architecture.md):

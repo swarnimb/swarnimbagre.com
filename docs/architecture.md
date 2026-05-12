@@ -168,7 +168,9 @@ The only programmatic write path. **Decision 4 — resolves ASSUMPTION-06.** Loc
 
 ## 4. Component Architecture
 
-### 4.1 Repo layout (proposed)
+### 4.1 Repo layout (confirmed)
+
+All admin routes are nested under `/admin/*`. Login lives at `/admin/login`, the dashboard at `/admin`, and the magic-link callback at `/admin/auth/callback`. Middleware matcher is `['/admin/:path*']`. See CONSTRAINT-17 (added 2026-05-12) and founder-brief entry of 2026-05-12 for rationale.
 
 ```
 swarnimbagre.com/
@@ -186,12 +188,14 @@ swarnimbagre.com/
 │   │   └── admin.css                 # Tailwind + scoped-preflight, imported only by admin layout
 │   └── (admin)/                      # route group — admin layout owns Tailwind import
 │       ├── layout.tsx                # admin-only Tailwind/shadcn CSS, Inter font
-│       ├── page.tsx                  # admin home
-│       ├── login/page.tsx
-│       ├── projects/...
-│       ├── posts/...
-│       ├── stats/page.tsx
-│       └── images/page.tsx
+│       └── admin/                    # all admin URLs live under /admin/*
+│           ├── page.tsx              # /admin — dashboard
+│           ├── login/page.tsx        # /admin/login
+│           ├── auth/callback/route.ts # /admin/auth/callback — magic-link callback
+│           ├── projects/...
+│           ├── posts/...
+│           ├── stats/page.tsx
+│           └── images/page.tsx
 ├── components/
 │   ├── public/                       # public bundle ports (verbatim from site/)
 │   ├── admin/                        # shadcn-based admin components
