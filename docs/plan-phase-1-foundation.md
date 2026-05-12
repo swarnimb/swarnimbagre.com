@@ -1,7 +1,7 @@
 # Plan — Phase 1: Foundation
 
 **Date:** 2026-05-06
-**Status:** Active
+**Status:** Complete (2026-05-11, session 9)
 **Tasks:** T1–T14 (14 tasks)
 **Predecessor:** none — first phase
 **Successor:** [`plan-phase-2-admin.md`](plan-phase-2-admin.md)
@@ -518,24 +518,26 @@ Sub-phased on 2026-05-07 into T10a–T10d. Track progress at sub-phase level. Or
 - `assertRequiredEnv(): void` (≤50 lines, CQ-01) — runs at startup, throws if any required var is missing. Names listed: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
 
 **Acceptance criteria:**
-- [ ] `.env.example` is final for Phase 1: all three Supabase vars listed, no values, no comments containing real secrets (SEC-01).
-- [ ] Vercel project environment variables set for production with the same three names. Service role key is server-only.
-- [ ] `docs/env-vars.md` documents: each var name, public vs server-only, where to get the value (Supabase dashboard), where to set locally (`.env.local`), where to set in production (Vercel dashboard) (DS-02).
-- [ ] Startup check fails loudly with a descriptive error if any var is missing (EH-01, EH-02).
-- [ ] `npm run build` succeeds with no warnings (CQ-05).
-- [ ] First Vercel production deploy succeeds. The four public pages render at the production URL (placeholder DNS is fine if cutover is deferred).
-- [ ] Supabase logs show no errors from the deploy (verify via `@supabase` MCP or dashboard).
-- [ ] Auto-Logging entry written to `docs/session-log.md` documenting the Phase 1 close (DS-03).
+- [x] `.env.example` is final for Phase 1: all three Supabase vars listed, no values, header comments distinguish public vs server-only (SEC-01).
+- [x] Vercel project environment variables set for production with the same three names. Service role key is server-only (Production + Preview).
+- [x] `docs/env-vars.md` documents: each var name, public vs server-only, where to get the value (Supabase dashboard), where to set locally (`.env.local`), where to set in production (Vercel dashboard) (DS-02).
+- [x] Startup check fails loudly with a descriptive error if any var is missing (EH-01, EH-02). Verified — local build threw on missing SUPABASE_SERVICE_ROLE_KEY with a clear message listing the missing var and pointing at `docs/env-vars.md`.
+- [x] `npm run build` succeeds with no warnings (CQ-05). Initial run logged 3 Dynamic-server-usage errors caught by `safeLoad`; resolved by declaring `/projects /writing /other` as `export const dynamic = 'force-dynamic'` since they call `cookies()` via `createServerClient`. Second build is clean.
+- [x] First Vercel production deploy succeeds. After a one-time framework-preset fix (Vercel had it set to "Other" instead of "Next.js"), deploy is green; route table shows all DB-driven pages as `ƒ` dynamic on-demand.
+- [x] Supabase logs show no errors from the deploy. Verified via `mcp__supabase__get_logs` — postgres logs clean (the only ERRORs are dashboard-side `supabase_migrations.schema_migrations does not exist` quirks unrelated to the app); API logs show 200s on `/rest/v1/projects`, `/rest/v1/posts`, `/rest/v1/stats` in the deploy window.
+- [x] Auto-Logging entry written to `docs/session-log.md` documenting the Phase 1 close (DS-03).
 
 **Tests required:**
-- `assertRequiredEnv throws when var is missing` (TS-01 error).
-- `assertRequiredEnv passes when all vars present` (TS-01 happy).
-- `production build succeeds` (`npm run build`) — TS-04.
-- `public pages render with DB data` — Playwright smoke against the deploy.
+- [x] `assertRequiredEnv throws when var is missing` (TS-01 error).
+- [x] `assertRequiredEnv passes when all vars present` (TS-01 happy).
+- [x] `production build succeeds` (`npm run build`) — TS-04.
+- [x] `public pages render with DB data` — Playwright MCP smoke ran against `https://swarnimbagre-com.vercel.app` covering `/`, `/projects`, `/writing`, `/other`, `/writing/hello-world`. All pages: correct title/canonical, nav rendered, DB-driven content present (Hello world post listed on `/writing` with `MAY 2026` date + excerpt; full Markdown rendered on `/writing/hello-world` with `<strong>`, `<em>`, list, link, and code-fence preserved). Zero console errors aside from the known favicon 404 (carried in deferred items). Mobile-variant smoke not run — MCP browser session cannot override User-Agent; deferred.
 
 **Depends on:** T9, T12, T13
 
 **Specialist:** `@cto`, `@supabase`
+
+**Status:** Complete in session 9 (2026-05-11). 35 Vitest tests pass (32 prior + 3 new). Vercel production deploy green. Commit `bbd6d5d`.
 
 ---
 
