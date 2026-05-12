@@ -218,6 +218,8 @@ Tailwind is imported in exactly one place: `app/styles/admin.css`, which is in t
 
 The Tailwind config's `content` glob includes only `./app/(admin)/**/*` and `./components/admin/**/*` and `./components/ui/**/*`. Public components are excluded. The public bundle never sees a Tailwind utility class, and the Preflight reset never reaches public route HTML.
 
+**Color token namespacing.** The four admin color tokens are namespaced as `--admin-bg`, `--admin-surface`, `--admin-fg`, `--admin-accent` (not the bare `--bg` / `--surface` / `--fg` / `--accent` names the public site defines on `:root` in `app/styles/colors_and_type.css`). This prevents cascade collisions if the public site's `:root` token definitions ever leak into the admin subtree (or vice versa). Tailwind's `theme.colors` config maps the utility names (`bg`, `surface`, `fg`, `accent`) to the `--admin-*` CSS variables, so utility class names (`bg-bg`, `text-fg`) stay clean in admin code. Locked T15 — see CONSTRAINT-16 and Founder Brief #4 (Admin CSS token namespacing).
+
 **Founder Brief:** "Tailwind scoping" in [`founder-brief.md`](founder-brief.md).
 
 ### 4.4 UI-boundary error handling — `lib/safe-load.ts`

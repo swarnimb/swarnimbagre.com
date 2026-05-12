@@ -25,6 +25,7 @@ This file is the plain-language record of every architectural decision. The audi
 | 11 | Server-safe Nav props — plain-data `hrefs` for Server Components | [§4.5](architecture.md#45-server--client-prop-boundary--nav--mobilenav) |
 | 12 | Image URLs are short-lived, generated on demand | [§4.6](architecture.md#46-image-read-pattern) |
 | 13 | Image components render on the server, not the browser | [§4.6](architecture.md#46-image-read-pattern) |
+| 14 | Admin CSS token namespacing | [§4.2](architecture.md#42-tailwind-scoping-decision-3--resolves-assumption-04) |
 
 ---
 
@@ -220,6 +221,20 @@ This file is the plain-language record of every architectural decision. The audi
 **Check before approving:** N/A — this is reversible. If image components ever need browser-side behavior, we can split: a server component for the URL fetch, a client component for the interactivity.
 
 **What this closes off:** No client-side conditional image loading from these specific components (e.g. "only fetch the URL when scrolled into view"). The `loading="lazy"` attribute handles native browser lazy-loading, which covers the typical use case.
+
+---
+
+## 2026-05-11 — Admin CSS token namespacing
+
+**Architecture link:** [`architecture.md` §4.2](architecture.md#42-tailwind-scoping-decision-3--resolves-assumption-04)
+
+**Decided:** Admin redefines the four borrowed color tokens under a namespaced prefix (`--admin-bg`, `--admin-surface`, `--admin-fg`, `--admin-accent`) rather than reusing the bare names (`--bg`, `--surface`, `--fg`, `--accent`) the public site uses on `:root`. The hex values are identical; only the variable names differ.
+
+**What this means for your product:** A future change to either side's color tokens cannot accidentally repaint the other side. If you ever decide the warm-brown background should shift a shade darker on the public site, the admin panel stays exactly as it was. The two visual worlds are isolated by variable name, not just by CSS file location.
+
+**Check before approving:** A color-token rename or value change requires updating both files independently. If you want a single source of truth for the four colors, you'd need a build-time pipeline that copies values from one to the other — adds complexity we don't have today. The current setup trades that for isolation.
+
+**What this closes off:** Sharing CSS custom properties across the public/admin boundary. Any component that wants to use the same color in both contexts must reference both prefixes explicitly, or rely on the Tailwind theme alias (admin only).
 
 ---
 

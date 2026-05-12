@@ -1,7 +1,7 @@
 # Constraints: swarnimbagre.com
 
 **Date seeded:** 2026-05-06 (by `@plan` Phase 4)
-**Last updated:** 2026-05-11 (session 7 — CONSTRAINT-14 added)
+**Last updated:** 2026-05-11 (T15 — CONSTRAINT-16 added)
 
 > Loaded by `@session-start` every session. Active binding decisions only — not history, not options considered. New constraints are added when `@plan`, `@cto`, or the builder makes a binding decision. A constraint is removed only when the decision is explicitly reversed, with the reversal noted in `docs/session-log.md`.
 
@@ -189,6 +189,12 @@ Image URLs are generated at request time via Supabase Storage `createSignedUrl(b
 
 ---
 
+### [CONSTRAINT-16] Admin color tokens namespaced as `--admin-*`
+
+The four borrowed color tokens are defined in admin as `--admin-bg`, `--admin-surface`, `--admin-fg`, `--admin-accent` — NOT as bare `--bg`, `--surface`, `--fg`, `--accent` (those names are owned by the public site's `:root` block in `app/styles/colors_and_type.css`). Hex values are identical between the two; only variable names differ. This prevents cascade collisions if the public `:root` ever leaks into admin or vice versa. Tailwind's `theme.colors` config maps utility names (`bg`, `surface`, `fg`, `accent`) to the `--admin-*` variables, so utility class names stay clean. See `architecture.md` §4.2 and `founder-brief.md` "Admin CSS token namespacing". Established T15 (2026-05-11).
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -207,3 +213,5 @@ Image URLs are generated at request time via Supabase Storage `createSignedUrl(b
 | 12 | Slug locked at DB level after publish | URLs permanent on publish | `@plan` | 2026-05-06 |
 | 13 | Voice — dry, anti-LinkedIn, no emoji | Applies to public copy AND admin labels | Kickoff + `@plan` | 2026-05-06 |
 | 14 | Server-Component data loads via `lib/safe-load.ts` | Page-level catch + log + fallback; no 500 on DB failure | `@dev` Targeted Fix | 2026-05-11 |
+| 15 | Image reads use signed URLs (TTL 3600s) | `getImageUrl` centralized; no `getPublicUrl` for private bucket | `@plan` + T14 | 2026-05-11 |
+| 16 | Admin color tokens namespaced as `--admin-*` | Prevents cascade collisions with public `:root` tokens | T15 | 2026-05-11 |
