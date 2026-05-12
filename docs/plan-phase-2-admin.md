@@ -70,11 +70,11 @@ _Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mappin
 
 ---
 
-## T17 — Magic-link login flow
+## T17 — Magic-link login flow [x]
 
 **Files:**
-- `app/(admin)/login/page.tsx` (create)
-- `app/auth/callback/route.ts` (create — Supabase Auth callback)
+- `app/(admin)/admin/login/page.tsx` (create — URL `/admin/login`, CONSTRAINT-17)
+- `app/(admin)/admin/auth/callback/route.ts` (create — Supabase Auth callback, URL `/admin/auth/callback`, CONSTRAINT-17)
 - `lib/auth.ts` (create — auth helpers)
 - `components/admin/LoginForm.tsx` (create)
 
@@ -83,12 +83,12 @@ _Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mappin
 - `<LoginForm />` (≤200 lines, CQ-02) — shadcn Form component, single email field, submit button.
 
 **Acceptance criteria:**
-- [ ] Email input validates as a non-empty email at the boundary before any Supabase call (SEC-02).
-- [ ] Errors are logged with context: `{ operation: 'signInWithMagicLink', emailProvided: true, error }` — never the raw email (SEC-05).
-- [ ] User-facing error is a generic "Could not send link" message (EH-04). Internal log has full Supabase error.
-- [ ] On success, a status message appears in-form (no toast — voice rule prefers inline feedback for an admin-of-one).
-- [ ] Auth callback route at `/auth/callback` exchanges the code for a session via Supabase SSR helpers and redirects to `/admin`.
-- [ ] All public function doc comments cover params, return, throws (DS-01).
+- [x] Email input validates as a non-empty email at the boundary before any Supabase call (SEC-02).
+- [x] Errors are logged with context: `{ operation: 'signInWithMagicLink', emailProvided: true, error }` — never the raw email (SEC-05).
+- [x] User-facing error is a generic "Could not send link" message (EH-04). Internal log has full Supabase error.
+- [x] On success, a status message appears in-form (no toast — voice rule prefers inline feedback for an admin-of-one).
+- [x] Auth callback route at `/admin/auth/callback` exchanges the code for a session via Supabase SSR helpers and redirects to `/admin` (CONSTRAINT-17).
+- [x] All public function doc comments cover params, return, throws (DS-01).
 
 **Tests required:**
 - `signInWithMagicLink rejects invalid email` (TS-01 error, TS-04 auth critical).
@@ -100,6 +100,14 @@ _Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mappin
 **Depends on:** T9, T16
 
 **Specialist:** `@supabase`
+
+_Completed 2026-05-12. Created `lib/auth.ts` (Server Action `signInWithMagicLink` with zod boundary validation + scrubbed log), `components/admin/LoginForm.tsx` (shadcn Form, inline success/error states, no toast), `app/(admin)/admin/login/page.tsx` (Server Component, redirects authenticated users to `/admin`), `app/(admin)/admin/auth/callback/route.ts` (handles both `token_hash`+`type` magic-link payload via `verifyOtp` and the PKCE `?code=...` shape via `exchangeCodeForSession`; both failure paths log internally and redirect to `/admin/login?error=callback_failed`). Added `ValidationError` to `lib/errors.ts`. Vitest: 35 → 41 (6 new — 4 auth.test + 2 LoginForm.test); Playwright: 13 → 14 (1 new — admin-auth-callback.spec). `npm run build` and `tsc --noEmit` exit 0. Notable: dual callback shape support keeps door open for future OAuth without rework; `.env.example` now documents `NEXT_PUBLIC_SITE_URL` (used for `emailRedirectTo`); did NOT add `@testing-library/user-event` (test uses `fireEvent` + `act` from the existing `@testing-library/react` install)._
+
+_F-1 + F-2 targeted fix applied 2026-05-12 (session 12, post `@security` BLOCKED). **F-1 (allowlist enforcement):** added `ADMIN_ALLOWED_EMAIL` env var (server-only, no `NEXT_PUBLIC_` prefix), surfaced via a new `getAdminAllowedEmail()` typed getter in `lib/env.ts` that throws on missing/empty (CONSTRAINT-09, SEC-04). `signInWithMagicLink` now calls an `assertAllowlistedEmail()` helper after zod boundary validation and before Supabase — case-insensitive trim compare, log payload preserved as `{ operation, emailProvided: true, error: 'not_allowlisted' }` so the raw rejected email never reaches the log (SEC-05). The Supabase `signInWithOtp` call now passes `shouldCreateUser: false` so a stale Layer-1 dashboard toggle cannot auto-provision a user. Defense-in-depth: the callback route at `app/(admin)/admin/auth/callback/route.ts` calls `supabase.auth.getUser()` after every successful `verifyOtp` / `exchangeCodeForSession`; if the authoritative user email is not allowlisted (or `getUser` returns no user) the session is invalidated via `signOut()` and the response redirects to the same generic `?error=callback_failed` shape — no distinct error code that would leak the reason. **F-2 (response uniformity):** collapsed `LoginForm.tsx` success and failure branches into a single terminal `submitted` state showing `"If that email is registered, check your inbox."` regardless of whether the server action resolved, rejected with `ValidationError`, or rejected with `ServiceError` — matching `auth-flow.md` §2 step 4 verbatim. Client-side zod format validation still surfaces inline (no enumeration risk — reveals email shape, not registration state). **Tests:** Vitest 41 → 52 (+3 in `auth.test.ts` for allowlist + missing-env + case-insensitive paths, +2 in `LoginForm.test.tsx` for enumeration-resistance and format-error coverage, +6 in new `tests/admin-auth-callback.test.ts` route-handler test file covering the callback's defense-in-depth allowlist path including PKCE and case-insensitive comparison). Playwright stays at 14: the defense-in-depth path requires mocking Supabase server-side calls (`verifyOtp`, `getUser`, `signOut`), which Playwright's network interception cannot reach — that test lives in Vitest where `createServerClient` can be mocked directly; the existing e2e bogus-payload test still covers the routing-layer contract. `npm run build` and `tsc --noEmit` exit 0._
+
+_F-12 + F-13 targeted fix applied 2026-05-12 (re-audit pass, third architectural pass on T17 — initial impl → F-1+F-2 fix → F-12+F-13 fix). The F-1 fix introduced a single-probe timing oracle (non-allowlisted rejections short-circuited in microseconds while allowlisted calls awaited Supabase ~100-500ms — F-12 High) and the throw-vs-resolve split left the Server Action's wire shape distinguishable to a raw `fetch` consumer (F-13 Medium). Both are caused by the same architectural shape, so fixed together. Split `lib/auth.ts` into a throwing internal helper `attemptMagicLink` (carries the EH-05 typed-error contract for unit tests) and a non-throwing Server Action `signInWithMagicLink` that wraps it. The wrapper catches every internal throw without re-logging (a second `console.error` on the catch path would itself reopen a smaller timing channel — the inner helper has already logged with scrubbed payload), and a `try/finally` enforces a `MIN_DURATION_MS = 750` floor on the response time regardless of outcome via a Promise-wrapped `setTimeout`. Both paths flow through the `finally`, so the bound applies uniformly; the floor is conservative enough to swallow normal Supabase variance, and runs over (not truncated) if Supabase is unusually slow. Option A (export `attemptMagicLink` from the `'use server'` file) was used — the directive only requires every export to be an async function, and `attemptMagicLink` is async. Verified `npm run build` accepts the second export. **Tests:** Vitest 52 → 57 (+5 in `auth.test.ts`: 4 wire-shape uniformity tests asserting `signInWithMagicLink` resolves with `undefined` on the allowlisted success, non-allowlisted, malformed, and Supabase-fail paths, plus 1 timing test using `vi.useFakeTimers({ toFake: ['setTimeout', 'performance'] })` + `advanceTimersByTimeAsync` to assert the promise stays pending at `MIN_DURATION_MS - 1` and settles at `MIN_DURATION_MS` without burning real wall time; the 7 throw-shape tests retargeted from `signInWithMagicLink` onto `attemptMagicLink`, coverage preserved). `LoginForm.test.tsx` updated to mock the prop with `mockResolvedValue(undefined)` on the not-allowlisted and Supabase-fail paths since the Server Action no longer throws; the UI assertions remain unchanged. `tests/admin-auth-callback.test.ts` unchanged — the callback handler's contract did not change. Playwright stays at 14. `npm run build` and `tsc --noEmit` exit 0._
+
+_F-14 + F-15 targeted fix applied 2026-05-12 (fourth architectural pass on T17 — initial impl → F-1+F-2 fix → F-12+F-13 fix → F-14+F-15 fix). **F-14 (Critical — Server Action surface):** the prior F-12+F-13 pass exported `attemptMagicLink` from the `'use server'` `lib/auth.ts` module, which Next.js promoted to a second publicly-addressable Server Action endpoint (action ID `4018515b...` registered in `.next/server/server-reference-manifest.json` and shipped in the client bundle). An attacker could `fetch` that action ID directly via a `Next-Action` header and bypass the wrapper's F-12 timing floor and F-13 wire-shape uniformity entirely. Fixed via option (b) from the audit-3 recommendation: moved `attemptMagicLink` plus the helpers it owns (`assertAllowlistedEmail`, `EMAIL_SCHEMA`, `SIGN_IN_OPERATION`, `getSiteUrl`) into a new `lib/auth-internal.ts` module without the `'use server'` directive. `lib/auth.ts` now imports the helper from that sibling module, retains the `'use server'` directive, and exports exactly one function — `signInWithMagicLink`. Post-build verification of `.next/server/server-reference-manifest.json` confirms a single action ID (`4022f0de...` → `signInWithMagicLink`); the helper's prior action ID is gone. The misleading doc comment claiming `attemptMagicLink` was "not callable from a client because the enclosing module is 'use server'" is replaced with an accurate explanation of the split-module design. **F-15 (Medium — cookie channel):** the default `@supabase/ssr` PKCE flow wrote a `*-code-verifier` Set-Cookie header on the allowlisted (call-Supabase) branch but not on the throw-and-skip branch, distinguishing the two at the HTTP-header level even with uniform body shape and uniform timing. Configured the request-scoped Supabase server client in `lib/supabase.ts` with `auth: { flowType: 'implicit' }` per the audit-3 recommendation; implicit flow does not emit the verifier cookie. The magic-link callback at `app/(admin)/admin/auth/callback/route.ts` consumes the `?token_hash=&type=` shape via `verifyOtp`, which is not PKCE-dependent — the production callback path is unaffected. The `?code=` branch becomes dead under the current magic-link-only model but is retained for the future-OAuth path documented in `docs/auth-flow.md`. **Tests:** Vitest 57 → 61 (+4 in a new `tests/auth-cookies.test.ts` file: asserts the SSR client construction options include `auth.flowType === 'implicit'` and that no `code-verifier`-named cookie is written on the allowlisted, not-allowlisted, or malformed-email paths; the auth-test import for `attemptMagicLink` was retargeted from `@/lib/auth` to `@/lib/auth-internal` and the existing 12 auth-test cases still pass). Playwright stays at 14. `npm run build` and `tsc --noEmit` exit 0. T17 has now had four architectural passes: initial implementation, F-1+F-2 (allowlist + UI uniformity), F-12+F-13 (timing floor + wire-shape uniformity), and F-14+F-15 (action surface reduction + cookie-channel close)._
 
 ---
 
@@ -119,6 +127,7 @@ _Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mappin
 - [ ] `/admin/login` itself is exempt — visiting it while signed in redirects to `/admin`.
 - [ ] Expired session → redirect to `/admin/login` with a generic message (EH-04). Internal log notes "session expired" (EH-02).
 - [ ] No hardcoded user IDs, emails, or roles (CQ-04). Session presence is the sole admin check (CONSTRAINT-09).
+- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `unauthenticated request to /admin redirects to /admin/login` (TS-04 access control critical).
@@ -147,6 +156,7 @@ _Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mappin
 - [ ] Color tokens applied: bg `#1C1712`, surface `#252018`, fg `#E8E0D0`, accent `#C9A84C`.
 - [ ] No "Dashboard" label. The page is just titled "Admin" or empty (CONSTRAINT-13).
 - [ ] Logout calls `signOut()`, clears the cookie, redirects to `/admin/login`. Browser back button does not re-authenticate.
+- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `admin home renders when authenticated` (TS-01).
@@ -214,6 +224,7 @@ _Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mappin
 - [ ] All queries parameterized via Supabase builder (SEC-03).
 - [ ] No PII in logs (SEC-05). Email never appears in mutation logs.
 - [ ] All Server Actions have doc comments (DS-01).
+- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `slugify produces lowercase dashed slug` (TS-01 happy).
@@ -247,6 +258,7 @@ _Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mappin
 - [ ] Hard-delete only — row is gone from DB (CONSTRAINT-10).
 - [ ] ESC key closes the modal (shadcn Dialog default).
 - [ ] No undo path. Recovery is via Supabase backups — not an admin concern.
+- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `modal opens on delete click` (TS-01).
@@ -282,6 +294,7 @@ _Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mappin
 - [ ] Form has a `content` textarea for raw Markdown. No WYSIWYG. The `content` is stored as-is — never converted to HTML before storage (CONSTRAINT-06).
 - [ ] Optional Markdown preview pane uses the same `renderMarkdown` from T12. Preview confirms what readers will see.
 - [ ] DB trigger from T8 enforces slug-lock on `posts` as well.
+- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `getAllPosts returns drafts and published when filter is all` (TS-01).
@@ -316,6 +329,7 @@ _Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mappin
 - [ ] Empty state: "No stats yet" (CONSTRAINT-13).
 - [ ] No edit. Corrections are delete-then-reinsert (acknowledged in PRD §3.4 and CONSTRAINT-10).
 - [ ] Delete: list rows expose a delete button gated by the same `DeleteConfirmModal` component from T22 (admin-only — RLS allows admin DELETE on stats).
+- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `getAllStats returns rows in reverse-chronological order` (TS-01).
@@ -348,6 +362,7 @@ _Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mappin
 - [ ] On error: caught, logged with context (operation + sanitized inputs — never log file content) (EH-01, EH-02, EH-03). Component shows inline error (EH-04).
 - [ ] Storage SDK used (no hardcoded URLs) (SEC-01, CQ-04).
 - [ ] Doc comment on `uploadImage` lists params, return, throws (DS-01).
+- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `uploadImage rejects file > 2MB` (TS-01 error, TS-04 data write critical).
@@ -380,6 +395,7 @@ _Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mappin
 - [ ] The previous image record becomes orphaned (parent_id NULL, parent_type NULL) by the update — eligible for cleanup after 7 days (CONSTRAINT-07).
 - [ ] Alt text persists on the `images` row; reading the parent re-fetches the alt and renders it in the public components from T13.
 - [ ] No image is allowed to be saved with empty alt (UI prevents submit; DB column is NOT NULL).
+- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `attaching an image updates parent.image_id` (TS-04).
@@ -409,6 +425,7 @@ _Completed 2026-05-12. See session-log T16 entry. Known gap: shadcn token mappin
 - [ ] On success: shows "Deleted N images, freed ~M MB". Toast is fine here.
 - [ ] On error: inline error, full log (EH-01, EH-02, EH-04).
 - [ ] All deletes are parameterized (SEC-03).
+- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `deleteOrphanImages deletes only rows older than 7 days` (TS-04 data write critical).

@@ -191,7 +191,20 @@ Image URLs are generated at request time via Supabase Storage `createSignedUrl(b
 
 ### [CONSTRAINT-16] Admin color tokens namespaced as `--admin-*`
 
-The four borrowed color tokens are defined in admin as `--admin-bg`, `--admin-surface`, `--admin-fg`, `--admin-accent` — NOT as bare `--bg`, `--surface`, `--fg`, `--accent` (those names are owned by the public site's `:root` block in `app/styles/colors_and_type.css`). Hex values are identical between the two; only variable names differ. This prevents cascade collisions if the public `:root` ever leaks into admin or vice versa. Tailwind's `theme.colors` config maps utility names (`bg`, `surface`, `fg`, `accent`) to the `--admin-*` variables, so utility class names stay clean. See `architecture.md` §4.2 and `founder-brief.md` "Admin CSS token namespacing". Established T15 (2026-05-11).
+Admin borrows 8 color tokens, all namespaced under `--admin-*` — NOT as bare `--bg`, `--surface`, `--fg`, `--accent`, etc. (those names are owned by the public site's `:root` block in `app/styles/colors_and_type.css`). Hex values match the public palette where they're sourced from it; only variable names differ. This prevents cascade collisions if the public `:root` ever leaks into admin or vice versa. Tailwind's `theme.colors` config maps shadcn slot names to the `--admin-*` variables, so utility class names and shadcn component internals stay clean.
+
+**The 8 tokens and their shadcn slot mappings:**
+
+1. `--admin-bg` #1C1712 → shadcn `background`
+2. `--admin-surface` #252018 → shadcn `card`, `popover`, `secondary`, `accent`, `muted` (background)
+3. `--admin-fg` #E8E0D0 → shadcn `foreground`, `card-foreground`, `popover-foreground`, `secondary-foreground`, `accent-foreground`
+4. `--admin-accent` #C9A84C → shadcn `primary`, `ring`
+5. `--admin-destructive` #B85C3C → shadcn `destructive` (sources hex from public `--danger`)
+6. `--admin-destructive-fg` #F5E8D8 → shadcn `destructive-foreground` (high-contrast readable text on destructive bg)
+7. `--admin-border` #3A3328 → shadcn `border`, `input` (sources hex from public `--hairline`)
+8. `--admin-muted-fg` #7A7060 → shadcn `muted-foreground` (sources hex from public `--fg-muted`)
+
+See `architecture.md` §4.2 and `founder-brief.md` "Admin CSS token namespacing". Established T15 (2026-05-11). Amended 2026-05-12 (session 12) — added 4 semantic shadcn tokens after `@designer` + `@cto` consultation. Rationale captured in `design-decisions.md`.
 
 ---
 
@@ -226,5 +239,5 @@ The four borrowed color tokens are defined in admin as `--admin-bg`, `--admin-su
 | 13 | Voice — dry, anti-LinkedIn, no emoji | Applies to public copy AND admin labels | Kickoff + `@plan` | 2026-05-06 |
 | 14 | Server-Component data loads via `lib/safe-load.ts` | Page-level catch + log + fallback; no 500 on DB failure | `@dev` Targeted Fix | 2026-05-11 |
 | 15 | Image reads use signed URLs (TTL 3600s) | `getImageUrl` centralized; no `getPublicUrl` for private bucket | `@plan` + T14 | 2026-05-11 |
-| 16 | Admin color tokens namespaced as `--admin-*` | Prevents cascade collisions with public `:root` tokens | T15 | 2026-05-11 |
+| 16 | Admin color tokens namespaced as `--admin-*` | 8-token semantic palette; namespaced to prevent public `:root` collisions | T15 | 2026-05-11 / amended 2026-05-12 |
 | 17 | Admin URL pattern locked to `/admin/*` | URL = layout = Tailwind = middleware = robots boundary | `@cto` pre-T16 | 2026-05-12 |

@@ -90,13 +90,25 @@ Verbatim from the bundle's anti-patterns. Non-negotiable:
 
 **Component library:** shadcn/ui with Tailwind. Use shadcn's defaults for forms, tables, modals, dropdowns, file upload UIs, and any other CRUD chrome. Do not custom-build admin components in the public-site aesthetic.
 
-**Color continuity:** Borrow these tokens from `site/colors_and_type.css` so admin doesn't feel jarring when bouncing between admin and public site:
-- Background: `--bg` (#1C1712)
-- Surface: `--surface` (#252018)
-- Body text: `--fg` (#E8E0D0)
-- Accent / primary action: `--accent` (#C9A84C)
+**Color continuity:** Borrow these tokens from the public palette (`app/styles/colors_and_type.css`) so admin doesn't feel jarring when bouncing between admin and public site. Tokens are namespaced as `--admin-*` in admin CSS — same hex, different variable name — to prevent cascade collisions (see CONSTRAINT-16).
 
-Apply via Tailwind theme config or CSS custom properties. Do NOT pull other tokens (typography, spacing, hairline colors) — those are public-site specific.
+Eight tokens total: 4 brand (original) + 4 semantic (added 2026-05-12 after `@designer` + `@cto` consultation to cover shadcn's required slots).
+
+**Brand tokens (original 4):**
+- `--admin-bg` (#1C1712) — page background. Maps to shadcn `background`.
+- `--admin-surface` (#252018) — raised surfaces. Maps to shadcn `card`, `popover`, `secondary`, `accent`, `muted` (background).
+- `--admin-fg` (#E8E0D0) — body text. Maps to shadcn `foreground`, `card-foreground`, `popover-foreground`, `secondary-foreground`, `accent-foreground`.
+- `--admin-accent` (#C9A84C) — primary action / focus. Maps to shadcn `primary`, `ring`.
+
+**Semantic tokens (added 2026-05-12):**
+- `--admin-destructive` (#B85C3C) — sources hex from public `--danger` (burnt sienna). Maps to shadcn `destructive`.
+- `--admin-destructive-fg` (#F5E8D8) — high-contrast readable text on destructive bg. Maps to shadcn `destructive-foreground`.
+- `--admin-border` (#3A3328) — sources hex from public `--hairline`. Maps to shadcn `border`, `input`.
+- `--admin-muted-fg` (#7A7060) — sources hex from public `--fg-muted` (dates, metadata). Maps to shadcn `muted-foreground`.
+
+**Why expanding from 4 to 8 does NOT violate the bundle rule:** the original "4 tokens only" rule existed to keep the public site's *identity elements* out of admin — Fraunces typography, hairline-driven layout grammar, the gold-underline link signature. Those remain public-only. Adding semantic admin tokens for shadcn slot coverage (destructive states, borders, muted text) is mechanical chrome, not identity. The shadcn aesthetic is preserved; only the hex values shift to the warm palette so admin doesn't clash visually when toggled with the public site.
+
+Do NOT pull typography tokens, spacing tokens, motion tokens, or any other public-site variables. The 8 colors above are the complete admin import.
 
 **Typography:** shadcn defaults (Inter or system font). Do NOT use Fraunces or JetBrains Mono in admin — those are public-site signature fonts and using them in admin dilutes the public site's identity.
 

@@ -12,6 +12,21 @@ import { cookies } from 'next/headers';
  * callback is wrapped in try/catch because Server Component cookies are
  * read-only — middleware refreshes the session, making the no-op safe here.
  *
+ * The auth client is configured with `flowType: 'implicit'` (F-15 mitigation).
+ * `@supabase/ssr` defaults to PKCE, which writes a `*-code-verifier` Set-Cookie
+ * header when `signInWithOtp` is invoked. The PKCE cookie is only written on
+ * the call-Supabase branch of `signInWithMagicLink`, so its presence
+ * distinguishes the allowlisted path from the throw-and-skip path at the
+ * HTTP-header level — a single-probe enumeration channel orthogonal to the
+ * F-12/F-13 closures. Implicit flow does not emit that cookie. The magic-link
+ * callback at `app/(admin)/admin/auth/callback/route.ts` consumes the
+ * `?token_hash=&type=` shape via `verifyOtp`, which is not PKCE-dependent, so
+ * the change has no effect on the production callback path. The PKCE-shaped
+ * `?code=` branch in the callback becomes dead under the current single-user
+ * magic-link-only model but is intentionally retained for the future-OAuth
+ * path documented in `docs/auth-flow.md`. See `docs/security-report.md` audit
+ * 3 finding F-15.
+ *
  * @returns A request-scoped Supabase client.
  * @throws  If `NEXT_PUBLIC_SUPABASE_URL` or `NEXT_PUBLIC_SUPABASE_ANON_KEY`
  *          is missing at runtime (the non-null assertions will throw).
@@ -22,6 +37,9 @@ export async function createServerClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      auth: {
+        flowType: 'implicit',
+      },
       cookies: {
         getAll: () => cookieStore.getAll(),
         setAll: (cookiesToSet) => {

@@ -8,6 +8,12 @@
   --admin-fg: #E8E0D0;
   --admin-accent: #C9A84C;
 
+  /* Semantic shadcn tokens (added 2026-05-12, CONSTRAINT-16 amended) */
+  --admin-destructive: #B85C3C;
+  --admin-destructive-fg: #F5E8D8;
+  --admin-border: #3A3328;
+  --admin-muted-fg: #7A7060;
+
   background-color: var(--admin-bg);
   color: var(--admin-fg);
   font-family: var(--font-inter), system-ui, sans-serif;

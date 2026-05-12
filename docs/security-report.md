@@ -1,142 +1,274 @@
-# Security Report: swarnimbagre.com
+# Security Report — T17 Magic-Link Login Flow (Audit Pass 4)
 
-**Last audit:** 2026-05-11
-**Scope:** T12 — Markdown rendering (`lib/markdown.ts`, `components/public/MarkdownContent.tsx`, `tests/markdown.test.ts`) + supply-chain hygiene for newly added deps (`marked@18.0.3`, `dompurify@3.4.2`, `@types/dompurify@3.0.5`) + SEC-07 sensitive-file exposure across the repo.
+**Date:** 2026-05-12 (audit 4 — final pass)
+**Auditor:** @security (session 12, audit pass 4)
+**Scope:** T17 after F-14 + F-15 fixes — `lib/auth.ts`, `lib/auth-internal.ts` (NEW), `lib/supabase.ts`, `lib/env.ts`, `lib/errors.ts`, `components/admin/LoginForm.tsx`, `app/(admin)/admin/login/page.tsx`, `app/(admin)/admin/auth/callback/route.ts`, `.env.example`, `tests/auth.test.ts`, `tests/auth-cookies.test.ts` (NEW), `tests/LoginForm.test.tsx`, `tests/admin-auth-callback.test.ts`, plus the Next.js build manifest at `.next/server/server-reference-manifest.json` and the client chunk at `.next/static/chunks/app/(admin)/admin/login/page.js`. Verifies the audit-3 fix loop closure.
 **Status:** CLEAR
-
-**Summary:** 0 Critical / 0 High / 0 Medium / 4 Low
-
-**Unresolved Critical/High findings:** None
-
----
-
-## Audit method
-
-Three independent sub-agents reviewed the code with no shared priming:
-
-1. **XSS red team** — exhaustively attempted bypasses against the DOMPurify whitelist (tag bypasses, attribute bypasses, URI scheme bypasses, mXSS, marked parser quirks, deferred-render race conditions, CSP gaps).
-2. **Supply chain** — `npm audit`, version currency, lockfile integrity, transitive surface, known CVE history for marked + dompurify.
-3. **Rules + SEC-07 compliance** — line-by-line against `rules/security.md` SEC-01 through SEC-07 + `.gitignore` coverage audit + git history scan + data-flow trace from DB to render.
-
----
-
-## Scope A — SEC-01 through SEC-07 compliance on T12 code
-
-| Rule | Status | Note |
-|---|---|---|
-| SEC-01 (no secrets in code) | PASS | No hardcoded keys/tokens in any T12 file. |
-| SEC-02 (input validation at boundaries) | PASS | Two-stage: `assertSlug` validates URL slug at the DB boundary (`lib/db.ts:109`); DOMPurify whitelist sanitizes markdown at the render boundary (`lib/markdown.ts:22`). |
-| SEC-03 (parameterized queries) | PASS | All Supabase queries use `.eq()` / `.select()` builders. No string concatenation. |
-| SEC-04 (auth on protected ops) | N/A | T12 is read-only public content. |
-| SEC-05 (no PII in logs) | PASS | `logDbError` logs only error code + message, never row data. Component-level errors don't reach client. |
-| SEC-06 (HTTPS, encryption at rest) | N/A | Deployment concern, not in T12 code. |
-| SEC-07 (no sensitive files in VCS) | PASS | `.gitignore` covers all SEC-07-listed files. None staged. None in git history. No secrets in `package.json`, lockfile, or config files. |
-
----
-
-## Scope B — XSS red team result
-
-The red-team agent attempted bypasses across all common XSS vector classes and **found nothing exploitable**:
-
-- **Blocked tags** (verified stripped): `<script>`, `<svg>`, `<iframe>`, `<object>`, `<embed>`, `<form>`, `<input>`, `<link>`, `<meta>`, `<style>`, `<base>`, `<math>`, `<template>`, `<noscript>`, `<title>`. None are in `ALLOWED_TAGS`.
-- **Blocked attributes** (verified stripped): `onerror`, `onload`, `onclick`, `formaction`, `xlink:href`, `style`, `srcset`, `srcdoc`, `ping`, all `data-*`. `ALLOWED_ATTR = [href, src, alt]` is enforced per-tag.
-- **URI scheme bypasses**: `javascript:`, `data:` (in `<a>` context), `vbscript:`, unicode/whitespace-evasion variants — all neutralized by DOMPurify's default `ALLOWED_URI_REGEXP`.
-- **mXSS**: DOMPurify 3.4.2 includes patches for all publicly known mXSS bypasses (DOM clobbering, SVG `<use>`).
-- **Parser quirks**: marked's HTML passthrough emits raw `<script>` from markdown sources, which DOMPurify then strips at the next layer.
-- **Deferred-render race**: `MarkdownContent` re-runs the `useEffect` whenever `md` changes (dep array `[md]`); there is no path where stale unsanitized HTML reaches the DOM.
-
----
-
-## Scope C — Supply chain
-
-`npm audit --json`: 7 moderate advisories, all in unrelated upstream packages (vitest, vite, esbuild, postcss, next). **Zero advisories** for `marked`, `dompurify`, or their transitive deps. Both packages are installed at the latest patch (`marked@18.0.3`, `dompurify@3.4.2`). `package-lock.json` present and committed.
-
----
-
-## Findings
-
-### LOW — No Content-Security-Policy configured
-
-**Rule violated:** Defense-in-depth (not in rules/security.md; OWASP A05 — security misconfiguration).
-
-**Founder Brief**
-**Decided:** The site has no CSP HTTP header set; if a sanitization bypass ever slipped through DOMPurify, an injected script would execute without a second line of defense.
-**Means for your product:** Today, no measurable risk — DOMPurify is the primary defense and is holding. But security best practice is layered: CSP catches what sanitization missed and shrinks the blast radius of any future bypass.
-**Check before approving:** When the fix lands, load the site in a browser, open DevTools Network → Headers, confirm `Content-Security-Policy` is set on document responses, and check the console for any CSP violation reports.
-**What this closes off:** Nothing meaningful.
-
-**What is wrong:** `next.config.ts`, `middleware.ts`, and `app/layout.tsx` contain no `Content-Security-Policy` header configuration.
-
-**What could go wrong:** If a future DOMPurify CVE or whitelist mistake lets a `<script>` or inline-event-handler through, the browser will execute it. CSP would block inline scripts and limit script sources to first-party origins.
-
-**How to fix it:** Add a CSP header in `next.config.ts` via `headers()` or in `middleware.ts`. Starting policy: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.supabase.co; font-src 'self'; connect-src 'self' https://*.supabase.co; frame-ancestors 'none'`. Tune `style-src` once the design source's inline-style usage is mapped.
-
----
-
-### LOW — `@types/dompurify@3.0.5` is outdated and likely deprecated
-
-**Rule violated:** Build hygiene (not security-critical; documented for completeness).
-
-**Founder Brief**
-**Decided:** The TypeScript type-definitions package for DOMPurify is over a year behind the runtime version.
-**Means for your product:** Zero runtime impact — the actual DOMPurify code is current and enforcing the whitelist correctly. The risk is developer-experience: future code that uses newer DOMPurify config options won't get accurate type-checking, which could mask a config typo at build time.
-**Check before approving:** After the fix, run `npm ls @types/dompurify` and `npm ls dompurify` — confirm matching major versions. Run `tsc --noEmit` to confirm no new type errors.
-**What this closes off:** Nothing.
-
-**What is wrong:** `package.json` declares `@types/dompurify@3.0.5` while runtime is `dompurify@3.4.2`. DOMPurify started bundling its own types in v3.2.0+, so the `@types/dompurify` package is effectively a stale stub.
-
-**What could go wrong:** Future T-tasks may misconfigure DOMPurify (e.g., typo a new config key) without TS catching it. Not exploitable directly — runtime behavior is unaffected.
-
-**How to fix it:** Remove `@types/dompurify` from `devDependencies` and let TypeScript pick up the types that ship inside the `dompurify` package itself. Verify with `tsc --noEmit`.
-
----
-
-### LOW — Caret pins on security-sensitive deps allow minor drift
-
-**Rule violated:** Best-practice (not in rules/security.md).
-
-**Founder Brief**
-**Decided:** `marked` and `dompurify` use caret pins (`^18.0.3`, `^3.4.2`), so `npm install` on a fresh checkout could pull a newer minor version.
-**Means for your product:** In practice, low risk: `package-lock.json` is committed and `npm ci` pins exact versions for reproducibility. The exposure only exists for someone who runs `npm install` instead of `npm ci` and gets a different minor version with a regression.
-**Check before approving:** If the fix lands, verify the lockfile still resolves to `18.0.3` / `3.4.2` and CI continues to use `npm ci`.
-**What this closes off:** Friction if you ever want to take a routine minor bump — manual review required.
-
-**What is wrong:** Caret pins on two deps where minor-version changes could (historically have) introduced sanitization regressions.
-
-**What could go wrong:** A fresh `npm install` (not `npm ci`) on a new machine pulls a new minor version that introduces an mXSS regression or marked HTML-emission change before manual review.
-
-**How to fix it:** Either (a) standardize on `npm ci` in CI/local-setup docs (likely already true), or (b) pin exactly: `"marked": "18.0.3"`, `"dompurify": "3.4.2"`. (a) is lower-friction; (b) is more defensive. Recommend (a) — it's the standard practice.
-
----
-
-### LOW — Test coverage gap on non-tested XSS vector classes
-
-**Rule violated:** TS-04 (security-critical test coverage, soft interpretation).
-
-**Founder Brief**
-**Decided:** The 6 tests in `tests/markdown.test.ts` cover the most common XSS vectors but not the full vector matrix.
-**Means for your product:** No current exploit — the red-team review confirmed all uncovered vectors are blocked by the whitelist anyway. The cost is regression-detection: if someone widens the whitelist later, the tests won't catch every new opening.
-**Check before approving:** After the fix, confirm new tests fail when the whitelist is intentionally widened, then pass when reverted.
-**What this closes off:** Nothing.
-
-**What is wrong:** No tests for `<svg>`, `<iframe>`, `<object>`, `<form>`, `data:` URIs, `vbscript:` protocol, or unicode-escape protocol bypasses.
-
-**What could go wrong:** A future T-task that widens `ALLOWED_TAGS` or relaxes the URI regex could open one of these vectors with no failing test to flag it.
-
-**How to fix it:** Add ~5 more tests for the above vector classes. Not a T12 blocker — fold into Phase 4 (launch prep) hardening, or open a tracked debt item.
-
----
-
-## Out-of-scope items surfaced
-
-These were discovered during the audit but lie outside T12's scope. Documented here so they're not lost:
-
-- **7 moderate-severity npm advisories** in upstream deps (vitest, vite, esbuild, postcss, next). None affect the markdown-rendering path. Recommend addressing during `@launch-prep` or whenever the next dep upgrade pass is scheduled.
-
----
+**Supersedes:** audit 3 BLOCKED report.
 
 ## Verdict
 
-CLEAR — no critical or high findings. T12 may proceed past the security gate. The four LOW findings are documented and should be addressed during Phase 4 launch prep or earlier at your discretion.
+The audit loop is closed. F-14 and F-15 are both fully mitigated and the mitigations are verified at the build-artifact level, not just at the source level. The build manifest at `.next/server/server-reference-manifest.json` now contains exactly ONE action ID (`signInWithMagicLink`); the prior `attemptMagicLink` action ID (`4018515b294631606bfe0eb8fb881fa5a1914d5b9d`) is zero-hits anywhere under `.next/`. The client static chunk contains exactly one action ID — the `signInWithMagicLink` one — and zero references to `attemptMagicLink`. The `lib/supabase.ts` server client is constructed with `auth: { flowType: 'implicit' }`, and a dedicated test (`tests/auth-cookies.test.ts`) verifies that the production factory actually passes that option to `@supabase/ssr` AND that no `*-code-verifier` cookie is set on any of the three observable paths (allowlisted, not-allowlisted, malformed). All 26 tests across the four T17 test files pass. The split between `lib/auth.ts` (the sole `'use server'` file, single export) and `lib/auth-internal.ts` (no directive, throwing helper) implements SEC-08 to the letter and matches the channel-decomposition spec at `docs/auth-flow.md` §2a points 4 and 5. The Critical from audit 3 is gone, the new Medium from audit 3 is gone, no new findings were introduced by the fix, and the carry-forward Mediums (F-3, F-4, F-5) plus carry-forward Lows (F-6 through F-11) remain at their prior severities. T17 is safe to mark complete. Proceed to T18.
 
-`@dev` may proceed to the next step in the Completion Order (`@code-review` for Phase 1 completion, then `@qa` for foundation-milestone shippability).
+## Resolved Findings
+
+- **F-1, F-2:** resolved in audit-2 fix loop. Unchanged here.
+- **F-12, F-13:** resolved in audit-3 fix loop. Audit 3 marked these "partially mitigated" because the wrapper was bypassable via F-14; with F-14 now closed, both are fully mitigated.
+- **F-14: Mitigated.** Build manifest contains exactly one action ID. `attemptMagicLink` is a non-`'use server'` module export reachable only from server code that imports it. Zero browser-callable surface.
+- **F-15: Mitigated.** `lib/supabase.ts:40-42` sets `auth: { flowType: 'implicit' }`. `tests/auth-cookies.test.ts:79-88` asserts the production factory passes the option through. Three further test cases assert no `*-code-verifier` cookie is set on any branch.
+
+## Findings (post-fix)
+
+### Critical
+
+None.
+
+### High
+
+None.
+
+### Medium
+
+---
+
+**F-3: Zod email schema has no length cap (carried forward, unchanged)**
+
+- **Severity:** Medium
+- **Where:** `lib/auth-internal.ts:20` — `z.string().min(1).email()`; `components/admin/LoginForm.tsx:21` — same shape mirrored client-side. The schema moved with the helper extraction (was `lib/auth.ts:9` pre-F-14 fix), but it is unchanged. The audit-3 recommendation to add `.max(254)` was not picked up by the F-14/F-15 fix sub-agents, which is correct — F-3 is a Medium and was explicitly scheduled as "fix during Phase 2" rather than blocked alongside F-14/F-15.
+- **Threat:** Unchanged. No `.max(254)`. A 10MB email-shaped string is accepted by zod, forwarded to Supabase, wastes bandwidth + Supabase quota.
+- **Mitigation status:** unmitigated.
+- **Recommended fix:** `z.string().min(3).max(254).email()` on both schemas.
+- **Effort:** trivial.
+
+---
+
+**F-4: Callback handler accepts overly wide OTP type set (carried forward, unchanged)**
+
+- **Severity:** Medium
+- **Where:** `app/(admin)/admin/auth/callback/route.ts:16-23` — `VALID_EMAIL_OTP_TYPES` includes `recovery`, `invite`, `email_change`, `signup` that the T17 flow never emits. Unsafe cast at `route.ts:127` (`type as 'email'`).
+- **Threat:** Defense-in-depth allowlist at `route.ts:133` limits blast radius; type-system hygiene gap remains.
+- **Mitigation status:** partially mitigated.
+- **Recommended fix:** Narrow to `new Set(['email', 'magiclink'])`. Replace cast with `EmailOtpType` from `@supabase/supabase-js`.
+- **Effort:** small.
+
+---
+
+**F-5: `/admin/*` unprotected between T17 and T18 ship (carried forward, unchanged)**
+
+- **Severity:** Medium
+- **Where:** `middleware.ts:44` (no admin gate yet — added in T18).
+- **Threat:** F-1 callback defense-in-depth means an attacker cannot mint a session; the leak is bounded to layout/nav rendering for unauthenticated visitors.
+- **Mitigation status:** accepted-risk (T18 sequencing).
+- **Recommended fix:** Ship T18 next.
+- **Effort:** N/A.
+
+---
+
+### Low
+
+---
+
+**F-6 through F-11 carry forward from audit 3 unchanged.**
+
+- **F-6:** No CSP — defer to Phase 4 launch prep.
+- **F-7:** `@types/dompurify@3.0.5` stale.
+- **F-8:** Caret pins on `marked` and `dompurify` — mitigated by `package-lock.json`.
+- **F-9:** XSS regression test gap on the public Markdown sanitizer.
+- **F-10:** Cookie hardening implicit (relies on `@supabase/ssr` defaults).
+- **F-11:** No app-level rate limit on `signInWithMagicLink`. With F-14 fixed, the audit-3 contingency ("escalates to Medium if F-14 is accepted") is moot — F-11 stays Low.
+
+---
+
+## Threat Model Walkthrough
+
+**F-14a (`lib/auth.ts` exports):** Read start-to-end. Single export: `signInWithMagicLink` at line 55. `attemptMagicLink` is NOT defined and NOT exported here — it is imported from `./auth-internal` at line 3 and called from the wrapper body at line 58. **Mitigated.**
+
+**F-14b (`lib/auth-internal.ts` directive check):** Read start-to-end. The file has no `'use server'` directive at the top (the first non-comment statement is `import { z } from 'zod';` at line 1). The string `'use server'` appears only inside JSDoc comments at lines 7, 8, 94, 95 — all describing why the directive is deliberately absent. No function-level `'use server'` annotations. `attemptMagicLink` at line 105 is exported as a regular async function. **Mitigated — the helper is a regular ES module export, not a Server Action.**
+
+**F-14c (build manifest action IDs — CRITICAL evidence):** Contents of `.next/server/server-reference-manifest.json` verbatim:
+
+```json
+{
+  "node": {
+    "4022f0de80ca96a1401369508fbda9577f368adadf": {
+      "workers": {
+        "app/(admin)/admin/login/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22C%3A%5C%5CUsers%5C%5CSwarnim%20Bagre%5C%5CDownloads%5C%5CMy%20Files%5C%5CProfessional%5C%5CProjects%5C%5CGithub%20Projects%5C%5Cswarnimbagre.com%5C%5Clib%5C%5Cauth.ts%22%2C%5B%7B%22id%22%3A%224022f0de80ca96a1401369508fbda9577f368adadf%22%2C%22exportedName%22%3A%22signInWithMagicLink%22%2C%22filename%22%3A%22..%2FC%3A%5C%5CUsers%5C%5CSwarnim%20Bagre%5C%5CDownloads%5C%5CMy%20Files%5C%5CProfessional%5C%5CProjects%5C%5CGithub%20Projects%5C%5Cswarnimbagre.com%5C%5Clib%5C%5Cauth.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/(admin)/admin/login/page": "action-browser"
+      },
+      "filename": "../C:\\Users\\Swarnim Bagre\\Downloads\\My Files\\Professional\\Projects\\Github Projects\\swarnimbagre.com\\lib\\auth.ts",
+      "exportedName": "signInWithMagicLink"
+    }
+  },
+  "edge": {},
+  "encryptionKey": "VocxjajCKocNrbVvgzYZUzT0/bsU72zqMpHKdccZ5OE="
+}
+```
+
+Exactly one action ID under `node`: `4022f0de80ca96a1401369508fbda9577f368adadf` with `exportedName: "signInWithMagicLink"`. No `attemptMagicLink` entry. **Mitigated.**
+
+(One ancillary note on the manifest content above: the `encryptionKey` field is the per-build Server Action encryption key. It is build-output, not source. Treating it as a secret would be standard hygiene if this directory were ever served as static assets, but `.next/` is server-only and conventionally never deployed as-is; Vercel re-derives the key per deploy. Not a finding.)
+
+**F-14d (grep `.next/` for prior `attemptMagicLink` action ID):** `4018515b294631606bfe0eb8fb881fa5a1914d5b9d` — **zero occurrences anywhere in `.next/`**. Confirmed via Grep across the entire directory tree. The prior action surface is fully removed.
+
+Cross-check: `attemptMagicLink` (the function name) appears in 1 file under `.next/`: `.next/server/app/(admin)/admin/login/page.js` (server-side compiled bundle). The two occurrences in that file are (a) the webpack harmony export shape from `auth-internal.ts`, (b) JSDoc text carried through compilation, and (c) the call site inside `signInWithMagicLink`'s body. None is an action-ID registration. The client static chunk (`.next/static/chunks/app/(admin)/admin/login/page.js`) contains **zero** references to `attemptMagicLink` and exactly **one** reference to the `signInWithMagicLink` action ID. **Mitigated.**
+
+**F-14e (test imports):** `tests/auth.test.ts:9` imports `attemptMagicLink` from `@/lib/auth-internal` (correct — not from `@/lib/auth`). `tests/auth.test.ts:10` imports `signInWithMagicLink` from `@/lib/auth`. If the import had been wrong, vitest would have thrown an import error at suite collection; instead all 12 tests in this file pass. **Verified.**
+
+**F-15a (`lib/supabase.ts` flowType):** Read line 40-42 — the `createSSRServerClient` call is passed `{ auth: { flowType: 'implicit' }, cookies: { ... } }`. The JSDoc at lines 14-29 documents the F-15 rationale and the consequence for the callback's `?code=` branch. **Mitigated.**
+
+**F-15b (`tests/auth-cookies.test.ts` assertion strength):** The test:
+- Lines 46-56 mock `@supabase/ssr.createServerClient` to capture the options object passed to it AND return a stub auth client whose `signInWithOtp` resolves clean. This means the **production `createServerClient` in `lib/supabase.ts` runs end-to-end** — that is the code path under test.
+- Lines 27-34 mock `next/headers.cookies()` to record every `set()` call routed through the cookie adapter `lib/supabase.ts:43-53` wires up.
+- Line 79-88 asserts `capturedOptions.value.auth.flowType === 'implicit'` — directly verifies the production factory passes the implicit flag through.
+- Lines 90-115 assert `cookieSetCalls.filter(c => c.name.includes('code-verifier'))` is empty on all three branches: allowlisted, not-allowlisted, malformed. Each test takes ~760ms (the MIN_DURATION_MS floor — observable proof that `signInWithMagicLink` ran the full wrapper path).
+
+**Not weak.** The test does NOT wholesale-mock `@/lib/supabase`; it mocks the underlying `@supabase/ssr` so the real `createServerClient` factory is the code under test. The assertion strategy proves the cookie surface is uniform. **Mitigated.**
+
+**F-15c (cumulative response-header uniformity check):** All four uniformity channels for the wire-level response are now closed: body shape (F-13), timing (F-12), action surface (F-14), `Set-Cookie` headers (F-15). Status codes are Next.js framework-controlled and identical at 200 across outcomes. UI text is uniform (F-2). Six-channel decomposition per `docs/auth-flow.md` §2a is enforced.
+
+**Regression: did `lib/auth-internal.ts` accidentally introduce `'use server'`?** Grepped the file. Zero hits for `'use server'` outside JSDoc lines 7-8, 94-95 (which explicitly say "deliberately does NOT carry the directive"). No string literals containing `'use server'` or `"use server"`. **No regression.**
+
+**Regression: is the `attemptMagicLink` import path correct?** `lib/auth.ts:3` reads `import { attemptMagicLink } from './auth-internal';` — relative import from `lib/auth.ts` to `lib/auth-internal.ts`. Path resolves. If the path had been typo'd, the wrapper would call `undefined(email)` at line 58 and every test in `tests/auth.test.ts` `signInWithMagicLink` describe block would have crashed. They pass. **Verified.**
+
+**Regression: does `flowType: 'implicit'` break the callback's `?code=` branch?** The branch at `app/(admin)/admin/auth/callback/route.ts:138-147` calls `supabase.auth.exchangeCodeForSession(code)`. Under implicit flow, `signInWithOtp` does not issue a `?code=` query param, so this branch is dead in the production magic-link path. If it ever fires erroneously (e.g., an attacker hand-crafts a `?code=xyz` URL), Supabase's implicit-flow client will return an error from `exchangeCodeForSession`; the route handler at line 140-142 catches that, logs `'exchangeCodeForSession returned error'`, and returns the generic `FAILURE_REDIRECT`. No new error path; behavior on the unreachable branch is the same generic failure as any other unrecognized callback shape. `tests/admin-auth-callback.test.ts:131-147` exercises this branch with a mocked stub and asserts the defense-in-depth check runs. The branch is intentionally retained for the future-OAuth path documented in `lib/supabase.ts:25-28`. **No regression.**
+
+**Regression: are there any other `'use server'` files in the project?** Grepped `lib/`, `app/`, `components/` for both `'use server'` and `"use server"`. Exactly one match for the file-level directive: `lib/auth.ts:1`. Zero function-level `'use server'` annotations anywhere. **No regression.**
+
+**Carry-forward T-N items:** F-3, F-4, F-5, F-6, F-7, F-8, F-9, F-10, F-11 unchanged.
+
+---
+
+## Static Scan Results
+
+**1. Hardcoded secrets (`sk_`, `service_role`, `eyJ` JWT prefix):**
+
+Matches inventory:
+- `supabase/migrations/002_rls_projects.sql`, `003_rls_posts.sql`, `004_rls_stats.sql`, `005_rls_images.sql` — `service_role` references are SQL comments documenting RLS posture (the Postgres role name in policy DDL is not a credential). **Not a finding.**
+- `docs/env-vars.md` — env var name documentation, no values. **Not a finding.**
+- `docs/security-report.md` (prior audit) — references the names only. **Not a finding.**
+- `.env.local` (gitignored at `.gitignore:5-6`) — contains a real `SUPABASE_SERVICE_ROLE_KEY` JWT; this is the canonical place. Confirmed absent from `git log --name-only`. **Clean.**
+- No `sk_` Stripe-shaped keys in tracked files. **Clean.**
+
+**2. `console.log` of objects containing `email`:**
+
+Zero `console.log` / `console.info` / `console.warn` / `console.debug` calls anywhere in `.ts` / `.tsx` outside `node_modules`. All logging uses `console.error` with structured payloads scrubbed per SEC-05. Tests at `tests/auth.test.ts:99-100`, `tests/auth.test.ts:117-118`, and `tests/admin-auth-callback.test.ts:97-98` assert raw emails do not appear in log output. **Clean.**
+
+**3. `dangerouslySetInnerHTML` in admin:**
+
+Two matches:
+- `lib/markdown.ts:18` — JSDoc text only.
+- `components/public/MarkdownContent.tsx:27` — public-site, DOMPurify-sanitized.
+
+No matches under `app/(admin)/**` or `components/admin/**`. **Clean for admin.**
+
+**4. Unvalidated redirect targets:**
+
+- `app/(admin)/admin/login/page.tsx:14` — `redirect('/admin')` literal. Safe.
+- `app/(admin)/admin/auth/callback/route.ts:76, 82, 92, 131, 135, 142, 146, 150` — all use `buildRedirect(request, CONSTANT)` with `new URL(path, request.url)` where `path` is `FAILURE_REDIRECT` or `SUCCESS_REDIRECT` (hardcoded). Host-header tampering only redirects within the attacker's claimed origin. No `searchParams.get('next')` or `?redirectTo=` anywhere. **Clean.**
+
+**5. `process.env.NEXT_PUBLIC_*` references:**
+
+- `lib/supabase.ts:37, 38, 69, 70` — Supabase URL + anon key. Non-secret. Safe.
+- `lib/auth-internal.ts:70, 72, 77` — `NEXT_PUBLIC_SITE_URL`, `NEXT_PUBLIC_VERCEL_URL`. Public configuration. Safe.
+- `lib/env.ts:2, 3` — string literals in the required-vars list. Safe.
+- `components/public/pages/Home.tsx:175`, `components/public/mobile/pages/Home.tsx:161` — `NEXT_PUBLIC_TWEAKS`. Feature flag. Safe.
+- `tests/auth.test.ts`, `tests/auth-cookies.test.ts`, `tests/env.test.ts` — test setup. Safe.
+
+**Clean. No `NEXT_PUBLIC_` secret exposure.**
+
+**6. `ADMIN_ALLOWED_EMAIL` references — server-only:**
+
+- `lib/env.ts:8, 41, 44` — read inside `getAdminAllowedEmail()`, server-only module. **Correct.**
+- `lib/auth-internal.ts:3, 35` — used inside the non-`'use server'` helper module (still server-only — only imported by the `'use server'` wrapper, which itself runs server-side). **Correct.**
+- `tests/auth.test.ts:37, 45, 134`, `tests/auth-cookies.test.ts:66, 75`, `tests/admin-auth-callback.test.ts:46, 53` — test setup (server-side Vitest). **Correct.**
+- `app/(admin)/admin/auth/callback/route.ts:53` (jsdoc) — name reference. **Correct.**
+- `.env.example:22` — declared without `NEXT_PUBLIC_` prefix; comment says "Never NEXT_PUBLIC_". **Correct.**
+
+Cross-check: no `'use client'` file imports `@/lib/env` or `@/lib/auth-internal`. The only `'use client'` admin file is `components/admin/LoginForm.tsx`, which imports `@/lib/auth` — the single-export `'use server'` module. Next.js boundary means only the RPC stub for `signInWithMagicLink` ships to the client, not the env-reading bodies of either `lib/auth-internal.ts` or `lib/env.ts`. **Clean.**
+
+**7. `'use server'` file inventory (primary check for this audit):**
+
+Project-wide search for `'use server'` directives at file-top:
+- **`lib/auth.ts:1`** — file-level `'use server'`. Exports:
+  - `signInWithMagicLink` (line 55) — Server Action ID `4022f0de80ca96a1401369508fbda9577f368adadf` per `.next/server/server-reference-manifest.json`. Sole public entry point.
+
+Other files containing the string `'use server'` (verified all are JSDoc references, not directives):
+- `lib/auth-internal.ts:7, 8, 94, 95` — JSDoc explaining the deliberate absence of the directive.
+- `lib/auth.ts:19, 24, 25` — JSDoc cross-referencing F-14.
+- `docs/auth-flow.md:51` — spec text.
+- `docs/security-report.md` (prior audits + this one) — historical narrative.
+- `docs/plan-phase-2-admin.md:108, 110` — plan text.
+
+No double-quoted `"use server"` anywhere outside `docs/`. No function-level `'use server'` annotations.
+
+**`'use server'` inventory total: 1 file, 1 Server Action endpoint. Matches SEC-08 and `docs/auth-flow.md` §2a point 4.**
+
+**SEC-07 sensitive-file scan:**
+- `.gitignore` covers `.env`, `.env*` (excludes `.env.example`), `docs/testing-setup.md`, `docs/session-log.md`, `docs/session-handoff.md`, `docs/framework-issues.md`, `profile.md`, `content/`, `CLAUDE.md`, `manifest.md`. No SEC-07 files in `git log --name-only`.
+- **Clean.**
+
+---
+
+## Test Suite Status
+
+Ran `npx vitest run tests/auth.test.ts tests/auth-cookies.test.ts tests/admin-auth-callback.test.ts tests/LoginForm.test.tsx` — **26 of 26 tests pass**:
+
+- `tests/auth.test.ts` — 12 tests pass (7 internal-helper, 5 wrapper). The wrapper tests each run ~760ms, demonstrating the constant-time floor activates uniformly across allowlisted, not-allowlisted, malformed, and Supabase-failure outcomes.
+- `tests/auth-cookies.test.ts` — 4 tests pass. Each runs ~760ms. Confirms `flowType: 'implicit'` is wired AND no `*-code-verifier` cookie is written on any branch.
+- `tests/admin-auth-callback.test.ts` — 6 tests pass. The defense-in-depth allowlist still gates both the `?token_hash=` and `?code=` branches.
+- `tests/LoginForm.test.tsx` — 4 tests pass. UI message is uniform across outcomes (F-2).
+
+---
+
+## Carry-forward Re-evaluation
+
+| Prior finding | Audit-3 severity | Audit-4 verdict | Notes |
+|---|---|---|---|
+| F-1 | Resolved | Resolved | unchanged. |
+| F-2 | Partially | Resolved | UI uniform; wire-level + cookie channels now also uniform via F-14 + F-15 fixes. |
+| F-12 | Partially | **Resolved** | Wrapper closes timing channel via the only callable endpoint. |
+| F-13 | Partially | **Resolved** | Body shape uniform; cookie channel also uniform via F-15. |
+| F-14 | **Critical** | **Resolved** | Single action ID in manifest. Prior helper action ID has zero hits in `.next/`. |
+| F-15 | **Medium** | **Resolved** | `flowType: 'implicit'` wired and verified by dedicated test. |
+| F-3 | Medium | Unchanged | No length cap; scheduled for Phase 2 hardening. |
+| F-4 | Medium | Unchanged | OTP type set still wide; defense-in-depth bounds blast radius. |
+| F-5 | Medium | Unchanged | T18 sequencing. |
+| F-6–F-11 | Low | Unchanged | Phase 4 launch-prep items. F-11 stays Low (audit-3 escalation contingency no longer applies). |
+
+---
+
+## Recommendations
+
+**Safe to proceed:**
+
+- T17 is complete and safe to mark done. The magic-link flow's wire-observable behavior is uniform across all six channels enumerated in `docs/auth-flow.md` §2a (UI text, body shape, timing, action surface, headers, status code). The Critical and the new Medium from audit 3 are both fully closed.
+- **Proceed to T18** (admin middleware) without further blocking. T18 will resolve F-5 (the carry-forward Medium for `/admin/*` being unprotected).
+
+**Fix during Phase 2 (medium hardening, non-blocking):**
+
+1. **F-3** — `.max(254)` on `lib/auth-internal.ts:20` and `components/admin/LoginForm.tsx:21`.
+2. **F-4** — narrow `VALID_EMAIL_OTP_TYPES` in `app/(admin)/admin/auth/callback/route.ts:16-23` to `new Set(['email', 'magiclink'])`; replace the unsafe cast with `EmailOtpType` from `@supabase/supabase-js`.
+
+**Track for Phase 4 launch prep (low, deferred):**
+
+3-8. F-6 (CSP), F-7 (dompurify types), F-8 (caret pins / `npm ci`), F-9 (XSS regression tests on the public Markdown sanitizer), F-10 (cookie-flag explicit assertions), F-11 (app-level rate limit on `signInWithMagicLink`).
+
+**Documentation hygiene (small, do whenever):**
+
+- Add to `docs/architecture.md` §6.4 the SEC-08 invariant: "Every export of a `'use server'` module is a public Server Action. Verify after each build that `.next/server/server-reference-manifest.json` lists only intended action IDs." This locks in the lesson from the audit-1-through-audit-4 loop so future contributors don't repeat the F-14 pattern.
+- Note that the `?code=` branch in `app/(admin)/admin/auth/callback/route.ts:138-147` is intentionally dead under the current implicit-flow / magic-link-only model; retained for future OAuth. The route-handler comments already say this — no action needed.
+
+**Monitor after launch:**
+
+- Supabase auth logs for unexpected `verifyOtp` failure spikes.
+- If a future contributor adds a second `export` to `lib/auth.ts`, treat it as a new Server Action and audit immediately. The build-output check is: `.next/server/server-reference-manifest.json` should list exactly the expected number of action IDs, no more.
+
+---
+
+**Summary:** 0 Critical / 0 High / 3 Medium (F-3, F-4, F-5) / 6 Low (F-6 through F-11).
+**Verdict:** **CLEAR.** The audit loop is closed. The F-14 + F-15 fix correctly addresses the audit-3 BLOCKED findings, no regressions were introduced, and no new findings surfaced. T17 ships.

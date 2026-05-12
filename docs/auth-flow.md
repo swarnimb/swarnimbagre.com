@@ -26,12 +26,38 @@ Out of scope: public-site auth (there is none — all public reads are anon role
 1. User navigates to `/admin/login`.
 2. The page renders a single-field form: email. The user enters `swarnim.build@gmail.com`.
 3. Client calls `supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: 'https://swarnimbagre.com/auth/callback' } })`. Supabase sends a magic link to the inbox.
-4. Regardless of whether the email matches the allowlisted address, the UI shows the same generic response: "If an account exists for that address, a sign-in link has been sent." This avoids leaking which addresses are valid (SEC-04 — defense against user enumeration).
+4. Regardless of whether the email matches the allowlisted address, the response must be uniform across all six observable channels enumerated in §2a (UI text, response body, response timing, Server Action surface, response headers, status code). This avoids leaking which addresses are valid (SEC-04 — defense against user enumeration). The literal UI text is a single template: "If an account exists for that address, a sign-in link has been sent." The other channels are not optional and not separable — see §2a.
 5. User opens the email and clicks the magic link. The link points at `https://swarnimbagre.com/auth/callback?token_hash=...&type=email`.
 6. The `/auth/callback` route handler calls `supabase.auth.verifyOtp({ token_hash, type: 'email' })` to exchange the token for a session. (`verifyOtp` is the correct method for the `token_hash` + `type` query-param shape that `signInWithOtp` produces. `exchangeCodeForSession` is for the PKCE/`?code=...` flow, which is not used here.)
 7. On success, `@supabase/ssr` writes the session cookies — `sb-access-token` and `sb-refresh-token` — as `httpOnly`, `Secure`, `SameSite=Lax`.
 8. The callback redirects to `/admin` (the dashboard home).
 9. On every subsequent request to `/admin/*`, the Next.js middleware (T17) checks for a valid session. No session, expired session, or wrong user email → redirect to `/admin/login`.
+
+---
+
+## 2a. Uniform Observable Response — Channel Decomposition
+
+**Property:** "Uniform observable response" means an attacker probing the auth endpoint cannot distinguish outcomes (registered email, non-registered email, format error, transient failure) by ANY observable channel. The six channels below are non-negotiable. Closing five and leaving one open leaves the enumeration oracle open.
+
+1. **UI text channel.** The user-visible message is identical across outcomes. Use a single template: "If an account exists for that address, a sign-in link has been sent." Format errors (zod parse fail) are the only carve-out — they reveal email syntax, not registration state, so a distinct "enter a valid email" message is acceptable for that case.
+   - *Verification:* Snapshot test on `LoginForm` asserting the success message is byte-identical for allowlisted, non-allowlisted, and transient-failure outcomes.
+
+2. **Response body channel.** The wire-level Server Action response payload shape is identical across outcomes. The public Server Action returns `void`/`undefined` and never throws to the wire. Internal helpers that throw are wrapped in a `try/catch` that swallows the throw and resolves with `undefined`.
+   - *Verification:* Test that asserts the raw `fetch` response body (React Flight frame) is byte-equal for an allowlisted call and a non-allowlisted call.
+
+3. **Response timing channel.** Wall-clock response time has a constant-time floor: `MIN_DURATION_MS = 750`. Fast paths pad to the floor with `setTimeout` inside a `try/finally`. Slow paths run over the floor without truncation (this is a floor, not a ceiling — truncating slow paths would introduce a different oracle).
+   - *Verification:* Test using fake timers (covering both `setTimeout` and `performance.now`) that asserts the wrapper resolves at ≥750ms for both the throw-internally and resolve-internally paths.
+
+4. **Server Action surface channel.** Exactly one action ID per auth flow exists in `.next/server/server-reference-manifest.json`. Internal helpers — any function that throws or has outcome-dependent timing — live in a separate file WITHOUT `'use server'`, typically `lib/auth-internal.ts`, and are imported into the `'use server'` wrapper. Every `export` from a `'use server'` module becomes a publicly addressable Server Action endpoint; this is the Next.js semantics and is not configurable.
+   - *Verification:* Build-output grep — `.next/server/server-reference-manifest.json` lists exactly one action ID for the login page, and `.next/static/chunks/app/(admin)/admin/login/page.js` contains exactly one action ID.
+
+5. **Response headers channel.** `Set-Cookie` and all other response headers are identical across outcomes. The Supabase SSR client's default PKCE flow writes a `*-code-verifier` cookie on the call-Supabase branch but not on the throw-and-skip branch — set `auth: { flowType: 'implicit' }` at client construction so magic-link `signInWithOtp` does not emit the verifier cookie. `verifyOtp` with `token_hash` is not PKCE-dependent and continues to work.
+   - *Verification:* Test that asserts the Server Action response's `Set-Cookie` header set is byte-equal for the throw path and the call-Supabase path.
+
+6. **Status code channel.** HTTP status is identical across outcomes — typically 200 for the Server Action; Next.js handles the framing. Any error path that surfaces a non-200 status to the wire is a leak.
+   - *Verification:* Test asserting `response.status === 200` for allowlisted, non-allowlisted, and transient-failure outcomes.
+
+**Why this decomposition exists:** T17 surfaced F-1/F-2/F-12/F-13/F-14/F-15 over three `@security` audit rounds because the prior spec wording "shows the same generic response" was read as UI-text-only. Each round moved one architectural layer deeper — UI text, then timing, then wire body, then action surface, then response headers. Channels make the requirement enforceable: every channel has a named property and a named verification, and a fix is not complete until all six are verified.
 
 ---
 
