@@ -22,12 +22,12 @@ End state: admin can log in via magic link, do full CRUD on projects and posts (
 **Functions to implement:** [setup task]
 
 **Acceptance criteria:**
-- [ ] Tailwind config `content` glob is exactly `./app/(admin)/**/*.{ts,tsx}`, `./components/admin/**/*.{ts,tsx}`, `./components/ui/**/*.{ts,tsx}`. Public paths excluded (CONSTRAINT-03).
-- [ ] `tailwindcss-scoped-preflight` plugin configured with `scopeOf: '.admin-root'`. Default Preflight is disabled.
-- [ ] `app/(admin)/layout.tsx` imports `styles/admin.css` and renders children inside `<div className="admin-root">` with the four borrowed color tokens (`--bg`, `--surface`, `--fg`, `--accent`) applied via CSS variables.
-- [ ] Inter font loaded via `next/font` for admin only. Fraunces and JetBrains Mono are not used in admin (design-decisions.md).
-- [ ] Public pages have zero Tailwind utility classes — verified by grep (CONSTRAINT-03).
-- [ ] `npm run build` succeeds; bundle analysis confirms Tailwind CSS does not appear in public route output.
+- [x] Tailwind config `content` glob is exactly `./app/(admin)/**/*.{ts,tsx}`, `./components/admin/**/*.{ts,tsx}`, `./components/ui/**/*.{ts,tsx}`. Public paths excluded (CONSTRAINT-03).
+- [x] `tailwindcss-scoped-preflight` plugin configured with `scopeOf: '.admin-root'`. Default Preflight is disabled.
+- [x] `app/(admin)/layout.tsx` imports `styles/admin.css` and renders children inside `<div className="admin-root">` with the four borrowed color tokens (`--bg`, `--surface`, `--fg`, `--accent`) applied via CSS variables.
+- [x] Inter font loaded via `next/font` for admin only. Fraunces and JetBrains Mono are not used in admin (design-decisions.md).
+- [x] Public pages have zero Tailwind utility classes — verified by grep (CONSTRAINT-03).
+- [x] `npm run build` succeeds; bundle analysis confirms Tailwind CSS does not appear in public route output.
 
 **Tests required:**
 - `public route HTML contains no Tailwind utility classes` — Playwright fetch + assertion (TS-04).
@@ -37,6 +37,8 @@ End state: admin can log in via magic link, do full CRUD on projects and posts (
 **Depends on:** Phase 1 complete (specifically T14)
 
 **Specialist:** `@cto`
+
+**Status:** Complete in session 10 (2026-05-11). 35/35 Vitest unit tests pass; 12/12 Playwright tests pass (3 new T15 scope tests + 9 prior, no regressions). Build green: 5 routes, `/admin` at 123 B / 103 kB First Load JS. Tailwind v3.4.17 pinned (not v4) due to `tailwindcss-scoped-preflight` v4 adapter absence. Color tokens namespaced as `--admin-*` to prevent cascade collision with public `:root` vars. Admin stub at `app/(admin)/admin/page.tsx` (not `app/(admin)/page.tsx`) — route group parens are URL-stripped, so the latter collided with `app/page.tsx`.
 
 ---
 
