@@ -1,7 +1,7 @@
 # Constraints: swarnimbagre.com
 
 **Date seeded:** 2026-05-06 (by `@plan` Phase 4)
-**Last updated:** 2026-05-12 (pre-T16 — CONSTRAINT-17 added)
+**Last updated:** 2026-05-12 (CONSTRAINT-18 added; CONSTRAINT-16 amended)
 
 > Loaded by `@session-start` every session. Active binding decisions only — not history, not options considered. New constraints are added when `@plan`, `@cto`, or the builder makes a binding decision. A constraint is removed only when the decision is explicitly reversed, with the reversal noted in `docs/session-log.md`.
 
@@ -220,6 +220,42 @@ See `architecture.md` §4.2 and `founder-brief.md` "Admin CSS token namespacing"
 
 ---
 
+### [CONSTRAINT-18] Supabase SSR client locked to `flowType: 'implicit'`
+
+**Decision:** `lib/supabase.ts::createServerClient` constructs the
+`@supabase/ssr` client with `auth: { flowType: 'implicit' }`. The library's
+PKCE default is not used.
+
+**What it means in practice:** Magic-link callback consumes `?token_hash=&type=`
+via `verifyOtp` (PKCE-agnostic). The `?code=...` branch in
+`app/(admin)/admin/auth/callback/route.ts` is dead under this lock but is
+retained for future OAuth. No `*-code-verifier` `Set-Cookie` is emitted on any
+auth path, closing the response-header enumeration channel. Test guardrail:
+`tests/auth-cookies.test.ts` asserts the production factory passes the option
+through AND that no verifier cookie is written on any branch.
+
+**Who decided and when:** T17 audit-round-3 fix (`@security` F-15 finding),
+2026-05-12.
+
+**What this closes off:** Switching back to PKCE without revisiting the
+header-channel decomposition in `docs/auth-flow.md` §2a point 5. Adding an
+OAuth provider (which requires PKCE) requires either a second client factory
+or a re-evaluation of header uniformity under PKCE.
+
+---
+
+### [CONSTRAINT-19] Dev-only API routes use `process.env[NODE_ENV_KEY]` bracket indirection
+
+**Decision:** Any route handler that must refuse to mount in production reads `NODE_ENV` via an intermediate constant — `const NODE_ENV_KEY = 'NODE_ENV'; process.env[NODE_ENV_KEY]` — NOT the direct `process.env.NODE_ENV` form. The gate must additionally include an explicit `if (process.env.VERCEL === '1')` refusal AND a `timingSafeEqual` shared-secret check (SEC-04). All three gates are independent; any single gate failure returns 404.
+
+**What it means in practice:** Direct `process.env.NODE_ENV` access is folded into a literal at build time by Next 15's compile-time inlining. The dot-notation form becomes a constant `'development' !== 'test'` at build, defeating the runtime gate entirely. The bracket-with-variable form preserves the runtime read. Reviewers see `[NODE_ENV_KEY]` and recognize that the literal form would be a regression. Currently applies to `app/api/test/sign-in/route.ts`; any future dev-only API surface follows the same pattern.
+
+**Who decided and when:** T19.2 implementation, `@dev`, 2026-05-12. Verified by `@security` audit 7 — bracket indirection survives Next 15 / SWC bundling; runtime gate is enforced in production builds.
+
+**What this closes off:** "Just use `process.env.NODE_ENV`" simplification PRs. The literal form is a build-time constant; the bracket form is a runtime check. They look identical but behave differently. Reversing requires either accepting the bundler's literal-substitution (and dropping the dev-route gate entirely) or migrating to a different runtime-only access pattern (e.g., `globalThis.process.env.NODE_ENV` — untested).
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -241,3 +277,5 @@ See `architecture.md` §4.2 and `founder-brief.md` "Admin CSS token namespacing"
 | 15 | Image reads use signed URLs (TTL 3600s) | `getImageUrl` centralized; no `getPublicUrl` for private bucket | `@plan` + T14 | 2026-05-11 |
 | 16 | Admin color tokens namespaced as `--admin-*` | 8-token semantic palette; namespaced to prevent public `:root` collisions | T15 | 2026-05-11 / amended 2026-05-12 |
 | 17 | Admin URL pattern locked to `/admin/*` | URL = layout = Tailwind = middleware = robots boundary | `@cto` pre-T16 | 2026-05-12 |
+| 18 | Supabase SSR client locked to flowType: implicit | No PKCE verifier cookie; header channel uniform | `@security` audit 3 | 2026-05-12 |
+| 19 | Dev-only routes use bracket NODE_ENV indirection | Defeats Next 15 compile-time inlining; runtime gate enforced | `@dev` + T19.2 | 2026-05-12 |

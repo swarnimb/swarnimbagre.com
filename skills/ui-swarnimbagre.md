@@ -14,7 +14,7 @@ Reports the two modes (Public, Admin), restates the canonical-source rule from `
 Mode A — Public site work. Touches files under `site/*` or any non-`/admin` route. Uses the existing component bundle verbatim — no library substitutions, no improvisation.
 
 ### `@ui-swarnimbagre admin [target]`
-Mode B — Admin panel work. Touches files under `/admin/*`. Uses shadcn/ui + Tailwind with four borrowed color tokens from `colors_and_type.css`.
+Mode B — Admin panel work. Touches files under `/admin/*`. Uses shadcn/ui + Tailwind with eight namespaced `--admin-*` tokens (4 brand + 4 semantic) defined in `app/styles/admin.css`. Hex values for 3 of the 4 semantic tokens (`--admin-destructive`, `--admin-border`, `--admin-muted-fg`) match public palette siblings in `app/styles/colors_and_type.css` for brand coherence. See CONSTRAINT-16.
 
 ---
 

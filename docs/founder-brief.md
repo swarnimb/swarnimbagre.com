@@ -26,6 +26,10 @@ This file is the plain-language record of every architectural decision. The audi
 | 12 | Image URLs are short-lived, generated on demand | [§4.6](architecture.md#46-image-read-pattern) |
 | 13 | Image components render on the server, not the browser | [§4.6](architecture.md#46-image-read-pattern) |
 | 14 | Admin CSS token namespacing | [§4.2](architecture.md#42-tailwind-scoping-decision-3--resolves-assumption-04) |
+| 15 | Admin URL pattern locked to `/admin/*` | §4.1 + CONSTRAINT-17 |
+| 16 | `'use server'` files contain one Server Action each | [§6.6.1](architecture.md#661) + SEC-08 |
+| 17 | Auth Server Actions have a constant-time response floor | [§6.6.2](architecture.md#662) |
+| 18 | Supabase auth client locked to `flowType: 'implicit'` | [§6.6.3](architecture.md#663) + CONSTRAINT-18 |
 
 ---
 
@@ -236,6 +240,22 @@ This file is the plain-language record of every architectural decision. The audi
 
 **What this closes off:** Sharing CSS custom properties across the public/admin boundary. Any component that wants to use the same color in both contexts must reference both prefixes explicitly, or rely on the Tailwind theme alias (admin only).
 
+**Amended 2026-05-12 (session 12):** Admin palette expanded from 4 tokens to 8.
+Existing 4 brand tokens (`--admin-bg`, `--admin-surface`, `--admin-fg`,
+`--admin-accent`) joined by 4 semantic tokens (`--admin-destructive`,
+`--admin-destructive-fg`, `--admin-border`, `--admin-muted-fg`). Rationale:
+shadcn primitives need semantic slots — destructive button background, table
+border, muted body text — and inline-styling the gaps was the exact sprawl
+the original 4-token rule was meant to prevent. The original rule protected
+against importing public-site identity elements (Fraunces, hairline grammar,
+gold-underline links), not against admin palette growth. `@designer` + `@cto`
+confirmed Option B (extend palette) over Option A (inline-style gaps) in
+parallel consult. Hex values for the 3 sourced-from-public semantic tokens
+(`--admin-destructive`, `--admin-border`, `--admin-muted-fg`) match the
+public palette siblings (`--danger`, `--hairline`, `--fg-muted`) verbatim to
+keep brand coherence; `--admin-destructive-fg` is a fresh value chosen for
+contrast against the destructive background.
+
 ---
 
 ## 2026-05-12 — Admin URL pattern — locked to `/admin/*`
@@ -249,6 +269,155 @@ This file is the plain-language record of every architectural decision. The audi
 **Check before approving:** None at this point — this is a plumbing decision, not a product call. The URLs you'll type are slightly longer (`/admin/projects` vs `/projects-edit`); that's the only thing you'll feel as a user.
 
 **What this closes off:** Root-level admin URLs (`/login`, `/dashboard`). Does NOT close off a future subdomain split (`admin.swarnimbagre.com`) — the `/admin/*` tree maps to a subdomain trivially.
+
+---
+
+## 2026-05-12 — `'use server'` files contain one Server Action each
+
+**Architecture reference:** §6.6.1 + SEC-08 + auth-flow.md §2a point 4
+
+**Decided:** Files that carry the `'use server'` directive contain exactly one
+exported async function — the public Server Action entry point. Throwing helpers,
+allowlist guards, and any function whose behavior or timing depends on outcome
+live in a sibling file with no directive (e.g., `lib/auth.ts` wraps
+`lib/auth-internal.ts`). The wrapper imports the helper as a regular ES module
+function.
+
+**Means for your product:** Every `export` from a `'use server'` module becomes
+a publicly callable RPC endpoint with a stable hashed ID that ships in the
+client bundle. An attacker can call any of them directly via `Next-Action` HTTP
+header, bypassing any wrapper. Keeping helpers in a non-`'use server'` file
+means they exist only as server-internal functions — not reachable from a
+browser. T17's audit loop caught this the hard way: the audit-2 fix
+accidentally exported the throwing helper from the `'use server'` file, and the
+build manifest grew a second action ID that bypassed the wrapper's constant-time
+bound. The fix was architectural, not parametric — split the file.
+
+**Check before approving:** This adds a sibling-file pattern for every new
+auth-adjacent feature (T18-T28, Phase 3 ingestion). The cost is one extra
+import line per feature. The alternative — wrapping helpers inside the
+`'use server'` file with internal `try/catch` to mask the behavior — was tried
+in audit-2 and failed because Next.js still exports the helper. There is no
+"private export from a `'use server'` file" — the file boundary IS the security
+boundary.
+
+**What this closes off:** Co-locating throwing helpers next to their wrapper
+for proximity. The audit-output verification (`server-reference-manifest.json`
+lists exactly the expected action IDs) becomes a required build-time check
+for every auth-adjacent PR.
+
+**Implemented in:** T17 audit-round-3 fix, 2026-05-12 (`lib/auth-internal.ts`
+created, `lib/auth.ts` reduced to single export). Verified via build-manifest
+grep: one action ID for `signInWithMagicLink`, zero hits for the prior
+`attemptMagicLink` action ID anywhere under `.next/`.
+
+---
+
+## 2026-05-12 — Auth Server Actions have a constant-time response floor
+
+**Architecture reference:** §6.6.2 + auth-flow.md §2a point 3
+
+**Decided:** The public `signInWithMagicLink` Server Action wraps its internal
+helper in a `try/finally` and pads the response with `setTimeout` so wall-clock
+response time has a minimum bound of 750ms regardless of outcome. Fast paths
+(non-allowlisted email, validation reject) pad up to the floor. Slow paths
+(Supabase API call) run over without truncation. The wrapper catches and
+discards thrown errors silently — re-logging inside the catch would itself
+introduce a timing differential and reopen the channel.
+
+**Means for your product:** An attacker probing the login endpoint cannot tell
+"this email is the admin's address" from "this email is not the admin's
+address" by measuring how fast the server responds. Before this fix, the
+not-allowlisted path returned in microseconds (no network call) while the
+allowlisted path waited ~100-500ms for Supabase — a single HTTP probe revealed
+the admin email. With the 750ms floor, both paths look identical to the wire.
+The cost is a ~750ms login UX, which is below the threshold most users notice
+on a one-time-per-month action.
+
+**Check before approving:** Are you OK with the login form taking ~750ms to
+respond? This is the floor — slow paths can run longer. The alternative —
+truncating slow paths with a ceiling — was rejected because it introduces a
+separate oracle (timeouts vs successes). The floor-not-ceiling design comes
+from `docs/auth-flow.md` §2a point 3.
+
+**What this closes off:** Inline error logging on the wrapper's catch branch
+(would reopen the timing channel at a smaller scale). Per-outcome custom
+response shapes (would reopen body-shape channel — see Brief C/F-13). Any
+future auth-adjacent Server Action with outcome-dependent inner timing must
+follow the same floor-wrap pattern.
+
+**Implemented in:** T17 audit-round-2 fix, 2026-05-12 (`lib/auth.ts:14, 55-70`).
+Verified via Vitest fake-timer test that the wrapper resolves at ≥750ms across
+allowlisted, not-allowlisted, malformed, and Supabase-failure outcomes.
+
+---
+
+## 2026-05-12 — Supabase auth client locked to `flowType: 'implicit'`
+
+**Architecture reference:** §6.6.3 + auth-flow.md §2a point 5 + CONSTRAINT-18
+
+**Decided:** `lib/supabase.ts::createServerClient` constructs the
+`@supabase/ssr` client with `auth: { flowType: 'implicit' }` rather than
+accepting the library default (PKCE). Magic-link callback consumes the
+`?token_hash=&type=` shape via `verifyOtp`, which works under both flow types
+— implicit flow has no effect on what the user experiences. The PKCE-shaped
+`?code=...` branch in the callback route is dead under the current single-user
+magic-link-only model; it is intentionally retained for future OAuth.
+
+**Means for your product:** PKCE's `*-code-verifier` `Set-Cookie` header would
+otherwise be sent only on the call-Supabase branch of the login flow, not on
+the throw-and-skip (non-allowlisted) branch. Anyone watching the network tab
+could distinguish "this email is in the allowlist" from "this email is not"
+by checking whether the response set a cookie — a single-probe oracle at the
+HTTP-header level, orthogonal to the body-shape and timing channels closed by
+the other fixes. Implicit flow does not emit the verifier cookie, so the
+response headers are uniform across all outcomes.
+
+**Check before approving:** This is a quiet but binding config decision. If
+a future contributor flips the client back to PKCE (or removes the explicit
+config and relies on a future library default change), the enumeration channel
+reopens silently — there is no runtime error, just leaked information. The
+guardrail is `tests/auth-cookies.test.ts`, which asserts the production
+factory passes `flowType: 'implicit'` through to `@supabase/ssr` and that no
+`*-code-verifier` cookie is written on any branch.
+
+**What this closes off:** OAuth support without revisiting this decision. When
+T-future adds an OAuth provider, the architecture splits: either two clients
+(implicit for magic-link, PKCE for OAuth) or a re-evaluation of whether
+constant-time-uniform headers are reachable under PKCE. Not a problem today
+(magic-link only by CONSTRAINT-09); flagged for whoever adds OAuth later.
+
+**Implemented in:** T17 audit-round-3 fix, 2026-05-12 (`lib/supabase.ts:40-42`).
+Verified via `tests/auth-cookies.test.ts` (4 tests, ~760ms each — the test
+wall-clock proves the wrapper ran end-to-end).
+
+---
+
+## 2026-05-12 — Dev-only API routes are env-gated with a compiler-evasion trick
+
+**Decided:** Test-fixture routes mount only when three runtime gates pass: NODE_ENV must equal `'test'` (read via `process.env[NODE_ENV_KEY]` indirection, NOT direct dot access), Vercel's `VERCEL=1` env var must be absent, AND a fixture secret must match the request header via constant-time comparison. The NODE_ENV indirection exists because Next 15 inlines `process.env.NODE_ENV` at build time — direct access becomes a compile-time `true` regardless of runtime env.
+
+**Means for your product:** Test infra is unreachable in production three independent ways. Any single gate failure returns 404 (no distinguishable error — no enumeration). The bracket-indirection idiom is non-obvious; future maintainers (Claude in future sessions, or you reading code six months from now) might "clean it up" back to `process.env.NODE_ENV` and silently re-enable the route in production builds. CONSTRAINT-19 was added this session to make the rule explicit.
+
+**Check before approving:** You are OK with a compile-time-evasion idiom living in the codebase. The build-output inspection lives in `docs/security-report.md` audit 7 — re-run if anyone changes the gate. The constraint catches this in code review.
+
+**What this closes off:** "Just delete the route in production" patterns (e.g., a build-time file deletion or a conditional Next route). The route is one file with three runtime gates; the gates ARE the production safety. Deleting the file would lose the ability to run e2e tests against production-shape builds (which the test infra requires).
+
+**Implemented in:** T19.2, 2026-05-12. Verified by `@security` audit 7 CLEAR: build-output grep shows zero `TEST_FIXTURE_SECRET` references in `.next/static/chunks/*` — bracket indirection survived bundling.
+
+---
+
+## 2026-05-12 — Playwright auth fixture uses server-side magic-link generation
+
+**Decided:** E2E tests log in via `auth.admin.generateLink` (service-role) + `auth.verifyOtp` server-side, then hand the bound cookie jar back to the browser context. No password stored anywhere, no email inbox involved, mirrors the production callback's `verifyOtp` code path.
+
+**Means for your product:** Test runs cannot leak production secrets (no real-user impersonation), e2e tests exercise the same `verifyOtp` code path real users hit (so regressions in the callback shape get caught), and the fixture identity lives on an unowned subdomain (`test.swarnimbagre.com`) so collisions with real users are impossible.
+
+**Check before approving:** Test pass requires the Supabase service-role key in the test environment (already required for stats-ingest Edge Function). The triple-gated `/api/test/sign-in` is the surface that hands the cookie to Playwright — its three gates are the only thing preventing this from becoming a production session-mint endpoint. CONSTRAINT-19 + the `VERCEL=1` check + the `TEST_FIXTURE_SECRET` discipline all stand between this fixture and a production exploit.
+
+**What this closes off:** UI-driven magic-link interception (would have required intercepting Supabase's outbound email infra in test — fragile and slow). Per-test password storage (no admin password to store). A CI-only Supabase project (CONSTRAINT-02 already closed this off — single project rule).
+
+**Implemented in:** T19.2, 2026-05-12. Files: `app/api/test/sign-in/route.ts`, `tests/e2e/fixtures/auth.ts`, `scripts/seed-test-fixture.ts`.
 
 ---
 

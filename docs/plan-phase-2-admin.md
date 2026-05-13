@@ -24,7 +24,7 @@ End state: admin can log in via magic link, do full CRUD on projects and posts (
 **Acceptance criteria:**
 - [x] Tailwind config `content` glob is exactly `./app/(admin)/**/*.{ts,tsx}`, `./components/admin/**/*.{ts,tsx}`, `./components/ui/**/*.{ts,tsx}`. Public paths excluded (CONSTRAINT-03).
 - [x] `tailwindcss-scoped-preflight` plugin configured with `scopeOf: '.admin-root'`. Default Preflight is disabled.
-- [x] `app/(admin)/layout.tsx` imports `styles/admin.css` and renders children inside `<div className="admin-root">` with the four borrowed color tokens (`--bg`, `--surface`, `--fg`, `--accent`) applied via CSS variables.
+- [x] `app/(admin)/layout.tsx` imports `styles/admin.css` and renders children inside `<div className="admin-root">` with the eight admin color tokens (`--admin-bg`, `--admin-surface`, `--admin-fg`, `--admin-accent`, `--admin-destructive`, `--admin-destructive-fg`, `--admin-border`, `--admin-muted-fg`) applied via CSS variables (CONSTRAINT-16, amended 2026-05-12).
 - [x] Inter font loaded via `next/font` for admin only. Fraunces and JetBrains Mono are not used in admin (design-decisions.md).
 - [x] Public pages have zero Tailwind utility classes — verified by grep (CONSTRAINT-03).
 - [x] `npm run build` succeeds; bundle analysis confirms Tailwind CSS does not appear in public route output.
@@ -122,12 +122,12 @@ _F-14 + F-15 targeted fix applied 2026-05-12 (fourth architectural pass on T17 �
 - `getServerSession(): Promise<Session | null>` (≤50 lines, CQ-01) — reads session from Supabase cookie, server-side.
 
 **Acceptance criteria:**
-- [ ] All `/admin/*` requests pass through the session check; no session → 307 redirect to `/admin/login` (SEC-04: enforce auth on every protected operation).
-- [ ] Public routes are not gated.
-- [ ] `/admin/login` itself is exempt — visiting it while signed in redirects to `/admin`.
-- [ ] Expired session → redirect to `/admin/login` with a generic message (EH-04). Internal log notes "session expired" (EH-02).
-- [ ] No hardcoded user IDs, emails, or roles (CQ-04). Session presence is the sole admin check (CONSTRAINT-09).
-- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
+- [x] All `/admin/*` requests pass through the session check; no session → 307 redirect to `/admin/login` (SEC-04: enforce auth on every protected operation).
+- [x] Public routes are not gated.
+- [x] `/admin/login` itself is exempt — visiting it while signed in redirects to `/admin`.
+- [x] Expired session → redirect to `/admin/login` with a generic message (EH-04). Internal log notes "session expired" (EH-02).
+- [x] No hardcoded user IDs, emails, or roles (CQ-04). Session presence is the sole admin check (CONSTRAINT-09).
+- [x] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `unauthenticated request to /admin redirects to /admin/login` (TS-04 access control critical).
@@ -139,24 +139,26 @@ _F-14 + F-15 targeted fix applied 2026-05-12 (fourth architectural pass on T17 �
 
 **Specialist:** `@supabase`, `@security`
 
+_Completed 2026-05-12 (pre-`@security`). Created `lib/auth-constants.ts` (extracted shared `MIN_DURATION_MS = 750`), `lib/session.ts` (`getServerSession()`, non-`'use server'`, never throws, uses `getSession()` for local cookie read). Modified `lib/auth.ts` (now imports `MIN_DURATION_MS` from the new constants module; `signInWithMagicLink` body unchanged). Modified `middleware.ts` (added `runAdminGate`, `isGatedAdminPath`, `buildLoginRedirect`, `padToFloor`, `applyDeviceVariant` helpers; matcher updated to remove `admin` from negative lookahead so the gate runs on `/admin/*`; middleware is now async). Five deviations from literal spec, all consulted with `@supabase` + `@security`: (D1) `getServerSession` placed in new `lib/session.ts` not `lib/auth.ts` — adding any export to the `'use server'` module would regress the T17 F-14 hardening by creating a second public Server Action endpoint (a wire-level session probe); (D2) gate uses `getSession()` not `getUser()` to avoid a Supabase round-trip on every admin page load — forged cookies still fail at the next Supabase call; (D3) cookies left untouched uniformly across B/C/D outcomes — simpler invariant than uniformly clearing; (D4) all three redirect outcomes log internally (B `info` "no session", C `info` "session expired", D `error` "unexpected error") with `{ path }` only, no token/email leakage; (D5) no `?next=`/`?from=` query params on the redirect target — open-redirect surface + UI-text channel leak. Tests: Vitest 61 → 81 (+7 in new `tests/session.test.ts` covering happy path, error-result + log-without-leak, throw + log-without-leak, never-throws invariant, no-session quiet path, non-Error rejection path, and a token-leak guard; +13 in new `tests/middleware.test.ts` covering F1/F2/F4 functional, P1/P2/P3 public-route preservation including the `/admin/login` and `/admin/auth/callback` exemptions, S1–S6 six-channel uniformity across B/C/D outcomes for timing/body/status/Location/Set-Cookie/no-`?next=`-leak, and L1 logging-payload security guard against token-shaped or email-shaped strings). `npm test` exits 0; `tsc --noEmit` exits 0. **Gap (deferred to a Phase 2 follow-up):** spec test 3 (signed-in user hitting `/admin/login` redirects to `/admin`) is page-level behavior in `app/(admin)/admin/login/page.tsx`, not middleware scope; the runtime behavior already exists from T17 but no `tests/admin-login-page.test.tsx` covers it. Recommend a small follow-up to add (a) signed-in → 307 to `/admin`, (b) anonymous → renders LoginForm. **Build-manifest action-ID count verification** (post-build grep on `.next/server/server-reference-manifest.json` to confirm exactly one action ID = `signInWithMagicLink`, F-14 hardening intact) is deferred to the `@security` audit step._
+
 ---
 
 ## T19 — Admin home + nav
 
 **Files:**
-- `app/(admin)/page.tsx` (create — admin home)
+- `app/(admin)/admin/page.tsx` (replace stub — admin home)
 - `components/admin/AdminNav.tsx` (create — nav with Projects, Posts, Stats, Images links + Logout button)
 
 **Functions to implement:**
 - `signOut(): Promise<void>` (≤50 lines, CQ-01) — Supabase signOut, clears session, redirects to `/admin/login`.
 
 **Acceptance criteria:**
-- [ ] `/admin` renders only when authenticated (middleware enforces).
-- [ ] Nav includes links to `/admin/projects`, `/admin/posts`, `/admin/stats`, `/admin/images`, plus a Logout button.
-- [ ] Color tokens applied: bg `#1C1712`, surface `#252018`, fg `#E8E0D0`, accent `#C9A84C`.
-- [ ] No "Dashboard" label. The page is just titled "Admin" or empty (CONSTRAINT-13).
-- [ ] Logout calls `signOut()`, clears the cookie, redirects to `/admin/login`. Browser back button does not re-authenticate.
-- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
+- [x] `/admin` renders only when authenticated (middleware enforces).
+- [x] Nav includes links to `/admin/projects`, `/admin/posts`, `/admin/stats`, `/admin/images`, plus a Logout button.
+- [x] Color tokens applied via namespaced --admin-* tokens (CONSTRAINT-16 amended 2026-05-12 — 8 tokens total). Implementation uses Tailwind utility classes (bg-background, text-foreground, bg-secondary, border-border, text-primary) which map to --admin-bg, --admin-fg, --admin-surface, --admin-border, --admin-accent via tailwind.config.ts.
+- [x] No "Dashboard" label. The page is just titled "Admin" or empty (CONSTRAINT-13).
+- [x] Logout calls `signOut()`, clears the cookie, redirects to `/admin/login`. Browser back button does not re-authenticate. [deferred to T19.2 — Playwright auth fixture missing; unit tests cover session-clear + redirect behavior]
+- [x] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `admin home renders when authenticated` (TS-01).
@@ -166,6 +168,57 @@ _F-14 + F-15 targeted fix applied 2026-05-12 (fourth architectural pass on T17 �
 **Depends on:** T18
 
 **Specialist:** `@ui-swarnimbagre`, `@supabase`
+
+_Completed 2026-05-12. Implementation complete; `@security` audit pass 6 returned CLEAR (`docs/security-report.md`). Build invariant verified: post-`npm run build`, `.next/server/server-reference-manifest.json` lists exactly two action IDs (`signInWithMagicLink` + `signOut`), matching the SEC-09 amended-wording allowlist. Tests: 92/92 Vitest passing; `tsc --noEmit` clean; 2 Playwright tests scaffolded as `.fixme` pending T19.2 fixture. Findings tracked: F-19 absorbed by T19.2; F-20, F-21, F-22 documented for follow-up (no `@dev` action required pre-ship). New plan tasks created: T19.1 (SEC-09 build-invariant test), T19.2 (Playwright auth fixture + back-button e2e — now also closes F-19 cookie-jar assertion)._
+
+---
+
+## T19.1 — SEC-09 build-invariant test
+
+**Files:**
+- `tests/server-actions-manifest.test.ts` (create — post-build assertion)
+
+**Functions to implement:**
+- One test (`assertServerActionAllowlist`) that loads `.next/server/server-reference-manifest.json` after build and asserts the set of action IDs equals the allowlist `{ signInWithMagicLink, signOut }`. Fail loud with the full set diff if drift is detected.
+
+**Acceptance criteria:**
+- [x] Test runs against a fresh build artifact (either run `next build` in the test setup or assume the CI step has run it before tests).
+- [x] Manifest read is robust to missing file (loud error with remediation hint).
+- [x] Allowlist is a single source of truth in the test file (no magic IDs scattered).
+- [x] Adding any new server action requires updating both `lib/auth.ts` and this test's allowlist — fail surfaces the link.
+
+**Depends on:** T19 (must be merged first so signOut exists in the manifest)
+**Why:** SEC-09 wording was amended on 2026-05-12 to "one ID per auth flow" but no test currently enforces the allowlist. This closes the policy-without-enforcement gap.
+**Specialist:** none — straight Vitest/Node assertion.
+
+_Completed 2026-05-12. The `assertServerActionAllowlist()` logic ships inline inside the `it()` block rather than as a named exported helper — functionally identical to the spec, no second call site exists to justify extraction, CQ-01 satisfied (block under 50 lines). `beforeAll` invokes `npm run build` with a `NODE_ENV=production` override so `.env.local` is loaded for the build step, then reads `.next/server/server-reference-manifest.json`; missing-manifest path throws loud with a remediation hint pointing at the build command. Allowlist is a single `const EXPECTED_ACTION_IDS = new Set(['signInWithMagicLink', 'signOut'])` declared at the top of the file — drift in either direction (extra or missing) fails with a full set diff in the assertion message. Post-build verification: manifest contains exactly the two expected action IDs and nothing else. Test passes 1/1; Vitest 92 → 93. This closes F-20 — the JSDoc reference in `lib/auth.ts:20` now points to an existing, enforcing test rather than a non-existent file._
+
+---
+
+## T19.2 — Playwright auth fixture + back-button e2e
+
+**Files:**
+- `tests/e2e/admin-logout.spec.ts` (existing file — remove the two `.fixme` markers)
+- New auth-fixture mechanism. Choose between:
+  - (b) NODE_ENV-gated `/api/test/sign-in` route — refuses to mount unless `NODE_ENV === 'test'` AND a fixture secret is present.
+  - (c) CI-only Supabase project with a known test user and a Playwright globalSetup that drives the magic-link flow.
+
+**Functions to implement:**
+- The chosen auth-fixture mechanism.
+- Implement `loginAsAdmin()` helper in the spec (currently throws).
+
+**Acceptance criteria:**
+- [x] After clicking "Sign out" from `/admin`, browser lands on `/admin/login`.
+- [x] After clicking browser-back, URL is still `/admin/login` (middleware re-redirects).
+- [x] Auth fixture cannot be invoked in production (env-gated AND build-stripped if possible).
+- [x] No real Supabase keys land in the test file or fixture file.
+- [x] After signOut → redirect, the browser cookie jar is empty for the Supabase session cookies (sb-*-auth-token, sb-*-refresh-token). Asserted via Playwright's `context.cookies()` snapshot. (F-19 closure)
+
+**Depends on:** T19 (must be merged first so sign-out flow exists end-to-end)
+**Why:** T19's TS-04 "back button after logout does not restore session" Playwright test was scaffolded as `.fixme` because no auth fixture exists in the project. Unit tests in `tests/signout.test.ts` cover session-clear + redirect behavior, but the browser-back behavior is verified only by middleware logic — a regression in middleware exemption logic would not be caught by unit tests alone. This test closes that gap.
+**Specialist:** `@supabase` (for fixture-secret RLS exemption if option (b)), `@security` (for the env-gating audit).
+
+_Completed 2026-05-12. Playwright 2/2 passing. `@supabase` consult locked option B: server-side `auth.admin.generateLink` + `verifyOtp`, no password stored anywhere, mirrors the production callback's `token_hash` shape. Test fixture user `playwright-fixture@test.swarnimbagre.com` lives on the unowned `test.swarnimbagre.com` subdomain (no DNS, no inbox, no collision risk) and is seeded once via `scripts/seed-test-fixture.ts`. The `/api/test/sign-in` route is triple-gated: NODE_ENV check (via bracket indirection `process.env[NODE_ENV_KEY]` to evade Next 15's compile-time inlining of `process.env.NODE_ENV`, which would have folded the guard into a constant `true` at build time) + explicit `VERCEL=1` refusal + `timingSafeEqual` comparison on the `x-fixture-secret` header. Any single gate alone refuses production traffic. F-19 closed by the cookie-jar assertion in the spec — filters `sb-*-auth-token` (and chunked variants) on the BrowserContext snapshot, asserts length zero post sign-out. `@security` audit 7 returned CLEAR: 0 Critical / 0 High / 2 Medium (F-3, F-4 unchanged) / 11 Low (F-19 superseded; F-20 demoted to Low; F-23 length-oracle accepted no-fix as irrelevant pre gate 1; F-24 cookie-regex precision bundled into this close). New devDep: `tsx@^4.19.0` for the seed script. Test baseline: Vitest 93 passing (unchanged from T19.1 close) + Playwright 14 → 16 (+2 from the un-`.fixme`'d TS-04 tests)._
 
 ---
 

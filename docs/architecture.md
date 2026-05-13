@@ -206,7 +206,8 @@ swarnimbagre.com/
 │   ├── admin-queries.ts              # admin reads
 │   ├── admin-mutations.ts            # admin writes (Server Actions)
 │   ├── markdown.ts                   # marked + DOMPurify whitelist
-│   ├── auth.ts                       # session helpers, signOut
+│   ├── auth.ts                       # Server Action entry points (e.g., `signInWithMagicLink`)
+│   ├── auth-internal.ts              # non-'use server' helpers (throwing, timing-sensitive)
 │   └── images.ts                     # Storage URL helpers
 ├── supabase/
 │   ├── migrations/                   # SQL migrations, sequentially numbered
@@ -222,7 +223,7 @@ Tailwind is imported in exactly one place: `app/styles/admin.css`, which is in t
 
 The Tailwind config's `content` glob includes only `./app/(admin)/**/*` and `./components/admin/**/*` and `./components/ui/**/*`. Public components are excluded. The public bundle never sees a Tailwind utility class, and the Preflight reset never reaches public route HTML.
 
-**Color token namespacing.** The four admin color tokens are namespaced as `--admin-bg`, `--admin-surface`, `--admin-fg`, `--admin-accent` (not the bare `--bg` / `--surface` / `--fg` / `--accent` names the public site defines on `:root` in `app/styles/colors_and_type.css`). This prevents cascade collisions if the public site's `:root` token definitions ever leak into the admin subtree (or vice versa). Tailwind's `theme.colors` config maps the utility names (`bg`, `surface`, `fg`, `accent`) to the `--admin-*` CSS variables, so utility class names (`bg-bg`, `text-fg`) stay clean in admin code. Locked T15 — see CONSTRAINT-16 and Founder Brief #4 (Admin CSS token namespacing).
+**Color token namespacing.** The admin uses an eight-token namespaced palette: 4 brand tokens (`--admin-bg`, `--admin-surface`, `--admin-fg`, `--admin-accent`) and 4 semantic tokens (`--admin-destructive`, `--admin-destructive-fg`, `--admin-border`, `--admin-muted-fg`). The semantic tokens map to shadcn slots (destructive, border, input, muted-foreground); the 3 sourced-from-public tokens match public-palette hexes verbatim (`--danger`, `--hairline`, `--fg-muted`) for brand coherence. The `--admin-*` prefix prevents cascade collisions if the public site's `:root` token definitions ever leak into the admin subtree (or vice versa). Tailwind config maps all 19 shadcn slots to these tokens, so utility class names (`bg-bg`, `text-fg`, `border-border`) stay clean in admin code — see CONSTRAINT-16 for the full slot table. Locked T15 — see Founder Brief #4 (Admin CSS token namespacing).
 
 **Founder Brief:** "Tailwind scoping" in [`founder-brief.md`](founder-brief.md).
 
@@ -298,6 +299,41 @@ Per CQ-01 and CQ-02:
 
 When a module hits the limit, split by single responsibility (CQ-03). `lib/admin-mutations.ts` is the most likely growth file; it splits per resource (`admin-mutations-projects.ts`, `admin-mutations-posts.ts`, etc.) when it exceeds 300 lines.
 
+### 4.7 Test infrastructure: NODE_ENV-gated dev-only routes
+
+The project mounts dev-only API routes (currently: `app/api/test/sign-in/route.ts`) using a triple-gate pattern. Each gate is independent — any one gate alone refuses production traffic.
+
+**Gate 1 — NODE_ENV bracket indirection.** The route reads NODE_ENV via:
+
+```typescript
+const NODE_ENV_KEY = 'NODE_ENV';
+if (process.env[NODE_ENV_KEY] !== 'test') return new Response(null, { status: 404 });
+```
+
+Direct `process.env.NODE_ENV` access is folded into a literal at build time by Next 15's compile-time inlining — the runtime gate becomes a constant `'development' !== 'test'` (always true in dev) regardless of the actual runtime NODE_ENV. The bracket-with-variable form preserves the runtime read. **Do not "simplify" this back to dot notation** — see CONSTRAINT-19.
+
+**Gate 2 — explicit Vercel runtime refusal.** `if (process.env.VERCEL === '1')` returns 404. Vercel sets `VERCEL=1` on every deployment runtime. This is the belt to Gate 1's suspenders.
+
+**Gate 3 — shared-secret header.** The route requires header `x-fixture-secret` to match `process.env.TEST_FIXTURE_SECRET` via `timingSafeEqual` from `node:crypto`. Length pre-check (return 404 on length mismatch, since `timingSafeEqual` throws on unequal-length buffers). The secret lives in `.env.local` (gitignored) and CI secrets only — never in Vercel env.
+
+**Pattern is reusable.** Any future dev-only API surface should follow the same three-gate pattern. The secret env var name and the header name are convention; the gate ordering and constant-time comparison are mandatory (SEC-04).
+
+**Cross-references:** `app/api/test/sign-in/route.ts` (implementation), `tests/e2e/fixtures/auth.ts` (consumer), `docs/security-report.md` audit 7 (verification), `docs/constraints.md` CONSTRAINT-19 (binding rule).
+
+### 4.8 Playwright auth fixture pattern
+
+E2E tests log in via a server-side magic-link flow that mirrors the production callback shape but bypasses email delivery.
+
+**Identity convention.** The fixture user is `playwright-fixture@test.swarnimbagre.com`. The subdomain `test.swarnimbagre.com` is unowned — no DNS, no MX records, no inbox. A stray real email bounces hard rather than landing in an inbox the project doesn't control. Future fixture identities follow the pattern `<purpose>@test.swarnimbagre.com`.
+
+**Seed mechanism.** `scripts/seed-test-fixture.ts` is an idempotent CLI that creates the fixture user via `auth.admin.createUser({ email, email_confirm: true })` using the service-role key. Re-running with an existing user is a no-op. Run via `npx tsx scripts/seed-test-fixture.ts` once per environment (local + CI).
+
+**Auth path.** The dev-only `/api/test/sign-in` route calls `auth.admin.generateLink({ type: 'magiclink', email })` to obtain a `token_hash`, then immediately calls `auth.verifyOtp({ token_hash, type: 'email' })` against the SSR client to bind the session to the response cookies. This mirrors the production callback at `app/(admin)/admin/auth/callback/route.ts` — same `verifyOtp` shape, same cookie wiring, no PKCE verifier emitted (CONSTRAINT-18 preserved).
+
+**Serial-mode requirement.** Specs that share a fixture user must use `test.describe.configure({ mode: 'serial' })`. `auth.admin.generateLink` invalidates the prior magic-link token for the email; concurrent workers calling generate+verify against the same user race and one fails with `otp_expired`. If a future spec needs parallelism, mint per-test-isolated identities (`playwright-fixture-${testId}@test.swarnimbagre.com`).
+
+**Cross-references:** `tests/e2e/fixtures/auth.ts` (`loginAsAdmin()` helper), `tests/e2e/admin-logout.spec.ts` (consumer + serial-mode example), `docs/plan-phase-2-admin.md` T19.2 (origin), `docs/founder-brief.md` entries 19 + 20.
+
 ---
 
 ## 5. Infrastructure and Deployment
@@ -328,6 +364,8 @@ Single free-tier project. Migrations applied via Supabase CLI from `supabase/mig
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Vercel + local `.env.local` | yes | Anon key for client/server reads |
 | `SUPABASE_SERVICE_ROLE_KEY` | Vercel server-only + local `.env.local` | **no** | Admin server-side writes only |
 | `STATS_INGEST_SECRET` | Supabase Edge Function env | **no** | Shared secret for `stats-ingest` |
+| `ADMIN_ALLOWED_EMAIL` | Vercel server-only + local `.env.local` | **no** | Admin allowlist enforcement for magic-link sign-in (Layer 2 defense; Layer 1 is the Supabase dashboard). See `auth-flow.md` §3 and `lib/auth-internal.ts::assertAllowlistedEmail`. |
+| `NEXT_PUBLIC_SITE_URL` | Vercel + local `.env.local` | yes | Absolute site URL for magic-link `emailRedirectTo`. Falls back to `NEXT_PUBLIC_VERCEL_URL` when unset. See `lib/auth-internal.ts::getSiteUrl`. |
 | `NEXT_PUBLIC_TWEAKS` | Vercel (preview only, never production) | yes (boolean) | Gates the tweaks panel |
 
 `.env.example` lists every variable name with no values (SEC-01). Service role key is loaded only in server contexts; never imported in client components. `NEXT_PUBLIC_TWEAKS` is unset in production.
@@ -363,6 +401,8 @@ Single free-tier project. Migrations applied via Supabase CLI from `supabase/mig
 - **Admin routes** (`/admin/*`): middleware checks for a Supabase session cookie. Unauthenticated → redirect to `/admin/login`. The admin's email is enforced by the fact that there is exactly one user account; no role check is needed.
 - **Edge Function**: shared-secret header. Constant-time comparison (SEC-04 — timing attack mitigation).
 
+Admin allowlist is two-layer (`auth-flow.md` §3): the Supabase dashboard "Allow new users to sign up" is OFF (Layer 1), and `lib/auth-internal.ts::assertAllowlistedEmail` rejects any email != `ADMIN_ALLOWED_EMAIL` before invoking `signInWithOtp` (Layer 2). Callback route defense-in-depth (`app/(admin)/admin/auth/callback/route.ts`) re-checks the email post-`verifyOtp` so a session is never minted for a non-allowlisted user.
+
 ### 6.3 Threat model — top three
 
 | # | Threat | Mitigation |
@@ -385,6 +425,31 @@ Single free-tier project. Migrations applied via Supabase CLI from `supabase/mig
 - Email addresses are logged as a presence flag (`{ emailProvided: true }`), never as the raw value (SEC-05).
 - User-facing errors are concise; full detail goes to the internal log (EH-04).
 - No `console.log` left in production code (CQ-05).
+
+### 6.6 Auth flow architectural patterns
+
+#### 6.6.1 `'use server'` module surface
+
+Every `export` of a `'use server'` module is promoted by Next.js to a publicly callable Server Action with a stable hashed ID that ships in the client bundle. Auth-adjacent code therefore separates concerns across two sibling files: a `'use server'` wrapper module that contains ONLY public Server Action entry points (`lib/auth.ts` — exports `signInWithMagicLink`), and a non-`'use server'` helper module that contains throwing, timing-sensitive, or otherwise outcome-dependent logic (`lib/auth-internal.ts` — exports `attemptMagicLink`, `assertAllowlistedEmail`, `EMAIL_SCHEMA`, `SIGN_IN_OPERATION`). The wrapper imports the helper as a regular ES module function. This pattern is binding for every future auth-adjacent task (T18-T28, Phase 3 ingestion). Build-output check: `.next/server/server-reference-manifest.json` lists exactly the expected action IDs, no more. See SEC-08 and `docs/auth-flow.md` §2a point 4.
+
+#### 6.6.2 Constant-time floor for enumeration-resistant Server Actions
+
+Auth-adjacent Server Actions whose internal helpers have outcome-dependent timing (allowlisted vs not-allowlisted, found vs not-found) wrap the helper in a `try/finally` block and pad the response with `setTimeout` to a fixed wall-clock floor before resolving. The floor is a named constant (`MIN_DURATION_MS = 750` in `lib/auth.ts`). Fast paths pad up; slow paths run over (floor, not ceiling — truncating slow paths would introduce a separate oracle). The wrapper catches and discards thrown errors silently — re-logging inside the catch reintroduces a timing differential between success and failure, reopening the channel. Inner helpers log structured context themselves. See `docs/auth-flow.md` §2a point 3 and `docs/security-report.md` audit-2 F-12.
+
+#### 6.6.3 Supabase SSR auth flow type — implicit, not PKCE
+
+`lib/supabase.ts::createServerClient` constructs the `@supabase/ssr` client with `auth: { flowType: 'implicit' }`. The library defaults to PKCE, which writes a `*-code-verifier` `Set-Cookie` on the call-Supabase branch of `signInWithOtp` but not on the throw-and-skip branch — a header-level enumeration channel orthogonal to body shape and timing. Implicit flow does not emit the verifier cookie, so the response headers are uniform across outcomes. Magic-link callback consumes `?token_hash=&type=` via `verifyOtp`, which is not PKCE-dependent. The PKCE-shaped `?code=...` branch in `app/(admin)/admin/auth/callback/route.ts` is dead under the current single-user magic-link-only model; it is retained for future OAuth integration. See `docs/auth-flow.md` §2a point 5, `docs/security-report.md` audit-3 F-15, and CONSTRAINT-18.
+
+#### 6.6.4 `/api/admin/*` route handler gate (F-17, audit pass 5)
+
+The middleware matcher `'/((?!api|_next/static|_next/image|favicon.ico).*)'` excludes `/api/*` (Next.js convention to avoid running middleware on API routes that handle their own auth). No `/api/*` routes exist today — `app/api/` is empty as of T18 — but the natural growth path lands admin-only endpoints (image upload, batch operations, deletes) under `/api/admin/*`, where the middleware admin-gate would not run. To prevent silent bypass, every route handler added under `app/api/admin/**` MUST: (1) call `getServerSession()` from `lib/session.ts` at the top of the handler, before any business logic; (2) return `new Response(null, { status: 401 })` if the session is null. Use the same uniform 401 across every admin API route — no body, no error detail — paralleling the SEC-09 redirect-uniformity contract that the page gate already satisfies. The alternative — tightening the middleware matcher to gate `/api/admin/*` directly — is acceptable but not preferred: per-handler protection keeps API routes self-protective and decouples them from the matcher's evolution. Document the choice when the first `/api/admin/*` route ships. **Code-review checklist:** any new file under `app/api/admin/**` must contain a `getServerSession()` call before any business logic. See `docs/security-report.md` audit-5 F-17.
+
+#### 6.6.5 Build invariants (F-14, SEC-09)
+
+Two invariants on the auth surface must hold across every build. Breaking either one is a security regression, not a refactor.
+
+- **Server Action surface (F-14, audit pass 4):** every export of a `'use server'` module is a public Server Action with a stable hashed ID in the client bundle. After every build, `.next/server/server-reference-manifest.json` must list exactly ONE action ID (`signInWithMagicLink`). If a future PR adds a second action ID, audit immediately — it is a wire-level enumeration channel. See §6.6.1, `docs/auth-flow.md` §2a point 4, `docs/security-report.md` audit-4 F-14 and audit-5 F-14a/c/d.
+- **Middleware uniformity (SEC-09, audit pass 5):** every middleware redirect outcome on the admin auth gate must pad to `MIN_DURATION_MS = 750` and write zero `Set-Cookie` headers. Tests S1–S5 in `tests/middleware.test.ts` enforce this contract across the no-session, Supabase-error, and helper-throw branches; do not relax them without re-running `@security`. See `docs/security-report.md` audit-5 "Six-channel SEC-09 uniformity".
 
 ---
 

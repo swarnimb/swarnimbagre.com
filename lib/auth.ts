@@ -1,17 +1,9 @@
 'use server';
 
+import { redirect } from 'next/navigation';
 import { attemptMagicLink } from './auth-internal';
-
-/**
- * Minimum wall-clock duration the public Server Action takes before resolving,
- * in milliseconds. Closes the timing-channel email enumeration vector
- * documented as F-12: without this bound, a non-allowlisted rejection returns
- * in microseconds while an allowlisted call awaits Supabase (~100-500ms),
- * giving an external observer a single-probe oracle on the admin address.
- * 750ms is enough to swallow both the fast and slow paths under normal network
- * conditions without becoming user-perceptible.
- */
-const MIN_DURATION_MS = 750;
+import { MIN_DURATION_MS } from './auth-constants';
+import { createServerClient } from './supabase';
 
 /**
  * Server Action — public entry point for the magic-link sign-in flow.
@@ -20,13 +12,14 @@ const MIN_DURATION_MS = 750;
  * `lib/auth-internal.ts`) so the wire-observable behavior is uniform across
  * outcomes:
  *
- * - **Server Action surface (F-14):** this module is the project's only
- *   `'use server'` file and exports exactly one function. Next.js promotes
- *   every export of a `'use server'` module to a publicly-addressable Server
- *   Action with a stable hashed action ID that ships in the client bundle, so
- *   adding any second export here would silently expose a second RPC endpoint.
- *   `attemptMagicLink` is therefore deliberately kept in a sibling module
- *   without the directive — it remains a regular function import, not a
+ * - **Server Action surface (F-14, SEC-09):** this module is the project's
+ *   only `'use server'` file. It exports one function per auth flow — today
+ *   `signInWithMagicLink` (this function) and `signOut` (below). Next.js
+ *   promotes every export to a publicly-addressable Server Action with a
+ *   stable hashed action ID that ships in the client bundle, so the SEC-09
+ *   allowlist (enforced by `tests/server-actions-manifest.test.ts`) is the union of one ID per flow.
+ *   `attemptMagicLink` is deliberately kept in a sibling module without the
+ *   `'use server'` directive — it remains a regular function import, not a
  *   Server Action. See `docs/security-report.md` audit 3 finding F-14.
  *
  * - **Wire shape (F-13):** never throws; always resolves with `undefined`.
@@ -67,4 +60,46 @@ export async function signInWithMagicLink(email: string): Promise<void> {
       await new Promise<void>((resolve) => setTimeout(resolve, remaining));
     }
   }
+}
+
+/**
+ * Server Action — signs the current admin out and redirects to /admin/login.
+ *
+ * Pairs with `signInWithMagicLink` above. Same six-channel discipline applied
+ * (`docs/auth-flow.md` §2a):
+ *
+ * - **Server Action surface (F-14, SEC-09):** this is the second of two
+ *   exports in this `'use server'` module. Each one is an auth flow (sign-in,
+ *   sign-out). SEC-09's allowlist is the union of the two action IDs.
+ * - **Wire shape (F-13):** never throws; always resolves with `undefined`.
+ *   The Supabase `signOut()` error path is swallowed without re-logging — for
+ *   the same reason F-12 documents on `signInWithMagicLink`: a `console.error`
+ *   on the catch path is itself a side-effect with a measurable cost and
+ *   reopens the timing oracle at a smaller scale. The catch is intentionally
+ *   silent (not a violation of EH-01 — the rule's intent is met by this
+ *   documented, deliberate discipline; observability of failed sign-outs is
+ *   not load-bearing because the user always ends up at `/admin/login`).
+ * - **Timing channel (F-12):** every invocation waits until at least
+ *   `MIN_DURATION_MS` has elapsed before calling `redirect()`, regardless of
+ *   the Supabase call's actual duration or outcome. Bound is a floor.
+ * - **Location/cookie/status uniformity (channels 5/6):** `redirect()` runs
+ *   on every outcome — success, expired session, and Supabase error all land
+ *   the user on `/admin/login` with the same response shape.
+ */
+export async function signOut(): Promise<void> {
+  const start = performance.now();
+  try {
+    const supabase = await createServerClient();
+    await supabase.auth.signOut();
+  } catch {
+    // Deliberately silent — re-logging here would reopen the F-12 timing
+    // oracle by introducing a side-effect cost only on the failure path.
+  } finally {
+    const elapsed = performance.now() - start;
+    const remaining = MIN_DURATION_MS - elapsed;
+    if (remaining > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+    }
+  }
+  redirect('/admin/login');
 }

@@ -66,7 +66,7 @@ Single user, magic link auth. Lean CRUD only. No analytics, no scheduling, no da
 ### 3.1 Auth
 
 **Provider:** Supabase Auth, email magic link, Email provider only.
-**Sole account:** swarnim.build@gmail.com (configured in Supabase).
+**Sole account:** swarnim.build@gmail.com. Enforced in two places: Supabase Auth user table AND the `ADMIN_ALLOWED_EMAIL` environment variable. Both must match for sign-in to succeed.
 **JWT:** 1 hour (Supabase default).
 **Refresh:** 30 days inactivity (Supabase default).
 **Lockout fallback:** if email is unreachable, recover by manually invalidating session in the Supabase dashboard.
@@ -75,6 +75,7 @@ Single user, magic link auth. Lean CRUD only. No analytics, no scheduling, no da
 - Given an unauthenticated request to any `/admin/*` route, when middleware runs, then the user is redirected to `/admin/login`.
 - Given a valid magic link is clicked, when the callback runs, then a session cookie is set and the user is redirected to `/admin`.
 - Given a session has expired, when the next admin request runs, then the user is redirected to `/admin/login` with no error leak.
+- Given any login submission (allowlisted email, non-allowlisted email, or malformed input), when the form is submitted, then the user sees the same success-shaped UI ("check your inbox"), the response payload is identical, and the response time is bounded to a uniform floor — no observable channel distinguishes outcomes.
 
 ### 3.2 Projects CRUD (`/admin/projects`)
 
