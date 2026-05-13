@@ -173,7 +173,7 @@ export default function ProjectForm({
             <Label htmlFor="project-slug">Slug</Label>
             <Input id="project-slug" value={project.slug} readOnly aria-readonly />
             <p className="text-sm text-muted-foreground">
-              Slug locked after publish. Edit the title only affects drafts.
+              Slug locked after publish.
             </p>
           </div>
         ) : null}
