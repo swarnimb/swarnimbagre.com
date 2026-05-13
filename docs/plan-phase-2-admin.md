@@ -269,15 +269,15 @@ _Completed 2026-05-12. Playwright 2/2 passing. `@supabase` consult locked option
 - `<ProjectForm project?: Project>` (≤200 lines, CQ-02).
 
 **Acceptance criteria:**
-- [ ] Form validation at boundary: title non-empty + ≤200 chars; description non-empty (SEC-02).
-- [ ] Slug field is read-only when `project.status === 'published'`. Edit screen shows the lock state explicitly.
-- [ ] Mutations are Server Actions, not client-side Supabase calls (SEC-01: server-only).
-- [ ] On success: redirect to `/admin/projects` with a success toast.
-- [ ] On error: inline error in the form (EH-04). Internal log has full detail (EH-01, EH-02, EH-03).
-- [ ] All queries parameterized via Supabase builder (SEC-03).
-- [ ] No PII in logs (SEC-05). Email never appears in mutation logs.
-- [ ] All Server Actions have doc comments (DS-01).
-- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
+- [x] Form validation at boundary: title non-empty + ≤200 chars; description non-empty (SEC-02).
+- [x] Slug field is read-only when `project.status === 'published'`. Edit screen shows the lock state explicitly.
+- [x] Mutations are Server Actions, not client-side Supabase calls (SEC-01: server-only).
+- [x] On success: redirect to `/admin/projects` with a success toast.
+- [x] On error: inline error in the form (EH-04). Internal log has full detail (EH-01, EH-02, EH-03).
+- [x] All queries parameterized via Supabase builder (SEC-03).
+- [x] No PII in logs (SEC-05). Email never appears in mutation logs.
+- [x] All Server Actions have doc comments (DS-01).
+- [x] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `slugify produces lowercase dashed slug` (TS-01 happy).
@@ -290,6 +290,8 @@ _Completed 2026-05-12. Playwright 2/2 passing. `@supabase` consult locked option
 **Depends on:** T20, T8
 
 **Specialist:** `@ui-swarnimbagre`, `@supabase`
+
+_Completed 2026-05-13. Created `lib/slug.ts` (NFKD diacritic strip + dash-collapse, ≤50 lines), `lib/admin-mutations-internal.ts` (throwing helpers + zod schemas, ≤80-line `updateProjectInternal` pre-fetches `status` for the CONSTRAINT-12 slug-lock omit), `lib/admin-mutations-types.ts` (pure types/consts split so the `'use client'` `ProjectForm` does not pull `next/headers` via the supabase chain), `lib/admin-mutations.ts` (`'use server'`; exports exactly `createProject` + `updateProject` matching `useActionState`'s `(prevState, formData) => Promise<State>` signature, six-channel uniformity wrapper with `MIN_DURATION_MS = 750` floor + `ZodError` → `fieldErrors` carve-out + `GENERIC_FORM_ERROR` envelope for any non-zod throw), `components/admin/ProjectForm.tsx` (one component for create + edit, client, sonner toast + `router.push` on success), `app/(admin)/admin/projects/new/page.tsx` and `app/(admin)/admin/projects/[id]/page.tsx` (server components, dispatch `notFound()` on null). Extended `lib/admin-queries.ts` with `getProjectById` (PGRST116 → null, separate `PROJECT_DETAIL_COLUMNS` projection including `description`). Updated `tests/server-actions-manifest.test.ts` allowlist from 2 → 4 action IDs (`signInWithMagicLink`, `signOut`, `createProject`, `updateProject`). New tests: `tests/slug.test.ts` (5), `tests/admin-mutations.test.ts` (8 — internal helpers), `tests/admin-mutations.timing.test.ts` (3 — Channel 3 floor), `tests/admin-mutations.uniformity.test.ts` (5 — Channel 2 envelope), `tests/ProjectForm.test.tsx` (4 — form error inline + slug-lock UX), plus 4 `getProjectById` cases appended to `tests/admin-queries.test.ts`. Vitest 96 → 125 passing; build clean; tsc clean. Build manifest verified at 4 action IDs by the manifest test. **Decision split** documented in source: types/consts moved to a third module (`admin-mutations-types.ts`) so the client form does not transitively pull `next/headers` — initial naive split (types in `-internal.ts`) failed the Next 15 build with "You're importing a component that needs next/headers", caught on first run. Next steps for main thread: commit + invoke `@security` (first mutation-side application of the 6-channel pattern; user-data CRUD per @dev Security Trigger)._
 
 ---
 

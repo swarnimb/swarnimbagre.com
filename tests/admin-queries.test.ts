@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getAllProjects, type ProjectRow } from '@/lib/admin-queries';
+import {
+  getAllProjects,
+  getProjectById,
+  type ProjectRow,
+} from '@/lib/admin-queries';
 import { ServiceError } from '@/lib/errors';
+import type { Project } from '@/lib/types';
 
 /**
  * Build a stub Supabase client whose chained query terminal resolves with the
@@ -81,6 +86,37 @@ afterEach(() => {
   consoleErrorSpy?.mockRestore();
 });
 
+/**
+ * Build a stub Supabase client whose chained query terminal `.single()`
+ * resolves with the given `{ data, error }` payload. Used by the
+ * `getProjectById` tests below, which exercise the
+ * `.from(...).select(...).eq(...).single()` shape rather than the list shape.
+ */
+function makeDetailStub(result: { data: unknown; error: unknown }): {
+  client: SupabaseClient;
+  calls: StubCall[];
+} {
+  const calls: StubCall[] = [];
+  const chain: Record<string, unknown> = {};
+  const recorder = (method: string) => (...args: unknown[]) => {
+    calls.push({ method, args });
+    return chain;
+  };
+  chain.select = recorder('select');
+  chain.eq = recorder('eq');
+  chain.single = (..._args: unknown[]) => {
+    calls.push({ method: 'single', args: _args });
+    return Promise.resolve(result);
+  };
+  const client = {
+    from: (table: string) => {
+      calls.push({ method: 'from', args: [table] });
+      return chain;
+    },
+  } as unknown as SupabaseClient;
+  return { client, calls };
+}
+
 describe('getAllProjects', () => {
   it('returns drafts and published when filter is "all"', async () => {
     const { client, calls } = makeStub({
@@ -121,5 +157,58 @@ describe('getAllProjects', () => {
     await expect(getAllProjects('all', 1, 50, client2)).rejects.toMatchObject({
       operation: 'getAllProjects',
     });
+  });
+});
+
+describe('getProjectById', () => {
+  /** Sample full project row returned by the detail SELECT. */
+  const FULL_ROW: Project = {
+    id: 'p-1',
+    title: 'OpenClaw',
+    slug: 'openclaw',
+    description: 'shipped',
+    status: 'published',
+    image_id: null,
+    created_at: '2026-01-01T00:00:00.000Z',
+    updated_at: '2026-01-02T00:00:00.000Z',
+  };
+
+  it('returns the row when one matches the id', async () => {
+    const { client, calls } = makeDetailStub({ data: FULL_ROW, error: null });
+
+    const result = await getProjectById(FULL_ROW.id, client);
+
+    expect(result).toEqual(FULL_ROW);
+    const eqCall = calls.find((c) => c.method === 'eq');
+    expect(eqCall?.args).toEqual(['id', FULL_ROW.id]);
+  });
+
+  it('returns null when no row matches (PGRST116 "no rows")', async () => {
+    const { client } = makeDetailStub({
+      data: null,
+      error: { code: 'PGRST116', message: 'no rows' },
+    });
+
+    await expect(getProjectById('nope', client)).resolves.toBeNull();
+  });
+
+  it('throws ServiceError on any other DB failure', async () => {
+    const { client } = makeDetailStub({
+      data: null,
+      error: { code: 'PGRST500', message: 'database boom' },
+    });
+
+    await expect(getProjectById('p-1', client)).rejects.toBeInstanceOf(
+      ServiceError,
+    );
+  });
+
+  it('throws ServiceError when id is empty (no DB call made)', async () => {
+    const { client, calls } = makeDetailStub({ data: null, error: null });
+
+    await expect(getProjectById('', client)).rejects.toBeInstanceOf(
+      ServiceError,
+    );
+    expect(calls.find((c) => c.method === 'from')).toBeUndefined();
   });
 });

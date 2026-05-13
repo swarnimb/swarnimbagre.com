@@ -1,0 +1,286 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { ZodError } from 'zod';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { ServiceError } from '@/lib/errors';
+import {
+  createProjectInternal,
+  updateProjectInternal,
+} from '@/lib/admin-mutations-internal';
+import type { Project } from '@/lib/types';
+
+/**
+ * T21 acceptance — admin mutation throwing helpers.
+ *
+ * Tests live against `createProjectInternal` / `updateProjectInternal` (the
+ * throwing layer) rather than the `'use server'` wrappers. The wrappers'
+ * uniformity contract is tested separately in
+ * `tests/admin-mutations.uniformity.test.ts` and
+ * `tests/admin-mutations.timing.test.ts`. Mirrors the
+ * `attemptMagicLink` / `signInWithMagicLink` split already in
+ * `tests/auth.test.ts`.
+ */
+
+/** Sample published row used by the slug-lock guard test. */
+const PUBLISHED_ROW: Project = {
+  id: 'p-pub',
+  title: 'OpenClaw',
+  slug: 'openclaw',
+  description: 'shipped',
+  status: 'published',
+  image_id: null,
+  created_at: '2026-01-01T00:00:00.000Z',
+  updated_at: '2026-01-02T00:00:00.000Z',
+};
+
+/** Sample draft row used as the pre-fetch result on draft-edit paths. */
+const DRAFT_ROW: Project = {
+  id: 'p-draft',
+  title: 'Work in progress',
+  slug: 'work-in-progress',
+  description: 'still thinking',
+  status: 'draft',
+  image_id: null,
+  created_at: '2026-04-01T00:00:00.000Z',
+  updated_at: '2026-04-01T00:00:00.000Z',
+};
+
+interface StubCall {
+  method: string;
+  args: unknown[];
+}
+
+/**
+ * Build a stub Supabase client that simulates the create-side chain:
+ *   `.from(...).insert(...).select().single() -> { data, error }`.
+ *
+ * Records every chained call so tests can assert that `.insert(...)` was
+ * invoked with the expected payload (including the auto-generated slug).
+ */
+function makeCreateStub(result: { data: unknown; error: unknown }): {
+  client: SupabaseClient;
+  calls: StubCall[];
+} {
+  const calls: StubCall[] = [];
+  const chain: Record<string, unknown> = {};
+  const recorder = (method: string) => (...args: unknown[]) => {
+    calls.push({ method, args });
+    return chain;
+  };
+  chain.insert = recorder('insert');
+  chain.select = recorder('select');
+  chain.single = (..._args: unknown[]) => {
+    calls.push({ method: 'single', args: _args });
+    return Promise.resolve(result);
+  };
+  const client = {
+    from: (table: string) => {
+      calls.push({ method: 'from', args: [table] });
+      return chain;
+    },
+  } as unknown as SupabaseClient;
+  return { client, calls };
+}
+
+/**
+ * Build a stub Supabase client for the update path: two distinct chains share
+ * one `.from()` call site (one for the pre-fetch SELECT, one for the UPDATE).
+ *
+ * The stub maintains a small state machine — the first `.eq(...).single()`
+ * call resolves with `fetchResult`, the second resolves with `updateResult`.
+ */
+function makeUpdateStub(opts: {
+  fetchResult: { data: unknown; error: unknown };
+  updateResult: { data: unknown; error: unknown };
+}): { client: SupabaseClient; calls: StubCall[] } {
+  const calls: StubCall[] = [];
+  let singleCallCount = 0;
+  const chain: Record<string, unknown> = {};
+  const recorder = (method: string) => (...args: unknown[]) => {
+    calls.push({ method, args });
+    return chain;
+  };
+  chain.select = recorder('select');
+  chain.update = recorder('update');
+  chain.eq = recorder('eq');
+  chain.single = (..._args: unknown[]) => {
+    calls.push({ method: 'single', args: _args });
+    singleCallCount += 1;
+    return Promise.resolve(
+      singleCallCount === 1 ? opts.fetchResult : opts.updateResult,
+    );
+  };
+  const client = {
+    from: (table: string) => {
+      calls.push({ method: 'from', args: [table] });
+      return chain;
+    },
+  } as unknown as SupabaseClient;
+  return { client, calls };
+}
+
+let consoleErrorSpy: ReturnType<typeof vi.spyOn> | undefined;
+
+beforeEach(() => {
+  consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  consoleErrorSpy?.mockRestore();
+});
+
+describe('createProjectInternal', () => {
+  it('rejects with a ZodError when title is empty (no DB call made)', async () => {
+    const { client, calls } = makeCreateStub({ data: null, error: null });
+
+    await expect(
+      createProjectInternal(
+        { title: '', description: 'something', status: 'draft' },
+        client,
+      ),
+    ).rejects.toBeInstanceOf(ZodError);
+
+    // Nothing reached the DB layer.
+    expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+    expect(calls.find((c) => c.method === 'insert')).toBeUndefined();
+  });
+
+  it('inserts the row with the slug derived from the title on valid input', async () => {
+    const insertedRow: Project = {
+      id: 'p-new',
+      title: 'New Thing',
+      slug: 'new-thing',
+      description: 'first cut',
+      status: 'draft',
+      image_id: null,
+      created_at: '2026-05-13T00:00:00.000Z',
+      updated_at: '2026-05-13T00:00:00.000Z',
+    };
+    const { client, calls } = makeCreateStub({ data: insertedRow, error: null });
+
+    const result = await createProjectInternal(
+      { title: 'New Thing', description: 'first cut', status: 'draft' },
+      client,
+    );
+
+    expect(result).toEqual(insertedRow);
+    const insertCall = calls.find((c) => c.method === 'insert');
+    expect(insertCall).toBeDefined();
+    expect(insertCall?.args[0]).toEqual({
+      title: 'New Thing',
+      description: 'first cut',
+      status: 'draft',
+      slug: 'new-thing',
+    });
+  });
+
+  it('throws ServiceError when Supabase rejects the insert', async () => {
+    const { client } = makeCreateStub({
+      data: null,
+      error: { code: '23505', message: 'duplicate key value' },
+    });
+
+    await expect(
+      createProjectInternal(
+        { title: 'Dup', description: 'collision', status: 'draft' },
+        client,
+      ),
+    ).rejects.toBeInstanceOf(ServiceError);
+  });
+});
+
+describe('updateProjectInternal', () => {
+  it('omits slug from the update payload when the existing row is published (CONSTRAINT-12)', async () => {
+    const { client, calls } = makeUpdateStub({
+      fetchResult: { data: { status: 'published' }, error: null },
+      updateResult: { data: { ...PUBLISHED_ROW, title: 'Renamed' }, error: null },
+    });
+
+    await updateProjectInternal(
+      PUBLISHED_ROW.id,
+      { title: 'Renamed', description: 'still shipped', status: 'published' },
+      client,
+    );
+
+    const updateCall = calls.find((c) => c.method === 'update');
+    expect(updateCall).toBeDefined();
+    const payload = updateCall?.args[0] as Record<string, unknown>;
+    expect(payload).toBeDefined();
+    expect(payload.title).toBe('Renamed');
+    expect(payload.description).toBe('still shipped');
+    expect(payload.status).toBe('published');
+    // The slug key must be ABSENT — not merely undefined — so the DB trigger
+    // is never asked to compare a value (defense in depth around CONSTRAINT-12).
+    expect(Object.prototype.hasOwnProperty.call(payload, 'slug')).toBe(false);
+  });
+
+  it('includes a derived slug in the update payload when the existing row is draft', async () => {
+    const { client, calls } = makeUpdateStub({
+      fetchResult: { data: { status: 'draft' }, error: null },
+      updateResult: { data: { ...DRAFT_ROW, title: 'New Title' }, error: null },
+    });
+
+    await updateProjectInternal(
+      DRAFT_ROW.id,
+      { title: 'New Title', description: DRAFT_ROW.description, status: 'draft' },
+      client,
+    );
+
+    const updateCall = calls.find((c) => c.method === 'update');
+    const payload = updateCall?.args[0] as Record<string, unknown>;
+    expect(payload.slug).toBe('new-title');
+  });
+
+  it('throws ServiceError when the slug-lock trigger raises on a published-row UPDATE', async () => {
+    // Simulates the T8 trigger raising when an update would change slug on a
+    // published row. Even though the app-side omit logic prevents this from
+    // reaching the trigger today, the defense-in-depth path must surface as a
+    // ServiceError — never an unhandled throw and never a silent ok.
+    const triggerError = {
+      code: 'P0001',
+      message: 'slug is locked on published rows',
+    };
+    const { client } = makeUpdateStub({
+      fetchResult: { data: { status: 'published' }, error: null },
+      updateResult: { data: null, error: triggerError },
+    });
+
+    await expect(
+      updateProjectInternal(
+        PUBLISHED_ROW.id,
+        { title: 'Renamed', description: 'still shipped', status: 'published' },
+        client,
+      ),
+    ).rejects.toBeInstanceOf(ServiceError);
+  });
+
+  it('throws ServiceError when the pre-fetch fails (e.g., row not found)', async () => {
+    const { client } = makeUpdateStub({
+      fetchResult: { data: null, error: { code: 'PGRST116', message: 'no rows' } },
+      updateResult: { data: null, error: null },
+    });
+
+    await expect(
+      updateProjectInternal(
+        'unknown-id',
+        { title: 'X', description: 'X', status: 'draft' },
+        client,
+      ),
+    ).rejects.toBeInstanceOf(ServiceError);
+  });
+
+  it('rejects with a ServiceError when id is empty (no DB call made)', async () => {
+    const { client, calls } = makeUpdateStub({
+      fetchResult: { data: null, error: null },
+      updateResult: { data: null, error: null },
+    });
+
+    await expect(
+      updateProjectInternal(
+        '',
+        { title: 'X', description: 'X', status: 'draft' },
+        client,
+      ),
+    ).rejects.toBeInstanceOf(ServiceError);
+    expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+  });
+});
