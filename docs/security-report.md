@@ -1,7 +1,7 @@
 # Security Report: swarnimbagre.com
 
-**Last audit:** 2026-05-13 (audit 9)
-**Scope:** T22 — projects admin delete with confirm modal (commit `971991e`)
+**Last audit:** 2026-05-13 (audit 10)
+**Scope:** T23 — posts admin CRUD with raw Markdown storage and slug-lock (commit `c50b144`)
 **Status:** CLEAR
 **Summary:** 0 Critical / 0 High / 2 Medium / 14 Low
 **Unresolved Critical/High findings:** None
@@ -10,33 +10,33 @@
 
 ## Verdict
 
-T22 ships. The third mutation Server Action — `deleteProject` — closes all six channels of the SEC-09 uniformity contract identically to `createProject` / `updateProject` from T21. The three-module split (`lib/admin-mutations.ts` `'use server'` wrapper / `lib/admin-mutations-internal.ts` throwing helper / `lib/admin-mutations-types.ts` pure types) is preserved exactly: `deleteProject` lives in the wrapper, `deleteProjectInternal` in the internal helper, and `ProjectMutationState` is reused with no new type added.
+T23 ships. The three new posts-side mutation Server Actions — `createPost`, `updatePost`, `deletePost` — close all six channels of the SEC-09 uniformity contract identically to the T20-T22 projects-side actions they mirror. The three-module split (`lib/admin-mutations.ts` `'use server'` wrapper / `lib/admin-mutations-internal.ts` throwing helper / `lib/admin-mutations-types.ts` pure types) is preserved exactly: the new wrappers live in `lib/admin-mutations.ts`, the new throwing helpers live in `lib/admin-mutations-internal.ts`, and the new `PostMutationState` + `POST_MUTATION_INITIAL_STATE` live in `lib/admin-mutations-types.ts`. `GENERIC_FORM_ERROR` is shared across project and post surfaces — resource-agnostic so cross-resource enumeration via copy differences is impossible.
 
-Build is green. `npm test` → 138/138 passing across 23 test files (matches expected count). Manifest contains exactly five action IDs: `signInWithMagicLink`, `signOut`, `createProject`, `updateProject`, `deleteProject`. The new ID (`40ee7ffd4b...` → `deleteProject` in `lib/admin-mutations.ts`) is the only delta from audit 8.
+Build is green. The live `.next/server/server-reference-manifest.json` lists exactly eight Server Action exportedNames: `signInWithMagicLink`, `signOut`, `createProject`, `updateProject`, `deleteProject`, `createPost`, `updatePost`, `deletePost`. The three new IDs are purely additive — no `*Internal` helper appears in the manifest. `tests/server-actions-manifest.test.ts` allowlist updated 5 → 8 in lock-step.
 
-`deleteProjectInternal` validates `id` is a non-empty/non-whitespace string before any DB call (SEC-02), uses the Supabase query builder for `.delete().eq('id', id)` (SEC-03), uses the request-scoped session-bound server client (SEC-06 / RLS), and never references `SUPABASE_SERVICE_ROLE_KEY` (SEC-01). The DeleteConfirmModal is a generic component reused across future delete surfaces (T23 / T24 / T27); the title interpolates the row title via standard JSX text children (React-escaped — no XSS surface).
+The slug-lock defense-in-depth holds for posts: `updatePostInternal` pre-fetches `status` and omits `slug` from the update payload when the existing row is `published` (`lib/admin-mutations-internal.ts:447-464`); the migration 006 trigger `posts_prevent_slug_change` (`supabase/migrations/006_slug_lock_triggers.sql:62-66`) is the layer-two DB guard. A regression in the app-side omit logic surfaces uniformly through the wrapper's catch as the generic form error envelope — wire shape stays indistinguishable.
 
-One new Low finding recorded (F-27: post-resolution side effects in `DeleteProjectButton` fire unconditionally after modal close — soft UX glitch, not a security issue, single-admin model). F-25, F-26 from audit 8 carry forward unchanged. F-23, F-24, F-20 from audit 7 carry forward unchanged. F-26's scope is confirmed bounded to T21 — `deleteProjectInternal` has no zod schema (uses typeof + trim guards directly), so the `.strict()` concern does not extend.
+Raw Markdown storage per CONSTRAINT-06 is enforced: `createPostInternal` and `updatePostInternal` pass the `content` string from FormData through zod's required-non-empty check (no transform, no trim) and on to the Supabase query builder verbatim. Render-time sanitization is the T12 `MarkdownContent` pipeline on the public-site read path (`app/writing/[slug]/page.tsx:121-129`), unchanged by T23. No new XSS surface is introduced — T23 does not render `content` as HTML anywhere; the admin edit view uses a plain `<Textarea>` (`components/admin/PostForm.tsx:144-152`), which renders the string as text, not HTML.
+
+No new findings recorded. F-3 and F-4 carry forward from audit 5 unchanged. F-23, F-24, F-25, F-26, F-27 and F-6 through F-11, F-20 through F-22 carry forward from prior audits unchanged. F-26 (zod `.strict()` gap) now extends in principle to `postCreateSchema` and `postUpdateSchema` — same parse-the-form-only pattern, same low-grade defense-in-depth concern, no escalation.
 
 ---
 
-## Six-channel mutation uniformity — per-channel verdict (`deleteProject`)
+## Six-channel mutation uniformity — per-channel verdict (`createPost` / `updatePost` / `deletePost`)
 
-1. **Channel 1 — UI text.** PASS. `GENERIC_FORM_ERROR = 'Could not save. Try again.'` (`lib/admin-mutations-types.ts:47`) is the only error string surfaced. `lib/admin-mutations.ts:196-198` returns it for every catch path; no rethrow, no internal error message leak. `DeleteProjectButton.tsx:87` calls `toast.error(result.formError ?? GENERIC_FORM_ERROR)` — the fallback nullish-coalesce is belt-and-braces (the wrapper always sets `formError`, but if it somehow didn't, the constant is the fallback, not an undefined toast).
+1. **Channel 1 — UI text.** PASS. `GENERIC_FORM_ERROR = 'Could not save. Try again.'` (`lib/admin-mutations-types.ts:73`) is the only error string surfaced for the form-level path; zod field errors are filtered to the post form's three declared fields only (`title`, `content`, `status`) via `postZodErrorToFieldErrors` (`lib/admin-mutations.ts:223-236`). No internal error message leak. The constant is shared with the project surface — copy is intentionally resource-agnostic so a probe cannot distinguish a post failure from a project failure.
 
-2. **Channel 2 — Response body.** PASS. Envelope is `{ status: 'ok' }` on success or `{ status: 'error', formError: GENERIC_FORM_ERROR }` on every throw. No `fieldErrors` branch (no zod schema; `id` is a direct argument). `tests/admin-mutations.uniformity.test.ts:134-155` covers both paths; the throw-path assertion verifies `formError` does not contain `'permission'` (no internal-error-text leak).
+2. **Channel 2 — Response body.** PASS. Envelope is `{ status: 'ok' }` on success, `{ status: 'error', fieldErrors }` for zod-only failures, or `{ status: 'error', formError: GENERIC_FORM_ERROR }` for every other throw. Never throws to the wire — try/catch in `lib/admin-mutations.ts:282-298` (create), `:317-335` (update), `:365-377` (delete) is total. The `fieldErrors` key set for posts is narrowed to `Partial<Record<'title' | 'content' | 'status', string>>` (`lib/admin-mutations-types.ts:53`) — no shape information leaks beyond the form's declared fields.
 
-3. **Channel 3 — Response timing.** PASS. `padToFloor(start)` runs inside `finally` (`lib/admin-mutations.ts:199`). `MIN_DURATION_MS` imported from `lib/auth-constants.ts:20` — NOT duplicated (verified by grep: only `lib/admin-mutations.ts:13` import references it across the mutation modules). `tests/admin-mutations.timing.test.ts:126-166` covers both success and throw paths; both assert non-settlement before `MIN_DURATION_MS - 1` and settlement at `MIN_DURATION_MS`.
+3. **Channel 3 — Response timing.** PASS. `padToFloor(start)` runs inside `finally` for all three actions (`lib/admin-mutations.ts:295-297`, `:332-334`, `:374-376`). `MIN_DURATION_MS` imported from `lib/auth-constants.ts:17` — NOT duplicated (verified: only one import reference in the mutation modules). All three new actions reuse the same `padToFloor` helper as the project surface.
 
 4. **Channel 4 — Server Action surface.** PASS. Post-build manifest inspected directly:
-   - `406f1b2acd...` → `signInWithMagicLink` (`lib/auth.ts`)
-   - `0034145551...` → `signOut` (`lib/auth.ts`)
-   - `603dfa713b...` → `createProject` (`lib/admin-mutations.ts`)
-   - `60a54cafff...` → `updateProject` (`lib/admin-mutations.ts`)
-   - `40ee7ffd4b...` → `deleteProject` (`lib/admin-mutations.ts`)
-   Exactly five entries; edge map empty. `lib/admin-mutations.ts` exports ONLY three async functions (verified — no helpers, consts, or types). `lib/admin-mutations-internal.ts` and `lib/admin-mutations-types.ts` do not carry `'use server'`. The new `components/admin/DeleteConfirmModal.tsx` and `components/admin/DeleteProjectButton.tsx` are `'use client'` only (verified). `tests/server-actions-manifest.test.ts:19-25` allowlist updated to include `deleteProject`; the test passes against the live manifest.
+   - `createPost`, `updateProject`, `deletePost`, `createProject`, `deleteProject`, `signInWithMagicLink`, `signOut`, `updatePost` → exactly eight entries; edge map empty.
+   - `lib/admin-mutations.ts` exports ONLY six async functions (`createProject`, `updateProject`, `deleteProject`, `createPost`, `updatePost`, `deletePost`) — no helpers, consts, or types exported from the `'use server'` module. The three throwing internals (`createPostInternal`, `updatePostInternal`, `deletePostInternal`) and the three schemas (`postCreateSchema`, `postUpdateSchema`) live in `lib/admin-mutations-internal.ts` (no `'use server'` directive) and so do NOT enter the manifest.
+   - `tests/server-actions-manifest.test.ts:21-30` allowlist updated to eight IDs; the test passes against the live manifest.
+   - `components/admin/PostForm.tsx` and `components/admin/DeletePostButton.tsx` are `'use client'` only — no `'use server'` cross-leak.
 
-5. **Channel 5 — Response headers.** PASS. `deleteProject` writes no cookies. Supabase client remains `flowType: 'implicit'` per CONSTRAINT-18 (`lib/supabase.ts:41`) — no `*-code-verifier` Set-Cookie is reachable from the mutation surface.
+5. **Channel 5 — Response headers.** PASS. None of the three post actions write cookies. Supabase client remains `flowType: 'implicit'` per CONSTRAINT-18 (`lib/supabase.ts:41`) — no `*-code-verifier` Set-Cookie is reachable from the mutation surface. The Server Action response headers are identical across outcomes.
 
 6. **Channel 6 — Status code.** PASS. No throw reaches the wire (Channel 2 catch is total). Next.js frames the Server Action response at 200 across all outcomes.
 
@@ -44,36 +44,44 @@ One new Low finding recorded (F-27: post-resolution side effects in `DeleteProje
 
 ## Standard SEC rule verdicts
 
-- **SEC-01 (server-only secrets).** CLEAR. Grep of `lib/admin-mutations*.ts` and `components/admin/Delete*.tsx` returns zero references to `SUPABASE_SERVICE_ROLE_KEY`. Only project-wide reference is `lib/env.ts:4` (env-presence list). No hardcoded URLs / tokens / API keys in any new file.
-- **SEC-02 (input validation).** CLEAR. `deleteProjectInternal` validates `typeof id === 'string' && id.trim().length > 0` BEFORE `createServerClient()` and BEFORE `.from().delete().eq()` (`lib/admin-mutations-internal.ts:263-268`). Both empty-string and whitespace-only id cases are tested (`tests/admin-mutations.test.ts:343-353`).
-- **SEC-03 (parameterized queries).** CLEAR. Single DB call: `supabase.from('projects').delete().eq('id', id)` (`lib/admin-mutations-internal.ts:270`). Pure query-builder; no string concat involving `id`. Grep for `\`.*\${id}` and `id.*\+.*['"]` across the mutation files returns no matches.
-- **SEC-04 (enumeration resistance).** CLEAR. Six-channel verdict above is the answer.
-- **SEC-05 (no PII in logs).** CLEAR. `logMutationError` (`lib/admin-mutations-internal.ts:87-97`) for the delete path logs only `operation: 'deleteProject'`, `errorCode`, `errorMessage`, `stack`. No `id` field is logged (delete has no slug/title to leak — `id` is a UUID, not user content, and is intentionally not included in the structured log payload). F-25's slug-in-trigger-message concern does not extend to delete (no trigger raises on delete in the current schema).
-- **SEC-06 (authentication enforcement).** CLEAR. `deleteProjectInternal` uses `createServerClient()` (session-bound, anon-key, cookie-aware) — not the anon client, not service-role. RLS `projects_admin_all` policy (`supabase/migrations/002_rls_projects.sql:41-47`) grants `authenticated` role full CRUD; unauthenticated callers are denied at the DB. The Server Action's middleware gate (T18) is layer one; RLS is layer two; both must fail for an attacker to delete a row.
-- **SEC-07 (sensitive file exposure).** CLEAR. `git ls-files | grep -E "^\.env"` returns only `.env.example`. Working tree clean for committed code (the open M / ?? entries are unrelated framework/non-tracked files). `git log --name-only -20` covering T22 + audit-8 commit shows zero SEC-07 files. Framework files (`CLAUDE.md`, `manifest.md`, `docs/session-*.md`) remain gitignored.
-- **SEC-08 (`'use server'` module discipline).** CLEAR. Project-wide grep for the directive: `lib/auth.ts:1` and `lib/admin-mutations.ts:1` only. `lib/admin-mutations-internal.ts`, `lib/admin-mutations-types.ts`, `components/admin/DeleteConfirmModal.tsx`, `components/admin/DeleteProjectButton.tsx` all correctly lack the directive (the latter two carry `'use client'` instead). Manifest count of 5 is the live invariant.
-- **SEC-09 (middleware uniformity).** N/A — T22 made no middleware changes.
+- **SEC-01 (no secrets in code).** CLEAR. Grep of all twelve T23 files returns zero references to `SUPABASE_SERVICE_ROLE_KEY` or any literal credential. Only project-wide reference is `lib/env.ts:4` (env-presence list). The mutation surface uses `NEXT_PUBLIC_SUPABASE_ANON_KEY` via `createServerClient()` — session-bound, RLS-respecting. Service-role is never imported into the admin write path.
+- **SEC-02 (input validation at boundary).** CLEAR.
+  - `createPostInternal` / `updatePostInternal` parse `input` via `postCreateSchema` / `postUpdateSchema` (`lib/admin-mutations-internal.ts:315-319`, `:330-334`) — required-non-empty, 200-char title cap matching the DB CHECK, status enum locked to `'draft' | 'published'`.
+  - `updatePostInternal` validates `typeof id === 'string' && id.length > 0` BEFORE the schema parse and BEFORE `createServerClient()` (`:426-431`).
+  - `deletePostInternal` validates `typeof id === 'string' && id.trim().length > 0` BEFORE any DB call (`:510-515`).
+- **SEC-03 (parameterized queries).** CLEAR. All three new mutation paths use the Supabase query builder exclusively: `.from('posts').insert(...)`, `.from('posts').update(...).eq('id', id)`, `.from('posts').delete().eq('id', id)`. No string concatenation involving `id`, `title`, `content`, `status`, or `slug` anywhere in the call chain. Grep for backtick-template-with-id across the new files returns no matches.
+- **SEC-04 (auth + authz).** CLEAR. Two-layer enforcement intact:
+  - Layer 1: `middleware.ts:151-157` runs `runAdminGate(request)` on every `/admin/:path*` request including Server Action POSTs (matcher at `:159-165` does not exclude POST). Unauthenticated → redirect to `/admin/login`, padded to `MIN_DURATION_MS` (`:69-75`).
+  - Layer 2: RLS `posts_admin_all` (`supabase/migrations/003_rls_posts.sql:42-47`) grants `authenticated` role full CRUD; unauthenticated callers hit `anon` role and are denied. An attacker who bypassed the middleware gate and called `createPost`/`updatePost`/`deletePost` directly would still be unauthenticated at the DB layer and rejected by RLS.
+- **SEC-05 (no PII / sensitive data in logs).** CLEAR. `logMutationError` (`lib/admin-mutations-internal.ts:96-106`) logs only `operation`, `errorCode`, `errorMessage`, and `stack`. No row data, no `content` body, no `id`, no `title` is logged. F-25's slug-in-trigger-message concern extends in principle to the new `updatePostInternal` (the trigger raise includes the slug), but the threat model is the same: an attacker who can read server logs already has worse access than an enumeration channel.
+- **SEC-06 (HTTPS + encrypted at rest).** N/A for code change — infrastructure concern. Vercel/Supabase defaults stand.
+- **SEC-07 (sensitive files not in VCS).** CLEAR. `git show --name-only c50b144` lists 12 files — all are application code or tests. No SEC-07-listed file appears in the commit or in `git log --all --name-only` (other than the allowed `.env.example`). `.gitignore:46-54` covers `CLAUDE.md`, `manifest.md`, `profile.md`, `content/`, `docs/session-log.md`, `docs/session-handoff.md`, `docs/testing-setup.md`, `docs/framework-issues.md`. Working tree clean post-commit.
+- **SEC-08 (Server Action surface minimization).** CLEAR. Live manifest confirms exactly eight exportedNames — the six action wrappers in `lib/admin-mutations.ts` plus the two in `lib/auth.ts`. None of `createPostInternal`, `updatePostInternal`, `deletePostInternal`, `postCreateSchema`, `postUpdateSchema`, or `logMutationError` appears in the manifest. The three-module split prevents a transitive `next/headers` import from breaking the client `PostForm`; the `'use server'` discipline prevents the throwing helpers from becoming public RPC endpoints.
+- **SEC-09 (uniform response across channels).** CLEAR. Six-channel verdict above is the answer for the mutation surface. Auth flows (`signInWithMagicLink`, `signOut`) untouched by T23.
 
 ---
 
-## DELETE-specific risk verdicts
+## T23-specific risk verdicts
 
-- **IDOR / horizontal escalation.** N/A. Single-user system per CONSTRAINT-09; RLS `authenticated`-role check is the gate either way. An attacker who bypassed the middleware gate and called `deleteProject(any-uuid)` directly would still be unauthenticated at the DB layer (no session cookie → `anon` role → policy denies).
-- **CONSTRAINT-10 hard-delete.** CLEAR. `.delete()` is a real Postgres DELETE via the PostgREST builder. Grep for `deleted_at | softDelete | soft_delete` across `lib/` returns no matches — no soft-delete column introduced. Row is gone after success.
-- **Double-click idempotency.** CLEAR. PostgREST DELETE of zero rows returns `data: null, error: null` (success at the SQL level). The second of two in-flight deletes resolves to `{ status: 'ok' }` — semantically correct (the row IS gone). The `tests/admin-mutations.test.ts:321-331` test verifies `error: null` resolves successfully.
-- **Race: edit-in-tab-A, delete-in-tab-B.** Theoretical, single-admin model. PostgREST `.update().eq('id', missing)` returns `data: []` (success, zero rows). `updateProjectInternal` calls `.single()` after `.update().eq().select()`, which converts zero-rows to a PGRST116 error and is wrapped in `ServiceError` and surfaced as the uniform form-error envelope — NOT a silent success. (Verified: `lib/admin-mutations-internal.ts:219-231` follows the .update().eq().select().single() chain — same as create/update path; missing-row resolves loudly.) No finding.
-- **XSS via project name in modal title.** CLEAR. `DeleteConfirmModal.tsx:111-113` renders `Delete {resource} "{name}"?` via JSX text children. React's default escaping handles every character. Grep for `dangerouslySetInnerHTML` across `components/admin/` returns no matches.
-- **CSRF.** CLEAR. Next 15 Server Actions are CSRF-protected by signed action IDs + same-origin (framework default). The new `deleteProject` action ID is hashed and ships in the client bundle bound to the same-origin check.
+- **Raw Markdown XSS surface.** N/A for T23. CONSTRAINT-06: `content` is stored verbatim. The admin edit view renders it inside a `<Textarea>` (`PostForm.tsx:144-152`) which is HTML-text-only (the value attribute, not innerHTML). The public render path (`app/writing/[slug]/page.tsx:121-129`) routes through `MarkdownContent`, which uses the existing `marked` + `dompurify` sanitizer pipeline — unchanged by T23. F-9 (existing audit-5 finding — XSS regression test gap on the public sanitizer) carries forward; T23 does not introduce a new render surface.
+- **Slug-lock CONSTRAINT-12.** CLEAR. Layer one: `updatePostInternal:447-464` omits `slug` from the update payload when `existing.status === 'published'`. The omit uses payload-key-construction, not `payload.slug = undefined` — the property is absent, not present-with-undefined (verified by `tests/admin-mutations.test.ts:454`: `Object.prototype.hasOwnProperty.call(payload, 'slug') === false`). Layer two: `supabase/migrations/006_slug_lock_triggers.sql:62-66` installs `posts_prevent_slug_change BEFORE UPDATE OF slug ON public.posts`. The trigger raises if a published row's slug changes; the wrapper's catch swallows to the uniform error envelope. Note: the commit message refers to "migration 008" — the actual migration is 006. Doc-text drift only, not a code or security gap.
+- **No length cap on `content`.** Acceptable. `postCreateSchema.content: z.string().min(1)` has no `.max()` cap. The DB CHECK is `length > 0` (no upper bound). The threat model is admin-only (single user, authenticated, CONSTRAINT-09); a malicious admin attacking their own DB via a multi-megabyte body is not a realistic vector. No finding.
+- **CSRF.** CLEAR. Next 15 Server Actions are CSRF-protected by signed action IDs + same-origin enforcement (framework default). `next.config.ts` has no `serverActions.allowedOrigins` opt-out. The three new action IDs are hashed and ship in the client bundle bound to the same-origin check.
+- **IDOR / horizontal escalation.** N/A. Single-user system per CONSTRAINT-09; RLS `authenticated`-role policy is the gate either way. There is no notion of "your post vs. another user's post" — the admin owns every row.
+- **`getPostById` / `getAllPosts` exposure.** CLEAR. Both admin queries use the session-bound `createServerClient()` and rely on RLS `posts_admin_all` for visibility. `getPostById` maps `PGRST116` to `null` (404 surface via `notFound()` in the page) — no error-text leak. `getAllPosts` defaults `pageSize=50`, hard-caps `MAX_PAGE=10_000` in the page (`app/(admin)/admin/posts/page.tsx:9`) to guard against abusive `OFFSET` values.
+- **XSS via post title in confirm modal.** CLEAR. `DeletePostButton` passes `name={post.title}` to the reused `DeleteConfirmModal` (`components/admin/DeletePostButton.tsx:107`). The modal renders the name via JSX text children (verified in audit 9 against the same component) — React's default escaping handles every character. No `dangerouslySetInnerHTML` in `components/admin/`.
 
 ---
 
-## DeleteConfirmModal — CONSTRAINT-13 voice verdict
+## PostForm / DeletePostButton — CONSTRAINT-13 voice verdict
 
 CLEAR. User-facing strings audited:
-- `'Delete {resource} "{name}"?'` — terse interrogative, no SaaS, no emoji.
-- `'This cannot be undone.'` — five words, factual, matches CONSTRAINT-10 hard-delete reality.
-- `'Delete'`, `'Cancel'`, `'Deleting'` — single-word labels, no spinner emoji, no `'loading…'` placeholder.
-- `'Deleted.'` (`DeleteProjectButton.tsx:12`) — single word, period, no decoration.
+- `'Saved.'` (`PostForm.tsx:25`) — single word, period.
+- `'Deleted.'` (`DeletePostButton.tsx:12`) — single word, period.
+- `'Edit post'` / `'New post'` (`PostForm.tsx:113`) — two-word sentence-case labels.
+- `'Title'`, `'Content'`, `'Status'`, `'Slug'`, `'Draft'`, `'Published'` — single-word labels, no decoration.
+- `'Saving'`, `'Save'`, `'Delete'`, `'Cancel'`, `'Deleting'` — single-word labels, no spinner emoji.
+- `'Slug locked after publish. Edit the title only affects drafts.'` (`PostForm.tsx:181`) — terse, factual; slight grammar trip but not a CONSTRAINT-13 voice violation (no SaaS, no emoji, no superlative). Noting for `@cpo` polish, not a security finding.
 
 No emoji, no superlative, no LinkedIn-motivational-post energy. Passes.
 
@@ -91,15 +99,15 @@ None.
 
 ### Medium
 
-(F-3 and F-4 from audit 5 remain at Medium severity, carry-forward, neither addressed nor regressed by T22.)
+(F-3 and F-4 from audit 5 remain at Medium severity, carry-forward, neither addressed nor regressed by T23.)
 
 ---
 
-**F-3 (Medium, carry-forward, unchanged):** Zod email schema in `lib/auth-internal.ts:20` has no length cap. Recommended `z.string().min(3).max(254).email()`. Not addressed by T22; not regressed.
+**F-3 (Medium, carry-forward, unchanged):** Zod email schema in `lib/auth-internal.ts:20` has no length cap. Recommended `z.string().min(3).max(254).email()`. Not addressed by T23; not regressed.
 
 ---
 
-**F-4 (Medium, carry-forward, unchanged):** Callback handler accepts overly wide OTP type set in `app/(admin)/admin/auth/callback/route.ts`. Recommended narrow to `new Set(['email', 'magiclink'])`. Not addressed by T22; not regressed.
+**F-4 (Medium, carry-forward, unchanged):** Callback handler accepts overly wide OTP type set in `app/(admin)/admin/auth/callback/route.ts`. Recommended narrow to `new Set(['email', 'magiclink'])`. Not addressed by T23; not regressed.
 
 ---
 
@@ -107,69 +115,30 @@ None.
 
 ---
 
-**F-27 (NEW): Post-resolution side effects in `DeleteProjectButton` fire unconditionally after modal close**
-
-- **Severity:** Low
-- **Rule violated:** None directly — soft UX/race concern, not a security boundary.
-- **Where:** `components/admin/DeleteProjectButton.tsx:74-88`. `handleConfirm` awaits `deleteAction(id)` and then unconditionally calls `toast.success(...)`, `setIsOpen(false)`, and either `router.push(...)` or `router.refresh()`. If the user presses ESC mid-flight (closing the modal via Radix's default key-handling — confirmed by `tests/DeleteConfirmModal.test.tsx:132-156`), the action remains in flight server-side and its post-resolution effects fire regardless of where the user has navigated. A `router.push('/admin/projects')` can therefore yank the user away from a different admin page they navigated to in the interim.
-- **Threat:** Functionally negligible. The admin is a single user (CONSTRAINT-09); the surface is internal. The worst case is a confusing redirect, not a privilege escalation or data leak. The action itself completes correctly server-side (hard-delete is idempotent).
-- **Mitigation status:** functionally accepted. The modal's pending state DOES clear in `finally` per `DeleteConfirmModal.tsx:91-100`; this finding is specifically about the parent's post-resolution branching, not the modal contract.
-- **Recommended fix:** Track an `isMounted` ref or a per-invocation `cancelled` flag in `DeleteProjectButton.handleConfirm`; gate `router.push/refresh` on `isOpen === true at start && isOpen === true at resolution`. Or — simpler — bind side effects to a `useEffect` that runs on a result state. Either is ~5 lines.
-- **Effort:** trivial. Defer to a "polish T22" pass.
+**F-26 (Low, scope extended, carry-forward from audit 8):** Zod schemas lack `.strict()`. **Scope now includes `postCreateSchema` and `postUpdateSchema`** (`lib/admin-mutations-internal.ts:315-319`, `:330-334`) — same parse-FormData-only pattern, same low-grade defense-in-depth concern. Extra FormData keys (e.g., a probe sending `?role=admin`) are ignored by `formData.get('title' | 'content' | 'status')`, so the surface is non-exploitable in practice. Defense-in-depth fix: add `.strict()` to all four schemas (two project + two post) in one pass.
 
 ---
 
-**F-25 (Low, carry-forward from audit 8, unchanged):** Postgres trigger-raise message embeds the slug verbatim in `errorMessage` log. The delete path does NOT extend this concern (no trigger raises on delete; `deleteProjectInternal`'s log payload contains no row-derived data). Concern remains scoped to `updateProjectInternal`'s pre-fetch + update chain. No-fix accepted.
+(All other prior-audit Low findings carry forward unchanged: F-27, F-25, F-23, F-24, F-20, F-21, F-22, F-6, F-7, F-8, F-9, F-10, F-11. None regressed or extended by T23. See audit 9 for full text.)
 
 ---
 
-**F-26 (Low, carry-forward from audit 8, unchanged):** Zod schemas lack `.strict()`. **Scope confirmed bounded to T21.** `deleteProjectInternal` has no zod schema (uses `typeof id === 'string' && id.trim().length > 0` directly), so there is no `.strict()` gap to extend. The finding remains specifically about `projectCreateSchema` and `projectUpdateSchema`. Defense-in-depth fix unchanged.
+## Build invariant — T23
 
----
+Post-`npm run build` (2026-05-13, audit 10):
 
-**F-23 (Low, carry-forward from audit 7, unchanged):** Length pre-check in `assertFixtureSecret` is a length oracle (irrelevant to threat model). Production gate-1 ordering absorbs the surface. No-fix accepted.
-
----
-
-**F-24 (Low, carry-forward from audit 7, unchanged):** F-19 cookie-jar regex misses chunked variants and a non-existent refresh-token cookie. False-negative ceiling on the assertion. No-fix accepted.
-
----
-
-**F-20 (Low, carry-forward from audit 7, unchanged):** Stale JSDoc wording in `lib/auth.ts:20`. Doc-polish only.
-
----
-
-**F-6 through F-11 (Low, carry-forward, unchanged from audit 5):**
-
-- **F-6:** No CSP — defer to Phase 4 launch prep.
-- **F-7:** `@types/dompurify@3.0.5` stale.
-- **F-8:** Caret pins on `marked` and `dompurify` — mitigated by `package-lock.json`.
-- **F-9:** XSS regression test gap on the public Markdown sanitizer.
-- **F-10:** Cookie hardening implicit (relies on `@supabase/ssr` defaults).
-- **F-11:** No app-level rate limit on `signInWithMagicLink`.
-
-See audit 5 for full text. None affected by T22.
-
----
-
-**F-21, F-22 (Low, carry-forward, unchanged):** `next.config.ts` CSRF-posture comment + Server Action IDs documented as non-secret. Both still recommended doc-polish; T22 has no effect on them.
-
----
-
-## Build invariant — T22
-
-Post-`npm run build` (2026-05-13, audit 9):
-
-- `.next/server/server-reference-manifest.json` lists exactly FIVE action IDs in the `node` map; `edge` map empty:
-  - `406f1b2acd793c144567457943dc9cafa48d09501a` → `signInWithMagicLink` (`lib/auth.ts`)
-  - `0034145551c16de429added00b69a97d379a3c909b` → `signOut` (`lib/auth.ts`)
-  - `603dfa713b7470102e8166225f877d61a24d8e6020` → `createProject` (`lib/admin-mutations.ts`)
-  - `60a54cafff864199a8998514e6dbc2c549708270a2` → `updateProject` (`lib/admin-mutations.ts`)
-  - `40ee7ffd4b8cb738064a8ef6adbec6cbc42e02a7f5` → `deleteProject` (`lib/admin-mutations.ts`)  ← NEW (T22)
-  The four prior IDs are unchanged from audit 8 — `deleteProject` is purely additive.
-- `/admin/projects` route 4.51 kB; `/admin/projects/[id]` route 1.61 kB. Both are dynamic (ƒ). The shadcn Dialog primitive is shared via the admin chunk.
-- `npx vitest run tests/server-actions-manifest.test.ts` → 1 test passed; allowlist `{signInWithMagicLink, signOut, createProject, updateProject, deleteProject}` matches the manifest exactly.
-- `npm test` → 138 tests across 23 files, all passing.
+- `.next/server/server-reference-manifest.json` lists exactly EIGHT action exportedNames in the `node` map; `edge` map empty:
+  - `signInWithMagicLink` (`lib/auth.ts`)
+  - `signOut` (`lib/auth.ts`)
+  - `createProject` (`lib/admin-mutations.ts`)
+  - `updateProject` (`lib/admin-mutations.ts`)
+  - `deleteProject` (`lib/admin-mutations.ts`)
+  - `createPost` (`lib/admin-mutations.ts`) ← NEW (T23)
+  - `updatePost` (`lib/admin-mutations.ts`) ← NEW (T23)
+  - `deletePost` (`lib/admin-mutations.ts`) ← NEW (T23)
+  The five prior exportedNames are unchanged from audit 9 — the three new entries are purely additive. No `*Internal` helper or schema appears in either map.
+- `tests/server-actions-manifest.test.ts:21-30` allowlist matches the live manifest exactly (eight IDs).
+- T23 tests: `npm test` count moved 138 → 141 (+3 TS-04: raw-Markdown round-trip, slug-lock on published update, delete-row internal). Per commit message.
 
 ---
 
@@ -177,8 +146,8 @@ Post-`npm run build` (2026-05-13, audit 9):
 
 - `.env.local` exists locally and is matched by `.gitignore` rule `.env*` (with `!.env.example` exception).
 - `git ls-files | grep -E "^\.env"` returns only `.env.example` — no real env file ever committed.
-- `git log --name-only -20` shows zero SEC-07 files in recent commits (T22 commit `971991e` and audit 8 commit `58e4a92` both verified).
-- Working tree `git status --short` shows only one tracked-file modification (`docs/plan-phase-2-admin.md`) and four untracked items (the audit-7/T20 leftovers from before the framework convention applied — none are SEC-07).
+- `git show --name-only c50b144`: 12 files, all application code or tests. Zero SEC-07 files.
+- `git log --all --name-only` across full history: zero SEC-07 files (only `.env.example`, which is allowed).
 - Framework files (`CLAUDE.md`, `manifest.md`, `profile.md`, `docs/session-*.md`, `content/`) gitignored per existing project convention.
 
 **SEC-07 verdict:** PASS.
@@ -192,8 +161,8 @@ Post-`npm run build` (2026-05-13, audit 9):
 | Critical | 0 | — |
 | High | 0 | — |
 | Medium | 2 | F-3, F-4 |
-| Low | 14 | F-6, F-7, F-8, F-9, F-10, F-11, F-20, F-21, F-22, F-23, F-24, F-25, F-26, F-27 |
+| Low | 14 | F-6, F-7, F-8, F-9, F-10, F-11, F-20, F-21, F-22, F-23, F-24, F-25, F-26 (scope extended), F-27 |
 
-**Verdict:** CLEAR — no Critical or High findings. T22 ships. The six-channel uniformity contract extends to the third mutation Server Action with no regression and no new structural exposure. One new Low (F-27, post-resolution side-effect race in `DeleteProjectButton`) flagged as polish-grade defense-in-depth for future hardening; not blocking.
+**Verdict:** CLEAR — no Critical or High findings. T23 ships. The six-channel uniformity contract extends to the three new post mutation Server Actions with no regression and no new structural exposure. No new findings recorded; F-26 scope formally extended to cover the two new zod schemas (defense-in-depth, not exploitable in practice).
 
-**Path forward:** T22 is CLEAR. Proceed to T23.
+**Path forward:** T23 is CLEAR. Proceed to T24.
