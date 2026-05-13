@@ -135,7 +135,7 @@ export async function createProject(
  * Same six-channel uniformity discipline as {@link createProject}. The
  * additional guard here is the slug-lock: the inner helper pre-fetches the
  * existing row's `status` and omits `slug` from the update payload when the
- * row is `published`. Even if that omit logic regresses, the migration 008
+ * row is `published`. Even if that omit logic regresses, the migration 006
  * trigger raises and the wrapper swallows the throw to the same uniform
  * `{ status: 'error', formError }` shape.
  *

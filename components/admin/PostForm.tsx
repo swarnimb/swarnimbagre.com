@@ -178,7 +178,7 @@ export default function PostForm({
             <Label htmlFor="post-slug">Slug</Label>
             <Input id="post-slug" value={post.slug} readOnly aria-readonly />
             <p className="text-sm text-muted-foreground">
-              Slug locked after publish. Edit the title only affects drafts.
+              Slug locked after publish.
             </p>
           </div>
         ) : null}
