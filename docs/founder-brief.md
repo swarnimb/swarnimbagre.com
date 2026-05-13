@@ -421,6 +421,22 @@ wall-clock proves the wrapper ran end-to-end).
 
 ---
 
+## 2026-05-13 — Admin mutation surface — three-module file split
+
+**Architecture reference:** §6.6.6 + §6.6.1 + auth-flow.md §2a point 4
+
+**Decided:** Admin write surface (create/update/delete on `projects`, `posts`, `stats`, image deletions) splits across three files per resource family, not the two-file split the auth flow uses. Pure types and the user-facing error string live in a `*-types.ts` module that is safe to import from a `'use client'` component. Throwing helpers and zod schemas live in a `*-internal.ts` module that has no `'use server'` directive and is server-only. Public Server Action entry points live in a `*.ts` module that DOES carry `'use server'`. The form imports types from `-types.ts` only; the server modules import helpers from `-internal.ts`; the `'use server'` wrapper imports from both.
+
+**Means for your product:** Admin forms can display field-level validation errors and form-level retry errors with strongly-typed shapes — the form code knows the action's return type at compile time. Without the third file, the client form has to either lose type-safety (treat the return as `unknown`) or pull in a module that transitively imports `next/headers`, which fails the Next 15 build with a hard error. With the third file, every future admin mutation (T23 posts, T24 stats, T25 image deletions) follows the same shape: client gets types, server gets helpers, the wrapper file stays small and audit-ready (every export is a Server Action — no helpers smuggled in).
+
+**Check before approving:** This adds one extra import line per resource family. The cost is real but small. The alternative — pushing the state envelope into the global `lib/types.ts` — would mix UI state shapes (`fieldErrors`, `formError`, `status`) with domain types (`Project`, `Post`, `Stat`). The third file keeps that boundary clean. If you ever decide the admin and public sides should share state types, you'd be unwinding this split.
+
+**What this closes off:** Co-locating types with the throwing helpers (the auth-flow's two-file pattern). The audit-output check from §6.6.5 (`server-reference-manifest.json` lists exactly the test-allowlist) becomes mandatory for every admin-mutation PR — adding an export to `lib/admin-mutations.ts` without updating `tests/server-actions-manifest.test.ts` is a build-time test failure by design.
+
+**Implemented in:** T21, 2026-05-13 (`lib/admin-mutations-types.ts`, `lib/admin-mutations-internal.ts`, `lib/admin-mutations.ts`). Extended in T22 (`deleteProject` joined the same three-file surface). Verified via `@security` audit 8 (T21) and audit 9 (T22), both CLEAR. Six-channel uniformity contract from `auth-flow.md` §2a is now applied identically across the auth surface AND the mutation surface.
+
+---
+
 ## How to update this file
 
 When `@cto` or any session changes a decision in [`architecture.md`](architecture.md):
