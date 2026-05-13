@@ -225,22 +225,22 @@ _Completed 2026-05-12. Playwright 2/2 passing. `@supabase` consult locked option
 ## T20 — Projects admin: list view
 
 **Files:**
-- `app/(admin)/projects/page.tsx` (create)
+- `app/(admin)/admin/projects/page.tsx` (create)
 - `lib/admin-queries.ts` (create — admin-side reads)
 - `components/admin/ProjectsList.tsx` (create)
 
 **Functions to implement:**
-- `getAllProjects(filter?: 'all' | 'published' | 'draft'): Promise<Project[]>` (≤50 lines, CQ-01) — admin sees drafts and published. Default `'all'`.
+- `getAllProjects(filter: ProjectFilter = 'all', page = 1, pageSize = 50, client?: SupabaseClient): Promise<{ rows: ProjectRow[]; total: number }>` (≤50 lines, CQ-01) — admin sees drafts and published. Default filter `'all'`. The optional `client` is a DI seam for tests (matches `lib/db.ts` convention).
 
 **Acceptance criteria:**
-- [ ] Table columns: Title, Slug, Status, Created, Actions (Edit, Delete).
-- [ ] Status rendered as a Badge (shadcn): `published` accent, `draft` muted.
-- [ ] Filter via shadcn Select: All / Published / Draft.
-- [ ] Sort by `created_at DESC`.
-- [ ] Empty state: "No projects yet" (CONSTRAINT-13: terse, no decoration).
-- [ ] Pagination: shadcn Pagination, 50 rows per page.
-- [ ] All queries via Supabase query builder (SEC-03).
-- [ ] Doc comments on all public functions (DS-01).
+- [x] Table columns: Title, Slug, Status, Created, Actions (Edit, Delete).
+- [x] Status rendered as a Badge (shadcn): `published` accent, `draft` muted.
+- [x] Filter via shadcn Select: All / Published / Draft.
+- [x] Sort by `created_at DESC`.
+- [x] Empty state: "No projects yet" (CONSTRAINT-13: terse, no decoration).
+- [x] Pagination: shadcn Pagination, 50 rows per page.
+- [x] All queries via Supabase query builder (SEC-03).
+- [x] Doc comments on all public functions (DS-01).
 
 **Tests required:**
 - `getAllProjects returns drafts and published when filter is all` (TS-01 happy).
@@ -256,8 +256,8 @@ _Completed 2026-05-12. Playwright 2/2 passing. `@supabase` consult locked option
 ## T21 — Projects admin: create + edit forms
 
 **Files:**
-- `app/(admin)/projects/new/page.tsx` (create)
-- `app/(admin)/projects/[id]/page.tsx` (create — edit)
+- `app/(admin)/admin/projects/new/page.tsx` (create)
+- `app/(admin)/admin/projects/[id]/page.tsx` (create — edit)
 - `components/admin/ProjectForm.tsx` (create)
 - `lib/admin-mutations.ts` (create — Server Actions for writes)
 - `lib/slug.ts` (create — slugify helper)
@@ -297,7 +297,7 @@ _Completed 2026-05-12. Playwright 2/2 passing. `@supabase` consult locked option
 
 **Files:**
 - `components/admin/DeleteConfirmModal.tsx` (create — reusable)
-- `app/(admin)/projects/[id]/page.tsx` (modify — wire delete button)
+- `app/(admin)/admin/projects/[id]/page.tsx` (modify — wire delete button)
 - `lib/admin-mutations.ts` (modify — add `deleteProject`)
 
 **Functions to implement:**
@@ -328,9 +328,9 @@ _Completed 2026-05-12. Playwright 2/2 passing. `@supabase` consult locked option
 ## T23 — Posts admin: list, create, edit, delete (same pattern as T20–T22)
 
 **Files:**
-- `app/(admin)/posts/page.tsx`
-- `app/(admin)/posts/new/page.tsx`
-- `app/(admin)/posts/[id]/page.tsx`
+- `app/(admin)/admin/posts/page.tsx`
+- `app/(admin)/admin/posts/new/page.tsx`
+- `app/(admin)/admin/posts/[id]/page.tsx`
 - `components/admin/PostsList.tsx`
 - `components/admin/PostForm.tsx`
 - `lib/admin-queries.ts` (modify — add post queries)
@@ -365,7 +365,7 @@ _Completed 2026-05-12. Playwright 2/2 passing. `@supabase` consult locked option
 ## T24 — Stats admin: read-only list + manual insert form
 
 **Files:**
-- `app/(admin)/stats/page.tsx` (create)
+- `app/(admin)/admin/stats/page.tsx` (create)
 - `components/admin/StatsList.tsx` (create)
 - `components/admin/StatsInsertForm.tsx` (create)
 - `lib/admin-queries.ts` (modify — add `getAllStats`)
@@ -433,8 +433,8 @@ _Completed 2026-05-12. Playwright 2/2 passing. `@supabase` consult locked option
 ## T26 — Wire image upload into Project + Post forms
 
 **Files:**
-- `app/(admin)/projects/[id]/page.tsx` (modify)
-- `app/(admin)/posts/[id]/page.tsx` (modify)
+- `app/(admin)/admin/projects/[id]/page.tsx` (modify)
+- `app/(admin)/admin/posts/[id]/page.tsx` (modify)
 - `components/admin/ProjectForm.tsx` (modify)
 - `components/admin/PostForm.tsx` (modify)
 - `lib/admin-mutations.ts` (modify — add image-detach helper if needed)
@@ -464,7 +464,7 @@ _Completed 2026-05-12. Playwright 2/2 passing. `@supabase` consult locked option
 ## T27 — Orphan image cleanup page
 
 **Files:**
-- `app/(admin)/images/page.tsx` (create)
+- `app/(admin)/admin/images/page.tsx` (create)
 - `components/admin/OrphanCleanup.tsx` (create)
 - `lib/admin-mutations.ts` (modify — add `deleteOrphanImages`)
 
