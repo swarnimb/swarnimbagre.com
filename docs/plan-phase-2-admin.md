@@ -347,11 +347,11 @@ _Completed 2026-05-13. Created `components/admin/DeleteConfirmModal.tsx` (reusab
 - `deletePost(id): Promise<void>` (CQ-01).
 
 **Acceptance criteria:**
-- [ ] All Project rules apply identically (slug auto + lock-on-publish, hard-delete with confirm modal, status enum, server-side mutations).
-- [ ] Form has a `content` textarea for raw Markdown. No WYSIWYG. The `content` is stored as-is — never converted to HTML before storage (CONSTRAINT-06).
-- [ ] Optional Markdown preview pane uses the same `renderMarkdown` from T12. Preview confirms what readers will see.
-- [ ] DB trigger from T8 enforces slug-lock on `posts` as well.
-- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
+- [x] All Project rules apply identically (slug auto + lock-on-publish, hard-delete with confirm modal, status enum, server-side mutations).
+- [x] Form has a `content` textarea for raw Markdown. No WYSIWYG. The `content` is stored as-is — never converted to HTML before storage (CONSTRAINT-06).
+- [x] Optional Markdown preview pane uses the same `renderMarkdown` from T12. Preview confirms what readers will see.
+- [x] DB trigger from T8 enforces slug-lock on `posts` as well.
+- [x] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `getAllPosts returns drafts and published when filter is all` (TS-01).
@@ -363,6 +363,8 @@ _Completed 2026-05-13. Created `components/admin/DeleteConfirmModal.tsx` (reusab
 **Depends on:** T22
 
 **Specialist:** `@ui-swarnimbagre`, `@supabase`
+
+_Completed 2026-05-13 (Session 17). Shipped over 4 commits: `c50b144` (feat — server-side mutation surface extended with `PostMutationState` + `POST_MUTATION_INITIAL_STATE` in `lib/admin-mutations-types.ts`; `createPostInternal` / `updatePostInternal` / `deletePostInternal` in `lib/admin-mutations-internal.ts` (update pre-fetches `status` to drive slug-omit on published rows, same pattern as T21); `createPost` / `updatePost` / `deletePost` `'use server'` wrappers in `lib/admin-mutations.ts` applying the SEC-09 six-channel uniformity contract; Server Action manifest allowlist 5 → 8; UI list / new / edit pages under `app/(admin)/admin/posts/`, `PostsList`, `PostForm`, `DeletePostButton`; query helpers `getAllPosts` + `getPostById`; raw Markdown round-trip + slug-lock-on-published + delete-row vitest cases — three TS-04 added), `c97ceeb` (fix — doc-text drift: migration ref 008→006 in `updateProject` doc comment + PostForm slug-locked help text rewritten to single clean sentence), `46e5cce` (fix — ProjectForm slug-locked help text same trim, latent bug surfaced via T23 mirroring), `2d1df71` (docs — `@security` audit 10 CLEAR — T23 posts admin surface). Reused `DeleteConfirmModal` from T22 verbatim. Three-module file split (§6.6.6) preserved cleanly. **Audit 10 verdict:** CLEAR. 0 Critical / 0 High / 2 Medium (F-3, F-4 carry-forward) / 14 Low. F-26 (zod `.strict()` defense-in-depth) now scoped to all post + project mutation schemas — deferred, not exploitable in practice because FormData reads are explicit-key-based. **Tests:** Vitest 138 → 141 (+3 TS-04). Build green; `tsc --noEmit` clean. Build manifest at 8 Server Action IDs exactly. **Refactor decision — NOT extracted:** ~30 lines of duplication between project and post mutation wrappers (sibling `*ZodErrorToFieldErrors` + `read*FormData` helpers) considered and explicitly left inline. Extraction would require a runtime field-list parameter and adds complexity vs. removes it. Matches T22 inline-vs-extract precedent. **Zero deviations from T20–T22 patterns; zero architectural decisions; zero new constraints.**_
 
 ---
 
