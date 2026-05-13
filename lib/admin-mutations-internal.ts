@@ -41,6 +41,8 @@ const TITLE_MAX_LENGTH = 200;
 const CREATE_PROJECT_OPERATION = 'createProject';
 /** Operation tag for update-side logs and ServiceError instances. */
 const UPDATE_PROJECT_OPERATION = 'updateProject';
+/** Operation tag for delete-side logs and ServiceError instances. */
+const DELETE_PROJECT_OPERATION = 'deleteProject';
 
 /** Status literal used to gate the slug-lock rule on edit. */
 const PUBLISHED: ProjectStatus = 'published';
@@ -228,4 +230,49 @@ export async function updateProjectInternal(
     });
   }
   return data as Project;
+}
+
+/**
+ * Hard-delete a project row by id.
+ *
+ * CONSTRAINT-10: hard-delete only — no soft-delete column, no tombstone, no
+ * undo. Recovery from accidental delete is via Supabase backups; the confirm
+ * modal at the UI boundary (T22) is the only undo path.
+ *
+ * Validates `id` is a non-empty string before any DB call (SEC-02). Deletes
+ * via the Supabase query builder (SEC-03). Throws freely — the public Server
+ * Action in `lib/admin-mutations.ts` catches and converts to the uniform
+ * state envelope so the wire shape is indistinguishable across outcomes
+ * (`docs/auth-flow.md` §2a Channel 2).
+ *
+ * Note: Supabase `.delete()` does not error when the row does not exist —
+ * the operation is idempotent at the SQL level. A missing row therefore
+ * resolves successfully; callers wanting "not found" semantics should pre-
+ * fetch via `getProjectById` (the T22 UI does this implicitly — the modal
+ * is opened against a row already on screen).
+ *
+ * @param id     UUID of the project to delete. Must be a non-empty string.
+ * @param client Optional injected client (DI seam for tests). Defaults to a
+ *               request-scoped admin server client.
+ * @throws ServiceError when `id` is empty or whitespace, or Supabase rejects.
+ */
+export async function deleteProjectInternal(
+  id: string,
+  client?: SupabaseClient,
+): Promise<void> {
+  if (typeof id !== 'string' || id.trim().length === 0) {
+    throw new ServiceError('invalid id argument', {
+      operation: DELETE_PROJECT_OPERATION,
+      cause: new Error(`id must be a non-empty string, got: ${typeof id}`),
+    });
+  }
+  const supabase = client ?? (await createServerClient());
+  const { error } = await supabase.from('projects').delete().eq('id', id);
+  if (error) {
+    logMutationError(DELETE_PROJECT_OPERATION, error);
+    throw new ServiceError(`${DELETE_PROJECT_OPERATION} failed`, {
+      operation: DELETE_PROJECT_OPERATION,
+      cause: error,
+    });
+  }
 }

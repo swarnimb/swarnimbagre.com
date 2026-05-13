@@ -23,11 +23,14 @@ vi.mock('@/lib/admin-mutations-internal', async () => {
     ...real,
     createProjectInternal: vi.fn(),
     updateProjectInternal: vi.fn(),
+    deleteProjectInternal: vi.fn(),
   };
 });
 
 const internal = await import('@/lib/admin-mutations-internal');
-const { createProject, updateProject } = await import('@/lib/admin-mutations');
+const { createProject, updateProject, deleteProject } = await import(
+  '@/lib/admin-mutations'
+);
 
 function buildFormData(entries: Record<string, string>): FormData {
   const fd = new FormData();
@@ -125,5 +128,28 @@ describe('updateProject — Channel 2 (response body shape)', () => {
     expect(result.formError).toBeDefined();
     // The generic form error must not leak the underlying reason (CONSTRAINT-13).
     expect(result.formError).not.toContain('slug');
+  });
+});
+
+describe('deleteProject — Channel 2 (response body shape)', () => {
+  it('resolves with status:"ok" (never throws) on internal success', async () => {
+    vi.mocked(internal.deleteProjectInternal).mockResolvedValue(undefined);
+    const p = deleteProject('p-1');
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(p).resolves.toEqual({ status: 'ok' });
+  });
+
+  it('resolves with uniform error envelope on internal throw', async () => {
+    vi.mocked(internal.deleteProjectInternal).mockRejectedValue(
+      new Error('permission denied'),
+    );
+    const p = deleteProject('p-1');
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = await p;
+    expect(result.status).toBe('error');
+    expect(result.formError).toBeDefined();
+    // The generic form error must not leak the underlying reason (CONSTRAINT-13).
+    expect(result.formError).not.toContain('permission');
+    expect(result.fieldErrors).toBeUndefined();
   });
 });

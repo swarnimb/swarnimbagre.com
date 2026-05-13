@@ -307,13 +307,13 @@ _Completed 2026-05-13. Created `lib/slug.ts` (NFKD diacritic strip + dash-collap
 - `<DeleteConfirmModal resource: string, name: string, onConfirm: () => Promise<void>, isOpen, onOpenChange>` (≤200 lines, CQ-02) — shadcn Dialog with destructive button.
 
 **Acceptance criteria:**
-- [ ] Modal text: `Delete {resource} "{name}"? This cannot be undone.` (CONSTRAINT-10).
-- [ ] Buttons: Cancel (close), Delete (destructive variant, red).
-- [ ] On Delete: call mutation, close modal, redirect to list with success toast.
-- [ ] Hard-delete only — row is gone from DB (CONSTRAINT-10).
-- [ ] ESC key closes the modal (shadcn Dialog default).
-- [ ] No undo path. Recovery is via Supabase backups — not an admin concern.
-- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
+- [x] Modal text: `Delete {resource} "{name}"? This cannot be undone.` (CONSTRAINT-10).
+- [x] Buttons: Cancel (close), Delete (destructive variant, red).
+- [x] On Delete: call mutation, close modal, redirect to list with success toast.
+- [x] Hard-delete only — row is gone from DB (CONSTRAINT-10).
+- [x] ESC key closes the modal (shadcn Dialog default).
+- [x] No undo path. Recovery is via Supabase backups — not an admin concern.
+- [x] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `modal opens on delete click` (TS-01).
@@ -324,6 +324,8 @@ _Completed 2026-05-13. Created `lib/slug.ts` (NFKD diacritic strip + dash-collap
 **Depends on:** T21
 
 **Specialist:** `@ui-swarnimbagre`
+
+_Completed 2026-05-13. Created `components/admin/DeleteConfirmModal.tsx` (reusable shadcn Dialog primitive; `resource` + `name` + `onConfirm` + controlled `isOpen` / `onOpenChange` props; pending-state disables both buttons and flips Delete label to "Deleting" per CONSTRAINT-13 voice — no spinner emoji, no "loading…"; ESC key closes via Radix default, not overridden), `components/admin/DeleteProjectButton.tsx` (client wrapper that owns modal open-state, calls `deleteProject` Server Action, surfaces sonner toast + `router.push` on `afterDelete: 'redirect'` from the edit page or `router.refresh` on `afterDelete: 'refresh'` from the list rows; on error envelope keeps modal open and shows `toast.error(formError)` so user can retry). Extended `lib/admin-mutations-internal.ts` with `deleteProjectInternal(id, client?)` (SEC-02 non-empty/whitespace id validation pre-DB; SEC-03 query builder `.from('projects').delete().eq('id', id)`; `ServiceError` on invalid id or Supabase error; throws freely — wrapper catches). Extended `lib/admin-mutations.ts` with `deleteProject(id): Promise<ProjectMutationState>` Server Action wrapper (six-channel uniformity inline — `MIN_DURATION_MS = 750` floor via `padToFloor` reused, `try/catch` swallows all throws to `{ status: 'error', formError: GENERIC_FORM_ERROR }`, no fieldErrors since no zod schema, no FormData since `id` is a direct argument). Modified `app/(admin)/admin/projects/[id]/page.tsx` to render `<DeleteProjectButton afterDelete="redirect">` below the form. Modified `components/admin/ProjectsList.tsx` to swap the disabled stub button for `<DeleteProjectButton afterDelete="refresh" size="sm">` per row. Updated `tests/server-actions-manifest.test.ts` allowlist 4 → 5 IDs and `docs/architecture.md` §6.6.5 "four IDs total" → "five IDs total" + `deleteProject` added to the bullet's name list. **Decision Point — (a) chosen:** wire delete on BOTH the list rows AND the edit page. Justification: respects T20's `title="Wired in T22"` hint; the destructive button is symmetric across both screens (admin doesn't need to drill into edit to delete a row); per-row modal state is trivially `useState<boolean>` inside the reusable `DeleteProjectButton`, no scope expansion. **Refactor decision — NOT extracted to `withMutationUniformity`:** the helper would have to be a higher-order function that takes a callback returning `Promise<void>` AND a separate callback returning the success-state shape, with `createProject` / `updateProject` having a `ZodError` carve-out that `deleteProject` lacks. Inlining the 3-line try/catch/finally per action stays readable and avoids cross-cutting risk to existing tests; per the approved decisions inlining is acceptable. **Tests:** Vitest 125 → 138 (+13 — note that beyond the 9 spec-required new tests, the `DeleteConfirmModal.test.tsx` file ships 6 cases vs. the 4 listed in the spec because the "modal does not render when isOpen=false" and "ESC + onConfirm not called" guards are valuable independent assertions; total file count: +3 internal in `admin-mutations.test.ts`, +2 uniformity, +2 timing, +6 new modal file). `npm run build` exits 0; build manifest contains exactly 5 action IDs verified via the manifest test; `tsc --noEmit` clean. Next steps for main thread: commit + invoke `@security` (third Server Action on the mutation surface — `@security` may want to verify the inlined wrapper preserves the six-channel timing + envelope contracts identically to `createProject` / `updateProject`)._
 
 ---
 

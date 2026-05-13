@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import AdminNav from '@/components/admin/AdminNav';
 import ProjectForm from '@/components/admin/ProjectForm';
+import DeleteProjectButton from '@/components/admin/DeleteProjectButton';
 import { getProjectById } from '@/lib/admin-queries';
 
 /**
@@ -12,6 +13,10 @@ import { getProjectById } from '@/lib/admin-queries';
  * `null` for the PGRST116 ("no rows") case, distinct from a true DB error
  * (which still throws and surfaces in the Next error overlay, matching the
  * admin-side intentional loudness documented on the list page).
+ *
+ * The destructive action lives in a separate {@link DeleteProjectButton}
+ * client component below the form: it owns the confirm modal's open-state
+ * and calls the `deleteProject` Server Action (T22).
  *
  * Auth is enforced by `middleware.ts` for `/admin/:path*`. CONSTRAINT-14's
  * `safeLoad` discipline is for public pages; the admin operator wants loud
@@ -34,6 +39,9 @@ export default async function Page({
     <>
       <AdminNav />
       <ProjectForm project={project} />
+      <section className="px-6 pb-10">
+        <DeleteProjectButton id={project.id} name={project.title} afterDelete="redirect" />
+      </section>
     </>
   );
 }

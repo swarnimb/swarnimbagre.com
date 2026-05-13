@@ -26,6 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import DeleteProjectButton from '@/components/admin/DeleteProjectButton';
 import type { ProjectRow, ProjectFilter } from '@/lib/admin-queries';
 
 /** Empty-state copy. CONSTRAINT-13: terse, no decoration, no SaaS phrasing. */
@@ -61,7 +62,10 @@ export interface ProjectsListProps {
  * `app/(admin)/admin/projects/page.tsx` reads them and refetches via
  * {@link import('@/lib/admin-queries').getAllProjects}. Sort is fixed to
  * `created_at DESC` server-side. Edit links to `/admin/projects/[id]` (T21);
- * Delete is `disabled` with a title hint (T22).
+ * Delete uses the {@link DeleteProjectButton} per-row pair (T22) — opens the
+ * shared {@link import('@/components/admin/DeleteConfirmModal').default}
+ * modal and calls the `deleteProject` Server Action; on success the row
+ * disappears via `router.refresh()` (no navigation).
  */
 export default function ProjectsList({
   rows,
@@ -142,14 +146,12 @@ export default function ProjectsList({
                       <Button asChild variant="outline" size="sm">
                         <Link href={`/admin/projects/${row.id}`}>Edit</Link>
                       </Button>
-                      <Button
-                        variant="destructive"
+                      <DeleteProjectButton
+                        id={row.id}
+                        name={row.title}
+                        afterDelete="refresh"
                         size="sm"
-                        disabled
-                        title="Wired in T22"
-                      >
-                        Delete
-                      </Button>
+                      />
                     </div>
                   </TableCell>
                 </TableRow>

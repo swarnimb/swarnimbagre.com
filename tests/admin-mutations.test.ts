@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { ServiceError } from '@/lib/errors';
 import {
   createProjectInternal,
+  deleteProjectInternal,
   updateProjectInternal,
 } from '@/lib/admin-mutations-internal';
 import type { Project } from '@/lib/types';
@@ -281,6 +282,73 @@ describe('updateProjectInternal', () => {
         client,
       ),
     ).rejects.toBeInstanceOf(ServiceError);
+    expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+  });
+});
+
+/**
+ * Build a stub Supabase client for the delete path:
+ *   `.from('projects').delete().eq('id', id) -> { error }`
+ *
+ * Mirrors `makeCreateStub` / `makeUpdateStub` — a flat chain that records
+ * each call so tests assert that `.delete().eq('id', id)` is reached with
+ * the expected arguments.
+ */
+function makeDeleteStub(result: { error: unknown }): {
+  client: SupabaseClient;
+  calls: StubCall[];
+} {
+  const calls: StubCall[] = [];
+  const chain: Record<string, unknown> = {};
+  chain.delete = (..._args: unknown[]) => {
+    calls.push({ method: 'delete', args: _args });
+    return chain;
+  };
+  chain.eq = (...args: unknown[]) => {
+    calls.push({ method: 'eq', args });
+    return Promise.resolve(result);
+  };
+  const client = {
+    from: (table: string) => {
+      calls.push({ method: 'from', args: [table] });
+      return chain;
+    },
+  } as unknown as SupabaseClient;
+  return { client, calls };
+}
+
+describe('deleteProjectInternal', () => {
+  it('calls supabase.from("projects").delete().eq("id", id) and resolves on success', async () => {
+    const { client, calls } = makeDeleteStub({ error: null });
+
+    await expect(deleteProjectInternal('p-1', client)).resolves.toBeUndefined();
+
+    const fromCall = calls.find((c) => c.method === 'from');
+    expect(fromCall?.args[0]).toBe('projects');
+    expect(calls.find((c) => c.method === 'delete')).toBeDefined();
+    const eqCall = calls.find((c) => c.method === 'eq');
+    expect(eqCall?.args).toEqual(['id', 'p-1']);
+  });
+
+  it('throws ServiceError when Supabase returns an error', async () => {
+    const { client } = makeDeleteStub({
+      error: { code: '42501', message: 'permission denied' },
+    });
+
+    await expect(
+      deleteProjectInternal('p-bad', client),
+    ).rejects.toBeInstanceOf(ServiceError);
+  });
+
+  it('throws ServiceError when id is empty or whitespace (no DB call made)', async () => {
+    const { client, calls } = makeDeleteStub({ error: null });
+
+    await expect(deleteProjectInternal('', client)).rejects.toBeInstanceOf(
+      ServiceError,
+    );
+    await expect(deleteProjectInternal('   ', client)).rejects.toBeInstanceOf(
+      ServiceError,
+    );
     expect(calls.find((c) => c.method === 'from')).toBeUndefined();
   });
 });

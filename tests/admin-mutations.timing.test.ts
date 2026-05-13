@@ -23,11 +23,14 @@ vi.mock('@/lib/admin-mutations-internal', async () => {
     ...real,
     createProjectInternal: vi.fn(),
     updateProjectInternal: vi.fn(),
+    deleteProjectInternal: vi.fn(),
   };
 });
 
 const internal = await import('@/lib/admin-mutations-internal');
-const { createProject, updateProject } = await import('@/lib/admin-mutations');
+const { createProject, updateProject, deleteProject } = await import(
+  '@/lib/admin-mutations'
+);
 
 afterEach(() => {
   vi.resetAllMocks();
@@ -37,6 +40,7 @@ beforeEach(() => {
   // Default stubs — overridden per case below.
   vi.mocked(internal.createProjectInternal).mockResolvedValue({} as never);
   vi.mocked(internal.updateProjectInternal).mockResolvedValue({} as never);
+  vi.mocked(internal.deleteProjectInternal).mockResolvedValue(undefined);
 });
 
 function buildFormData(entries: Record<string, string>): FormData {
@@ -105,6 +109,48 @@ describe('updateProject — timing floor (Channel 3)', () => {
         { status: 'idle' },
         buildFormData({ id: 'p-1', title: 'T', description: 'D', status: 'draft' }),
       ).then(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(MIN_DURATION_MS - 1);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await p;
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('deleteProject — timing floor (Channel 3)', () => {
+  it('does not settle before MIN_DURATION_MS even when the inner helper resolves instantly', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'performance'] });
+    try {
+      vi.mocked(internal.deleteProjectInternal).mockResolvedValue(undefined);
+      let settled = false;
+      const p = deleteProject('p-1').then(() => {
+        settled = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(MIN_DURATION_MS - 1);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await p;
+      expect(settled).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still pads to MIN_DURATION_MS when the inner helper throws', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'performance'] });
+    try {
+      vi.mocked(internal.deleteProjectInternal).mockRejectedValue(
+        new Error('boom'),
+      );
+      let settled = false;
+      const p = deleteProject('p-1').then(() => {
         settled = true;
       });
 
