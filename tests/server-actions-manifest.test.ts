@@ -13,11 +13,11 @@ import { execSync } from 'node:child_process';
 
 // Single source of truth for the SEC-09 allowlist. Adding a new Server Action
 // requires updating BOTH the `'use server'` module(s) AND this constant in
-// lock-step. After T23, the allowlist is eight IDs spread across two modules:
+// lock-step. After T24, the allowlist is ten IDs spread across two modules:
 //   - `lib/auth.ts`            — `signInWithMagicLink`, `signOut`
 //   - `lib/admin-mutations.ts` — `createProject`, `updateProject`,
 //                                `deleteProject`, `createPost`, `updatePost`,
-//                                `deletePost`
+//                                `deletePost`, `insertStat`, `deleteStat`
 const SERVER_ACTION_ALLOWLIST = new Set<string>([
   'signInWithMagicLink',
   'signOut',
@@ -27,6 +27,8 @@ const SERVER_ACTION_ALLOWLIST = new Set<string>([
   'createPost',
   'updatePost',
   'deletePost',
+  'insertStat',
+  'deleteStat',
 ]);
 
 const MANIFEST_PATH = resolve(

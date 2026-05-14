@@ -61,12 +61,34 @@ export const POST_MUTATION_INITIAL_STATE: PostMutationState = {
 };
 
 /**
+ * Discriminated state shape returned by every admin STAT mutation Server
+ * Action (T24). Same envelope as {@link ProjectMutationState} and
+ * {@link PostMutationState} with the `fieldErrors` keys narrowed to the
+ * fields the stat form actually owns (`category`, `label`, `value`, `unit`).
+ * Stats has no lifecycle (no draft/published, no edit, no slug) — the
+ * mutation surface is `insertStat` and `deleteStat` only.
+ */
+export interface StatMutationState {
+  /** `'idle'` is the initial state used by `useActionState`. */
+  status: 'idle' | 'ok' | 'error';
+  /** Field-level zod errors, keyed by schema field name. */
+  fieldErrors?: Partial<Record<'category' | 'label' | 'value' | 'unit', string>>;
+  /** Form-level error (Supabase failure, RLS denial, etc.). Generic copy. */
+  formError?: string;
+}
+
+/** Initial state shipped to `useActionState` for stat mutations. */
+export const STAT_MUTATION_INITIAL_STATE: StatMutationState = {
+  status: 'idle',
+};
+
+/**
  * Generic form-level error string. CONSTRAINT-13 voice rule: dry, terse, no
  * SaaS phrasing. The string is intentionally non-specific — any specificity
  * would re-open a Channel 1 (UI text) leak about whether the failure was a
  * trigger raise, a unique violation, or a network blip.
  *
- * Shared by both project and post mutation surfaces — the wire string is
+ * Shared by project, post, and stat mutation surfaces — the wire string is
  * intentionally resource-agnostic so cross-resource enumeration via copy
  * differences is impossible.
  */

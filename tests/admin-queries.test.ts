@@ -2,11 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   getAllProjects,
+  getAllStats,
   getProjectById,
   type ProjectRow,
 } from '@/lib/admin-queries';
 import { ServiceError } from '@/lib/errors';
-import type { Project } from '@/lib/types';
+import type { Project, Stat } from '@/lib/types';
 
 /**
  * Build a stub Supabase client whose chained query terminal resolves with the
@@ -210,5 +211,59 @@ describe('getProjectById', () => {
       ServiceError,
     );
     expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+  });
+});
+
+describe('getAllStats', () => {
+  /** Sample stat row — newest. */
+  const STAT_ROW_NEWEST: Stat = {
+    id: 'stat-a',
+    category: 'health',
+    label: 'sleep hours',
+    value: '7.5',
+    unit: 'h',
+    created_at: '2026-05-13T00:00:00.000Z',
+  };
+  /** Sample stat row — older, with a nullable unit. */
+  const STAT_ROW_OLDER: Stat = {
+    id: 'stat-b',
+    category: 'code',
+    label: 'commits',
+    value: '12',
+    unit: null,
+    created_at: '2026-05-12T00:00:00.000Z',
+  };
+
+  it('returns rows newest-first with the exact total count (TS-01 happy)', async () => {
+    const { client, calls } = makeStub({
+      data: [STAT_ROW_NEWEST, STAT_ROW_OLDER],
+      error: null,
+      count: 2,
+    });
+
+    const result = await getAllStats(1, 50, client);
+
+    expect(result.rows).toEqual([STAT_ROW_NEWEST, STAT_ROW_OLDER]);
+    expect(result.total).toBe(2);
+    // Reverse-chronological is server-side; assert the order() call shape.
+    const orderCall = calls.find((c) => c.method === 'order');
+    expect(orderCall?.args).toEqual(['created_at', { ascending: false }]);
+    // No filter — stats has no status column.
+    expect(calls.find((c) => c.method === 'eq')).toBeUndefined();
+  });
+
+  it('throws a ServiceError tagged with the operation when the database fails (TS-01 error)', async () => {
+    const { client } = makeStub({ data: null, error: DB_ERROR, count: null });
+    await expect(getAllStats(1, 50, client)).rejects.toBeInstanceOf(
+      ServiceError,
+    );
+    const { client: client2 } = makeStub({
+      data: null,
+      error: DB_ERROR,
+      count: null,
+    });
+    await expect(getAllStats(1, 50, client2)).rejects.toMatchObject({
+      operation: 'getAllStats',
+    });
   });
 });
