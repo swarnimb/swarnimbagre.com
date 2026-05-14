@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 /**
- * T21 acceptance — Channel 3 (timing) uniformity for mutation Server Actions.
+ * T21 acceptance — Channel 3 (timing) uniformity for PROJECT mutation
+ * Server Actions.
  *
  * Mirrors the F-12 timing test in `tests/auth.test.ts` (lines 185-231) for
  * `signInWithMagicLink`. The wrapper pads every outcome — success, zod
@@ -14,24 +15,22 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 /** Mirrors lib/auth-constants.ts::MIN_DURATION_MS. Lock-step with production. */
 const MIN_DURATION_MS = 750;
 
-vi.mock('@/lib/admin-mutations-internal', async () => {
-  const real =
-    await vi.importActual<typeof import('@/lib/admin-mutations-internal')>(
-      '@/lib/admin-mutations-internal',
-    );
+vi.mock('@/lib/admin-projects-mutations-internal', async () => {
+  const real = await vi.importActual<
+    typeof import('@/lib/admin-projects-mutations-internal')
+  >('@/lib/admin-projects-mutations-internal');
   return {
     ...real,
     createProjectInternal: vi.fn(),
     updateProjectInternal: vi.fn(),
     deleteProjectInternal: vi.fn(),
-    insertStatInternal: vi.fn(),
-    deleteStatInternal: vi.fn(),
   };
 });
 
-const internal = await import('@/lib/admin-mutations-internal');
-const { createProject, updateProject, deleteProject, insertStat, deleteStat } =
-  await import('@/lib/admin-mutations');
+const internal = await import('@/lib/admin-projects-mutations-internal');
+const { createProject, updateProject, deleteProject } = await import(
+  '@/lib/admin-projects-mutations'
+);
 
 afterEach(() => {
   vi.resetAllMocks();
@@ -42,8 +41,6 @@ beforeEach(() => {
   vi.mocked(internal.createProjectInternal).mockResolvedValue({} as never);
   vi.mocked(internal.updateProjectInternal).mockResolvedValue({} as never);
   vi.mocked(internal.deleteProjectInternal).mockResolvedValue(undefined);
-  vi.mocked(internal.insertStatInternal).mockResolvedValue({} as never);
-  vi.mocked(internal.deleteStatInternal).mockResolvedValue(undefined);
 });
 
 function buildFormData(entries: Record<string, string>): FormData {
@@ -154,96 +151,6 @@ describe('deleteProject — timing floor (Channel 3)', () => {
       );
       let settled = false;
       const p = deleteProject('p-1').then(() => {
-        settled = true;
-      });
-
-      await vi.advanceTimersByTimeAsync(MIN_DURATION_MS - 1);
-      expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      await p;
-      expect(settled).toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-});
-
-describe('insertStat — timing floor (Channel 3)', () => {
-  it('does not settle before MIN_DURATION_MS even when the inner helper resolves instantly', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'performance'] });
-    try {
-      vi.mocked(internal.insertStatInternal).mockResolvedValue({} as never);
-      let settled = false;
-      const p = insertStat(
-        { status: 'idle' },
-        buildFormData({ category: 'C', label: 'L', value: 'V' }),
-      ).then(() => {
-        settled = true;
-      });
-
-      await vi.advanceTimersByTimeAsync(MIN_DURATION_MS - 1);
-      expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      await p;
-      expect(settled).toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('still pads to MIN_DURATION_MS when the inner helper throws', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'performance'] });
-    try {
-      vi.mocked(internal.insertStatInternal).mockRejectedValue(
-        new Error('boom'),
-      );
-      let settled = false;
-      const p = insertStat(
-        { status: 'idle' },
-        buildFormData({ category: 'C', label: 'L', value: 'V' }),
-      ).then(() => {
-        settled = true;
-      });
-
-      await vi.advanceTimersByTimeAsync(MIN_DURATION_MS - 1);
-      expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      await p;
-      expect(settled).toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-});
-
-describe('deleteStat — timing floor (Channel 3)', () => {
-  it('does not settle before MIN_DURATION_MS even when the inner helper resolves instantly', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'performance'] });
-    try {
-      vi.mocked(internal.deleteStatInternal).mockResolvedValue(undefined);
-      let settled = false;
-      const p = deleteStat('s-1').then(() => {
-        settled = true;
-      });
-
-      await vi.advanceTimersByTimeAsync(MIN_DURATION_MS - 1);
-      expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(1);
-      await p;
-      expect(settled).toBe(true);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('still pads to MIN_DURATION_MS when the inner helper throws', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'performance'] });
-    try {
-      vi.mocked(internal.deleteStatInternal).mockRejectedValue(
-        new Error('boom'),
-      );
-      let settled = false;
-      const p = deleteStat('s-1').then(() => {
         settled = true;
       });
 

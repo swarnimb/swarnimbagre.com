@@ -30,6 +30,7 @@ This file is the plain-language record of every architectural decision. The audi
 | 16 | `'use server'` files contain one Server Action each | [§6.6.1](architecture.md#661) + SEC-08 |
 | 17 | Auth Server Actions have a constant-time response floor | [§6.6.2](architecture.md#662) |
 | 18 | Supabase auth client locked to `flowType: 'implicit'` | [§6.6.3](architecture.md#663) + CONSTRAINT-18 |
+| 19 | Admin mutation modules split per resource (§6.6.6 evolved) | [§6.6.5](architecture.md#665-build-invariants-f-14-sec-09) + [§6.6.6](architecture.md#666-admin-mutation-surface--three-module-file-split-per-resource) + [§4.3](architecture.md#43-file-and-function-size-budgets) |
 
 ---
 
@@ -434,6 +435,22 @@ wall-clock proves the wrapper ran end-to-end).
 **What this closes off:** Co-locating types with the throwing helpers (the auth-flow's two-file pattern). The audit-output check from §6.6.5 (`server-reference-manifest.json` lists exactly the test-allowlist) becomes mandatory for every admin-mutation PR — adding an export to `lib/admin-mutations.ts` without updating `tests/server-actions-manifest.test.ts` is a build-time test failure by design.
 
 **Implemented in:** T21, 2026-05-13 (`lib/admin-mutations-types.ts`, `lib/admin-mutations-internal.ts`, `lib/admin-mutations.ts`). Extended in T22 (`deleteProject` joined the same three-file surface). Verified via `@security` audit 8 (T21) and audit 9 (T22), both CLEAR. Six-channel uniformity contract from `auth-flow.md` §2a is now applied identically across the auth surface AND the mutation surface.
+
+---
+
+## 2026-05-13 — Admin mutation modules split per resource (§6.6.6 evolution)
+
+**Architecture reference:** §6.6.6 (rewritten this session) + §6.6.5 + §4.3
+
+**Decided:** The admin write surface, which previously lived in one shared three-module trio (`lib/admin-mutations.ts` + `-internal.ts` + `-types.ts` carrying ten Server Actions across projects, posts, and stats), splits at T25 into per-resource trios — one for each resource family that has a mutation surface: projects, posts, stats, and (in the next commit) images. Every resource gets the same three-file layout it had under the shared trio (`-types.ts` for the client-safe envelope, `-internal.ts` for throwing helpers, `-mutations.ts` for the `'use server'` wrapper). The shared trio is deleted in the same commit that introduces the per-resource trios for projects, posts, and stats; the images trio joins in the next commit.
+
+**Means for your product:** Adding the next admin write feature now means creating one trio for that resource family — three small files — instead of bolting onto a growing monolith. The previous shared `lib/admin-mutations.ts` was 519 lines and `lib/admin-mutations-internal.ts` was 687 lines just before T25; both broke CQ-02's 300-line service-file budget and would have grown to ~800 / ~900 lines with the T25 image-upload code merged in. Splitting now also keeps unrelated paths apart: a future change to the slug-lock policy on projects cannot accidentally regress the schemaless stat-insert path; a bug in the file-upload error-handling cannot leak into the post-update wrapper. Tests follow the same split — mutation tests live next to the resource they cover, and a stats refactor only re-runs stats tests during development.
+
+**Check before approving:** This adds three entries (one per resource trio) to the SEC-09 inventory in `tests/server-actions-manifest.test.ts` and bumps the architecture doc's per-module Server Action inventory in §6.6.5 from "two modules" to "four modules" (`lib/auth.ts` plus three `lib/admin-{resource}-mutations.ts` files). The images trio joins as a fifth module in the next commit. Audits get easier to scope (the security audit's "did this mutation change?" question now points at one file per resource), but anyone reviewing the architecture has more file paths to keep in mind. The cost is real but small for a one-person project; for a team of three or more it would be a clear win on its own.
+
+**What this closes off:** A single shared mutation file that any future admin feature could "just add an action to." From T25 onward, every new mutation surface gets its own trio. If a future feature genuinely shares mutation logic across resources (e.g., a generic "publish" action that flips status on any of projects/posts), that shared logic lives in a new `lib/admin-{resource}-mutations.ts` (e.g., `lib/admin-publishing-mutations.ts`) trio of its own — never bolted onto an existing resource's trio. Reverting this split (going back to a shared trio) would re-introduce the 300-line cap violation and re-couple unrelated write paths.
+
+**Implemented in:** T25 commit 1 (refactor), 2026-05-13. New trios: `lib/admin-projects-mutations*.ts` (3 actions), `lib/admin-posts-mutations*.ts` (3 actions), `lib/admin-stats-mutations*.ts` (2 actions). Deleted: `lib/admin-mutations.ts` + `-internal.ts` + `-types.ts`. Allowlist unchanged at 10 in this commit; the images trio + `uploadImage` (allowlist 10 → 11) ships in commit 2. Test files split per resource on the same axis. Verified via `tests/server-actions-manifest.test.ts` (post-build manifest matches the 10-entry allowlist and the new 4-module structure).
 
 ---
 

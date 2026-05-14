@@ -14,11 +14,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { createPost, updatePost } from '@/lib/admin-mutations';
+import { createPost, updatePost } from '@/lib/admin-posts-mutations';
 import {
   POST_MUTATION_INITIAL_STATE,
   type PostMutationState,
-} from '@/lib/admin-mutations-types';
+} from '@/lib/admin-posts-mutations-types';
 import type { Post, PostStatus } from '@/lib/types';
 
 /** Toast copy on success. CONSTRAINT-13: dry, no SaaS phrasing, no emoji. */
@@ -57,7 +57,7 @@ function fieldError(
  * One component, two modes. Mode is inferred from the `post` prop:
  *
  * - **No `post`** → render the create form; submit calls `createPost`
- *   (the Server Action from `lib/admin-mutations.ts`).
+ *   (the Server Action from `lib/admin-posts-mutations.ts`).
  * - **`post` present** → render the edit form prefilled from `post`; submit
  *   calls `updatePost` with a hidden `id` field. The slug input becomes
  *   read-only when `post.status === 'published'` to reflect CONSTRAINT-12

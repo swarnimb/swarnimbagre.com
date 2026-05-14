@@ -3,7 +3,7 @@ import { ZodError, type ZodIssue } from 'zod';
 
 /**
  * T21 acceptance — Channel 2 (response body shape) uniformity for the
- * mutation Server Actions. The wrapper resolves with the same
+ * PROJECT mutation Server Actions. The wrapper resolves with the same
  * `{ status, fieldErrors?, formError? }` envelope across every outcome —
  * success, validation failure, and internal throw — so an attacker probing
  * the endpoint cannot distinguish outcomes from the wire-level response
@@ -14,24 +14,22 @@ import { ZodError, type ZodIssue } from 'zod';
  * Mirrors the F-13 wire-shape tests in `tests/auth.test.ts` (lines 158-183).
  */
 
-vi.mock('@/lib/admin-mutations-internal', async () => {
-  const real =
-    await vi.importActual<typeof import('@/lib/admin-mutations-internal')>(
-      '@/lib/admin-mutations-internal',
-    );
+vi.mock('@/lib/admin-projects-mutations-internal', async () => {
+  const real = await vi.importActual<
+    typeof import('@/lib/admin-projects-mutations-internal')
+  >('@/lib/admin-projects-mutations-internal');
   return {
     ...real,
     createProjectInternal: vi.fn(),
     updateProjectInternal: vi.fn(),
     deleteProjectInternal: vi.fn(),
-    insertStatInternal: vi.fn(),
-    deleteStatInternal: vi.fn(),
   };
 });
 
-const internal = await import('@/lib/admin-mutations-internal');
-const { createProject, updateProject, deleteProject, insertStat, deleteStat } =
-  await import('@/lib/admin-mutations');
+const internal = await import('@/lib/admin-projects-mutations-internal');
+const { createProject, updateProject, deleteProject } = await import(
+  '@/lib/admin-projects-mutations'
+);
 
 function buildFormData(entries: Record<string, string>): FormData {
   const fd = new FormData();
@@ -55,7 +53,7 @@ function makeZodError(field: string, message: string): ZodError {
 beforeEach(() => {
   // Use fake timers so each case fast-forwards past the MIN_DURATION_MS floor
   // without consuming real wall time (the timing floor itself is covered by
-  // `tests/admin-mutations.timing.test.ts`).
+  // `tests/admin-projects-mutations.timing.test.ts`).
   vi.useFakeTimers({ toFake: ['setTimeout', 'performance'] });
 });
 
@@ -150,70 +148,6 @@ describe('deleteProject — Channel 2 (response body shape)', () => {
     expect(result.status).toBe('error');
     expect(result.formError).toBeDefined();
     // The generic form error must not leak the underlying reason (CONSTRAINT-13).
-    expect(result.formError).not.toContain('permission');
-    expect(result.fieldErrors).toBeUndefined();
-  });
-});
-
-describe('insertStat — Channel 2 (response body shape)', () => {
-  it('resolves with status:"ok" (never throws) on internal success', async () => {
-    vi.mocked(internal.insertStatInternal).mockResolvedValue({} as never);
-    const p = insertStat(
-      { status: 'idle' },
-      buildFormData({ category: 'C', label: 'L', value: 'V' }),
-    );
-    await vi.advanceTimersByTimeAsync(1000);
-    await expect(p).resolves.toEqual({ status: 'ok' });
-  });
-
-  it('resolves with status:"error" + fieldErrors on a ZodError throw', async () => {
-    vi.mocked(internal.insertStatInternal).mockRejectedValue(
-      makeZodError('category', 'category is required'),
-    );
-    const p = insertStat(
-      { status: 'idle' },
-      buildFormData({ category: '', label: 'L', value: 'V' }),
-    );
-    await vi.advanceTimersByTimeAsync(1000);
-    const result = await p;
-    expect(result.status).toBe('error');
-    expect(result.fieldErrors).toEqual({ category: 'category is required' });
-    expect(result.formError).toBeUndefined();
-  });
-
-  it('resolves with status:"error" + formError on any non-zod throw', async () => {
-    vi.mocked(internal.insertStatInternal).mockRejectedValue(
-      new Error('db boom'),
-    );
-    const p = insertStat(
-      { status: 'idle' },
-      buildFormData({ category: 'C', label: 'L', value: 'V' }),
-    );
-    await vi.advanceTimersByTimeAsync(1000);
-    const result = await p;
-    expect(result.status).toBe('error');
-    expect(result.formError).toBeDefined();
-    expect(result.fieldErrors).toBeUndefined();
-  });
-});
-
-describe('deleteStat — Channel 2 (response body shape)', () => {
-  it('resolves with status:"ok" (never throws) on internal success', async () => {
-    vi.mocked(internal.deleteStatInternal).mockResolvedValue(undefined);
-    const p = deleteStat('s-1');
-    await vi.advanceTimersByTimeAsync(1000);
-    await expect(p).resolves.toEqual({ status: 'ok' });
-  });
-
-  it('resolves with uniform error envelope on internal throw', async () => {
-    vi.mocked(internal.deleteStatInternal).mockRejectedValue(
-      new Error('permission denied'),
-    );
-    const p = deleteStat('s-1');
-    await vi.advanceTimersByTimeAsync(1000);
-    const result = await p;
-    expect(result.status).toBe('error');
-    expect(result.formError).toBeDefined();
     expect(result.formError).not.toContain('permission');
     expect(result.fieldErrors).toBeUndefined();
   });

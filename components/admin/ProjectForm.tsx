@@ -14,11 +14,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { createProject, updateProject } from '@/lib/admin-mutations';
+import { createProject, updateProject } from '@/lib/admin-projects-mutations';
 import {
   PROJECT_MUTATION_INITIAL_STATE,
   type ProjectMutationState,
-} from '@/lib/admin-mutations-types';
+} from '@/lib/admin-projects-mutations-types';
 import type { Project, ProjectStatus } from '@/lib/types';
 
 /** Toast copy on success. CONSTRAINT-13: dry, no SaaS phrasing, no emoji. */
@@ -57,7 +57,7 @@ function fieldError(
  * One component, two modes. Mode is inferred from the `project` prop:
  *
  * - **No `project`** → render the create form; submit calls `createProject`
- *   (the Server Action from `lib/admin-mutations.ts`).
+ *   (the Server Action from `lib/admin-projects-mutations.ts`).
  * - **`project` present** → render the edit form prefilled from `project`;
  *   submit calls `updateProject` with a hidden `id` field. The slug input
  *   becomes read-only when `project.status === 'published'` to reflect

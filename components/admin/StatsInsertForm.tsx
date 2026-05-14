@@ -6,19 +6,19 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { insertStat } from '@/lib/admin-mutations';
+import { insertStat } from '@/lib/admin-stats-mutations';
 import {
   STAT_MUTATION_INITIAL_STATE,
   type StatMutationState,
-} from '@/lib/admin-mutations-types';
+} from '@/lib/admin-stats-mutations-types';
 
 /** Toast copy on success. CONSTRAINT-13: dry, no SaaS phrasing, no emoji. */
 const SAVE_SUCCESS_MESSAGE = 'Saved.';
 
 /**
  * Max input length for each text field. Mirrors `STAT_FIELD_MAX_LENGTH` in
- * `lib/admin-mutations-internal.ts` so the HTML `maxLength` attribute and
- * the zod boundary agree.
+ * `lib/admin-stats-mutations-internal.ts` so the HTML `maxLength`
+ * attribute and the zod boundary agree.
  */
 const FIELD_MAX_LENGTH = 200;
 

@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import DeleteConfirmModal from '@/components/admin/DeleteConfirmModal';
-import { deletePost } from '@/lib/admin-mutations';
-import { GENERIC_FORM_ERROR } from '@/lib/admin-mutations-types';
+import { deletePost } from '@/lib/admin-posts-mutations';
+import { GENERIC_FORM_ERROR } from '@/lib/auth-constants';
 
 /** Toast on success. CONSTRAINT-13: dry, no SaaS phrasing, no emoji. */
 const DELETE_SUCCESS_MESSAGE = 'Deleted.';
