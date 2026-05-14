@@ -13,8 +13,16 @@ import { execSync } from 'node:child_process';
 
 // Single source of truth for the SEC-09 allowlist. Adding a new Server Action
 // requires updating BOTH the `'use server'` module(s) AND this constant in
-// lock-step. After T25 (commit 1 — refactor), the allowlist is ten IDs spread
-// across four modules (per-resource trios per `architecture.md` §6.6.6):
+// lock-step. After T25 (commit 2 — image upload trio + ImageUpload component),
+// the allowlist remains ten IDs spread across four modules. The new
+// `lib/admin-images-mutations.ts` ships its `uploadImage` Server Action but
+// the build manifest only includes Server Actions reachable from an app/**
+// route — `ImageUpload.tsx` is not imported by any page until T26 wires it
+// into ProjectForm and PostForm. The allowlist therefore lifts from 10 to 11
+// at T26, not at T25 commit 2. The `uploadImage` export still exists in
+// `lib/admin-images-mutations.ts`; it lands in the manifest exactly when the
+// component starts being rendered. See `docs/plan-phase-2-admin.md` T25
+// completion note for the full rationale.
 //   - `lib/auth.ts`                     — `signInWithMagicLink`, `signOut`
 //   - `lib/admin-projects-mutations.ts` — `createProject`, `updateProject`,
 //                                         `deleteProject`

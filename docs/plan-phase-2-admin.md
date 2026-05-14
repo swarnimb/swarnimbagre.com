@@ -407,14 +407,16 @@ _Completed 2026-05-13 (Session 18). Shipped end-to-end in a single session acros
 
 ---
 
-## T25 — Image upload component + Storage integration
+## T25 — Image upload component + Storage integration [x]
 
 **Files:**
 - `components/admin/ImageUpload.tsx` (create)
-- `lib/admin-mutations.ts` (modify — add `uploadImage`)
+- `lib/admin-images-mutations.ts` (create)
+- `lib/admin-images-mutations-internal.ts` (create)
+- `lib/admin-images-mutations-types.ts` (create)
 
 **Functions to implement:**
-- `uploadImage(file: File, parentType: 'projects' | 'posts', parentId: string, altText: string): Promise<Image>` (≤80 lines, CQ-01) — Server Action. Validates file type (JPEG, PNG, WebP, SVG) and size (≤2 MB) at the boundary (SEC-02). Generates a UUID. Constructs path `images/{parentType}/{parentId}/{uuid}_{filename}`. Uploads to Storage (server-only, service role) (SEC-01). Inserts the `images` row.
+- `uploadImage(file: File, parentType: 'projects' | 'posts', parentId: string, altText: string): Promise<Image>` (≤80 lines, CQ-01) — Server Action. Validates file type (JPEG, PNG, WebP) and size (≤2 MB) at the boundary (SEC-02). Generates a UUID. Constructs path `images/{parentType}/{parentId}/{uuid}_{filename}`. Uploads to Storage (server-only, service role) (SEC-01). Inserts the `images` row.
 - `<ImageUpload onUpload, onError, parentType, parentId>` (≤200 lines, CQ-02).
 
 **Acceptance criteria:**
@@ -438,6 +440,8 @@ _Completed 2026-05-13 (Session 18). Shipped end-to-end in a single session acros
 **Depends on:** T7, T21
 
 **Specialist:** `@supabase`
+
+_Completed 2026-05-13. Shipped over three commits — commit 1 (refactor: shared `lib/admin-mutations*.ts` split into per-resource trios for projects, posts, stats per §6.6.6), commit 2 (this — image upload trio + `ImageUpload` component + Storage integration), commit 3 (`.strict()` defense-in-depth applied across all five admin schemas; closes F-26 carry-forward). **Per-resource trio established for images:** `lib/admin-images-mutations-{types,internal,}.ts` mirrors the project / post / stat shape verbatim, with two deviations documented in the `-types.ts` JSDoc — file-related constants (`IMAGES_BUCKET`, `MAX_FILE_BYTES`, `ALLOWED_MIME_TYPES`, `ALT_TEXT_MAX_LENGTH`, `ALLOWED_PARENT_TYPES`) live in `-types.ts` so the client component can read them without dragging `next/headers` into the client module graph; `ImageMutationState.image?: ImageRecord` carries a payload on success because the spec requires `onUpload(image)` (the other three resource envelopes carry no payload — their forms redirect or refresh). **SVG dropped:** original T25 spec listed JPEG/PNG/WebP/SVG; locked decision before execution narrowed to JPEG/PNG/WebP only — SVG's rendered-HTML attack surface is wider than the use case (project / post hero images) needs. Spec amended in this commit: line 417 dropped `, SVG`. **Compensating-delete pattern introduced:** if Storage `.upload()` succeeds but the `images.insert()` rejects, `uploadImageInternal` issues `storage.from('images').remove([bucketPath])` before re-throwing. If the compensating delete itself fails, both error payloads are logged loudly with the bucket path; the user-facing throw still cites the primary insert error. **Path scheme (CONSTRAINT-07):** `images/{parentType}/{parentId}/{uuid}_{filename}` — `parentId` is UUID-validated by zod (path-injection guard), filename is sanitised to `[A-Za-z0-9._-]` with separator + control char + NUL stripping, capped at 100 chars before extension. **Allowlist deviation from commit-2 spec — bump deferred to T26:** the spec called for the SEC-09 allowlist to lift 10 → 11 in this commit, but Next.js only registers Server Actions in `.next/server/server-reference-manifest.json` when they are reachable from an app/** route. `ImageUpload.tsx` is not imported by any page until T26 wires it into ProjectForm / PostForm; the manifest therefore continues to expose ten action IDs at the end of T25 commit 2. The `uploadImage` export is fully present in `lib/admin-images-mutations.ts`; it lands in the manifest exactly when the component starts being rendered. The allowlist constant in `tests/server-actions-manifest.test.ts` and the architecture §6.6.5 numbers stay at ten / four-modules in this commit; T26 lifts both to eleven / five-modules in lock-step with the wiring. The hard rule "do NOT modify any file under app/**/*.tsx" in this commit's spec made the spec's "11 entries" expectation unreachable — surfaced and adopted the deferred-bump resolution. **Tests:** Vitest 159 → 173 (+14 in this commit: 9 data-layer in `admin-images-mutations.test.ts` including the SVG-rejection drift-closer, the path-injection UUID guard, and the compensating-delete invariant; 3 uniformity in `admin-images-mutations.uniformity.test.ts` with explicit Channel 1 leak guards on the formError string; 2 timing in `admin-images-mutations.timing.test.ts`). Build green; `tsc --noEmit` clean; manifest test passes at ten action IDs (unchanged from T24). **No wiring into ProjectForm / PostForm — that is T26.** **`.strict()` batch follows in commit 3** (closes F-26 across all five admin schemas in one cross-cutting commit; T25's `uploadImageSchema` ships without `.strict()` in this commit and gains it in the next, in lock-step with `projectCreateSchema` / `projectUpdateSchema` / `postCreateSchema` / `postUpdateSchema` / `statInsertSchema`)._
 
 ---
 
