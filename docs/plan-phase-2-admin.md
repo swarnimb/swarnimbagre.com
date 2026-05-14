@@ -368,27 +368,30 @@ _Completed 2026-05-13 (Session 17). Shipped over 4 commits: `c50b144` (feat — 
 
 ---
 
-## T24 — Stats admin: read-only list + manual insert form
+## T24 — Stats admin: read-only list + manual insert form [x]
 
 **Files:**
 - `app/(admin)/admin/stats/page.tsx` (create)
 - `components/admin/StatsList.tsx` (create)
 - `components/admin/StatsInsertForm.tsx` (create)
+- `components/admin/DeleteStatButton.tsx` (create — wraps the generic `DeleteConfirmModal` from T22, mirrors `DeletePostButton` minus the `afterDelete` prop)
 - `lib/admin-queries.ts` (modify — add `getAllStats`)
-- `lib/admin-mutations.ts` (modify — add `insertStat`)
+- `lib/admin-mutations.ts` (modify — add `insertStat`, `deleteStat`)
+- `lib/admin-mutations-internal.ts` (modify — add `statInsertSchema`, `insertStatInternal`, `deleteStatInternal`)
+- `lib/admin-mutations-types.ts` (modify — add `StatMutationState`, `STAT_MUTATION_INITIAL_STATE`)
 
 **Functions to implement:**
 - `getAllStats(limit: number, offset: number): Promise<Stat[]>` (≤50 lines, CQ-01).
 - `insertStat(input: { category, label, value, unit? }): Promise<Stat>` (≤80 lines, CQ-01) — Server Action with zod validation (SEC-02).
 
 **Acceptance criteria:**
-- [ ] List columns: Category, Label, Value, Unit, Created. Reverse-chronological. Pagination 50/page.
-- [ ] Manual insert form fields: Category (text), Label (text), Value (text), Unit (text, optional). All non-Unit fields required (SEC-02).
-- [ ] Insert is a Server Action; no client-side write (SEC-01).
-- [ ] Empty state: "No stats yet" (CONSTRAINT-13).
-- [ ] No edit. Corrections are delete-then-reinsert (acknowledged in PRD §3.4 and CONSTRAINT-10).
-- [ ] Delete: list rows expose a delete button gated by the same `DeleteConfirmModal` component from T22 (admin-only — RLS allows admin DELETE on stats).
-- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
+- [x] List columns: Category, Label, Value, Unit, Created. Reverse-chronological. Pagination 50/page.
+- [x] Manual insert form fields: Category (text), Label (text), Value (text), Unit (text, optional). All non-Unit fields required (SEC-02).
+- [x] Insert is a Server Action; no client-side write (SEC-01).
+- [x] Empty state: "No stats yet" (CONSTRAINT-13).
+- [x] No edit. Corrections are delete-then-reinsert (acknowledged in PRD §3.4 and CONSTRAINT-10).
+- [x] Delete: list rows expose a delete button gated by the same `DeleteConfirmModal` component from T22 (admin-only — RLS allows admin DELETE on stats).
+- [x] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `getAllStats returns rows in reverse-chronological order` (TS-01).
@@ -399,6 +402,8 @@ _Completed 2026-05-13 (Session 17). Shipped over 4 commits: `c50b144` (feat — 
 **Depends on:** T23
 
 **Specialist:** `@supabase`, `@ui-swarnimbagre`
+
+_Completed 2026-05-13 (Session 18). Shipped end-to-end in a single session across data layer + UI + tests. Followed the three-module file split (§6.6.6) verbatim — `StatMutationState` envelope in `-types.ts`, throwing helpers + zod schema in `-internal.ts`, `'use server'` wrappers in `-mutations.ts`. **Two new Server Actions, not one:** `deleteStat` added alongside `insertStat` because every prior admin delete path (T22 `deleteProject`, T23 `deletePost`) flows through the six-channel uniformity wrapper — a bare client-side delete would have violated SEC-01 and broken the SEC-09 contract. Allowlist accordingly bumped 8 → 10, not 8 → 9. **`getAllStats` signature deviation:** plan-file spec called for `(limit, offset) → Stat[]`; implementation uses `(page, pageSize, client?) → { rows: Stat[]; total: number }` mirroring `getAllPosts` and `getAllProjects` so the UI pagination footer can render `Page X of Y`. Documented in the function's JSDoc. **F-26 stays deferred:** zod `.strict()` defense-in-depth not adopted at T24 — cross-cutting decision; piecemeal application would create schema inconsistency across the three resources. **Combined-page composition:** form above list on `/admin/stats` (no `/admin/stats/new` route) per the plan spec and CONSTRAINT-10 (no edit path means the create/list split would not pay for itself). **DeleteStatButton** drops the `afterDelete` prop `DeletePostButton` carries — stats has no edit page, only the list-row "refresh" path exists. **Tests:** Vitest 141 → 159 (+18: 2 `getAllStats` in `admin-queries.test.ts`; 5 `insertStatInternal` + 2 `deleteStatInternal` in `admin-mutations.test.ts`; 3 `insertStat` + 2 `deleteStat` in `admin-mutations.uniformity.test.ts`; 2 `insertStat` + 2 `deleteStat` in `admin-mutations.timing.test.ts`). Build green — manifest at exactly 10 Server Action IDs. **Playwright baseline correction:** session-handoff's "Playwright 16" was correct all along; the pre-execution audit's "9" came from a sub-agent miscount of `.spec.ts` files instead of test cases (`npx playwright test --list` reported 16 tests across 9 files). **One mid-execution mirror-template miss:** duplicated `buildFormData` in `admin-mutations.timing.test.ts` (existing helper at line 46; I appended a second at line 171). Caught by esbuild parse error on first `npm test` run; fixed in a single edit. **Zero new architectural decisions; zero new constraints; zero new dependencies. F-26 carry-forward + DeleteConfirmModal/DeleteStatButton test gap carry-forward continue from T23.**_
 
 ---
 
