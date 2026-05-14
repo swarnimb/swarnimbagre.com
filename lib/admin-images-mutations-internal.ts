@@ -96,7 +96,7 @@ export const uploadImageSchema = z.object({
     .trim()
     .min(1, 'alt text is required')
     .max(ALT_TEXT_MAX_LENGTH),
-});
+}).strict();
 
 /** Inferred input shape (post-parse) for the upload metadata. */
 export type UploadImageInput = z.infer<typeof uploadImageSchema>;

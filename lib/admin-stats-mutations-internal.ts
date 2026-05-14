@@ -105,7 +105,7 @@ export const statInsertSchema = z.object({
     (v) => (typeof v === 'string' && v.trim().length === 0 ? undefined : v),
     z.string().trim().min(1).max(STAT_FIELD_MAX_LENGTH).optional(),
   ),
-});
+}).strict();
 
 /** Inferred input shape for {@link insertStatInternal}. */
 export type StatInsertInput = z.infer<typeof statInsertSchema>;

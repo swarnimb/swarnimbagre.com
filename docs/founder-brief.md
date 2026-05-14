@@ -31,6 +31,7 @@ This file is the plain-language record of every architectural decision. The audi
 | 17 | Auth Server Actions have a constant-time response floor | [§6.6.2](architecture.md#662) |
 | 18 | Supabase auth client locked to `flowType: 'implicit'` | [§6.6.3](architecture.md#663) + CONSTRAINT-18 |
 | 19 | Admin mutation modules split per resource (§6.6.6 evolved) | [§6.6.5](architecture.md#665-build-invariants-f-14-sec-09) + [§6.6.6](architecture.md#666-admin-mutation-surface--three-module-file-split-per-resource) + [§4.3](architecture.md#43-file-and-function-size-budgets) |
+| 20 | Zod .strict() adopted across admin mutation schemas (F-26 closure) | architecture.md §6.6.6 footnote / security-report.md F-26 |
 
 ---
 
@@ -451,6 +452,22 @@ wall-clock proves the wrapper ran end-to-end).
 **What this closes off:** A single shared mutation file that any future admin feature could "just add an action to." From T25 onward, every new mutation surface gets its own trio. If a future feature genuinely shares mutation logic across resources (e.g., a generic "publish" action that flips status on any of projects/posts), that shared logic lives in a new `lib/admin-{resource}-mutations.ts` (e.g., `lib/admin-publishing-mutations.ts`) trio of its own — never bolted onto an existing resource's trio. Reverting this split (going back to a shared trio) would re-introduce the 300-line cap violation and re-couple unrelated write paths.
 
 **Implemented in:** T25 commit 1 (refactor), 2026-05-13. New trios: `lib/admin-projects-mutations*.ts` (3 actions), `lib/admin-posts-mutations*.ts` (3 actions), `lib/admin-stats-mutations*.ts` (2 actions). Deleted: `lib/admin-mutations.ts` + `-internal.ts` + `-types.ts`. Allowlist unchanged at 10 in this commit; the images trio + `uploadImage` (allowlist 10 → 11) ships in commit 2. Test files split per resource on the same axis. Verified via `tests/server-actions-manifest.test.ts` (post-build manifest matches the 10-entry allowlist and the new 4-module structure).
+
+---
+
+## 2026-05-13 — Zod `.strict()` adopted across the admin mutation surface (F-26 closure)
+
+**Architecture reference:** §6.6.6 boundary-validation discipline + `docs/security-report.md` F-26
+
+**Decided:** Every Zod schema on the admin write boundary — `projectCreateSchema`, `projectUpdateSchema`, `postCreateSchema`, `postUpdateSchema`, `statInsertSchema`, and the new `uploadImageSchema` (T25) — appends `.strict()`. Strict-mode parsing throws a `ZodError` with the `unrecognized_keys` issue code on any input field whose name is not declared in the schema. Closes F-26 (carried forward from audit 8 through audit 11; originally scoped to four schemas, expanded to all six write-boundary schemas in this batch to keep the rule uniform across the admin surface).
+
+**Means for your product:** Today nothing visible changes — the admin Server Action wrappers read FormData via explicit `formData.get('title')` / `.get('description')` / etc., so any extra field in a probe request (e.g., a hand-crafted Server Action call sending `?admin=true`) is simply not read. The wire shape stays uniform; the wrapper still resolves with the generic error envelope on any zod throw; the user-facing UI is byte-identical. What changes is the depth of defense: if a future refactor switches a wrapper from explicit-key reads to `Object.fromEntries(formData.entries())` (the kind of shortcut a reasonable Build agent might write), the `.strict()` schema rejects the request at the boundary instead of silently writing extra fields to the database. The security audit can stop carrying F-26 forward as a "scope keeps extending" finding — it is closed at the source.
+
+**Check before approving:** This is a no-op for users today, by design. The only place anyone notices is in tests: any unit test that calls a schema's `.parse()` with a payload containing an extra key starts throwing where it previously passed. If such a test exists, it was relying on the schema's old laxness; the test should either narrow its payload or drop the extra key. The omnibus test file (`tests/admin-mutations-strict.test.ts`) asserts the new behavior holds for all six schemas and serves as a regression guard against anyone removing `.strict()` later.
+
+**What this closes off:** Schema laxness as a "future-proofing" defense ("we might want to add a field later, so let zod ignore extras"). From T25 onward, adding a new field to the admin write surface means adding it to the schema explicitly — there is no quiet path where a field flows from form to database without appearing in the schema. Removing `.strict()` from any of the six schemas is a security regression and the strict-batch tests will fail loudly.
+
+**Implemented in:** T25 commit 3, 2026-05-13. Six schemas updated in lock-step across four per-resource internal modules. Six-case omnibus test file added (`tests/admin-mutations-strict.test.ts`). F-26 marked CLOSED in the next `@security` audit (audit 12).
 
 ---
 

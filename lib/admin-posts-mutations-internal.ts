@@ -88,7 +88,7 @@ export const postCreateSchema = z.object({
   title: z.string().trim().min(1, 'title is required').max(TITLE_MAX_LENGTH),
   content: z.string().min(1, 'content is required'),
   status: z.enum(['draft', 'published']).default('draft'),
-});
+}).strict();
 
 /** Inferred input shape for {@link createPostInternal}. */
 export type PostCreateInput = z.infer<typeof postCreateSchema>;
@@ -103,7 +103,7 @@ export const postUpdateSchema = z.object({
   title: z.string().trim().min(1, 'title is required').max(TITLE_MAX_LENGTH),
   content: z.string().min(1, 'content is required'),
   status: z.enum(['draft', 'published']),
-});
+}).strict();
 
 /** Inferred input shape for {@link updatePostInternal}. */
 export type PostUpdateInput = z.infer<typeof postUpdateSchema>;

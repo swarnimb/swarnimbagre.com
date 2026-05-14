@@ -57,7 +57,7 @@ export const projectCreateSchema = z.object({
   title: z.string().trim().min(1, 'title is required').max(TITLE_MAX_LENGTH),
   description: z.string().trim().min(1, 'description is required'),
   status: z.enum(['draft', 'published']).default('draft'),
-});
+}).strict();
 
 /** Inferred input shape for {@link createProjectInternal}. */
 export type ProjectCreateInput = z.infer<typeof projectCreateSchema>;
@@ -72,7 +72,7 @@ export const projectUpdateSchema = z.object({
   title: z.string().trim().min(1, 'title is required').max(TITLE_MAX_LENGTH),
   description: z.string().trim().min(1, 'description is required'),
   status: z.enum(['draft', 'published']),
-});
+}).strict();
 
 /** Inferred input shape for {@link updateProjectInternal}. */
 export type ProjectUpdateInput = z.infer<typeof projectUpdateSchema>;
