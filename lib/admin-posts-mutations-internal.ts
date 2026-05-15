@@ -2,8 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { createServerClient } from './supabase';
 import { ServiceError } from './errors';
-import { slugify } from './slug';
 import type { Post, PostStatus } from './types';
+import { orphanIfChanged } from './admin-images-orphan';
+import { deriveSlugOrThrow } from './admin-slug';
+import { logSupabaseError } from './admin-mutation-log';
 
 /**
  * Module note (F-14 analogue, applied to POST mutations).
@@ -59,23 +61,6 @@ const DELETE_POST_OPERATION = 'deletePost';
 const POST_PUBLISHED: PostStatus = 'published';
 
 /**
- * Log a Supabase error without leaking row data or PII. Matches the shape of
- * `logDbError` in `lib/db.ts` so structured logs are uniform across the data
- * layer (EH-02, EH-03, SEC-05).
- */
-function logMutationError(
-  operation: string,
-  error: { code?: string; message?: string } | null,
-): void {
-  console.error(`[admin-mutations] ${operation} failed`, {
-    operation,
-    errorCode: error?.code ?? null,
-    errorMessage: error?.message ?? null,
-    stack: new Error().stack,
-  });
-}
-
-/**
  * Zod schema for the create-post boundary.
  *
  * `title` mirrors the projects cap (200 chars) — the DB CHECK is identical.
@@ -94,25 +79,59 @@ export const postCreateSchema = z.object({
 export type PostCreateInput = z.infer<typeof postCreateSchema>;
 
 /**
- * Zod schema for the update-post boundary. Same shape as create — both
- * fields are required because the form re-submits the full row, not a patch.
- * The wrapper computes whether `slug` should be re-derived from the new title
+ * Zod schema for the update-post boundary. Same shape as create plus an
+ * optional `image_id` (T26 image-upload wiring) — both text fields are
+ * required because the form re-submits the full row, not a patch. The
+ * wrapper computes whether `slug` should be re-derived from the new title
  * (when the existing row is a `draft`) or omitted (when `published`).
+ *
+ * `image_id` is a UUID-or-null: the FormData read in
+ * `admin-posts-mutations.ts` coerces an empty string to `null` BEFORE the
+ * schema runs, so the parser only ever sees the post-coercion shape. A
+ * non-null value must be a valid UUID — anything else is rejected at the
+ * boundary (SEC-02).
  */
 export const postUpdateSchema = z.object({
   title: z.string().trim().min(1, 'title is required').max(TITLE_MAX_LENGTH),
   content: z.string().min(1, 'content is required'),
   status: z.enum(['draft', 'published']),
+  image_id: z.string().uuid('image_id must be a uuid').nullable(),
 }).strict();
 
 /** Inferred input shape for {@link updatePostInternal}. */
 export type PostUpdateInput = z.infer<typeof postUpdateSchema>;
 
 /**
+ * Pre-fetch `status` (slug-lock gate, CONSTRAINT-12) and `image_id`
+ * (orphan-on-swap source, T26) for {@link updatePostInternal}. Extracted
+ * to keep the orchestrator under CQ-01's 50-line cap.
+ *
+ * @throws ServiceError on any Supabase error.
+ */
+async function fetchExistingPost(
+  client: SupabaseClient,
+  id: string,
+): Promise<{ status: PostStatus; image_id: string | null }> {
+  const { data, error } = await client
+    .from('posts')
+    .select('status, image_id')
+    .eq('id', id)
+    .single();
+  if (error) {
+    logSupabaseError(UPDATE_POST_OPERATION, error);
+    throw new ServiceError(`${UPDATE_POST_OPERATION} failed`, {
+      operation: UPDATE_POST_OPERATION,
+      cause: error,
+    });
+  }
+  return data as { status: PostStatus; image_id: string | null };
+}
+
+/**
  * Insert a new post row.
  *
  * Boundary-validates the input with {@link postCreateSchema} (SEC-02),
- * derives the slug from `title` via {@link slugify}, and inserts via the
+ * derives the slug from `title` via {@link deriveSlugOrThrow}, and inserts via the
  * Supabase query builder (SEC-03). Slug uniqueness is enforced at the DB
  * (UNIQUE constraint on `posts.slug`) — a collision surfaces as a Postgres
  * `23505` and is wrapped in a {@link ServiceError} here, then swallowed to a
@@ -138,13 +157,7 @@ export async function createPostInternal(
   client?: SupabaseClient,
 ): Promise<Post> {
   const parsed = postCreateSchema.parse(input);
-  const slug = slugify(parsed.title);
-  if (slug.length === 0) {
-    throw new ServiceError('slug derives to empty from title', {
-      operation: CREATE_POST_OPERATION,
-      cause: new Error('slugify(title) returned an empty string'),
-    });
-  }
+  const slug = deriveSlugOrThrow(parsed.title, CREATE_POST_OPERATION);
   const supabase = client ?? (await createServerClient());
   const payload = {
     title: parsed.title,
@@ -158,7 +171,7 @@ export async function createPostInternal(
     .select()
     .single();
   if (error) {
-    logMutationError(CREATE_POST_OPERATION, error);
+    logSupabaseError(CREATE_POST_OPERATION, error);
     throw new ServiceError(`${CREATE_POST_OPERATION} failed`, {
       operation: CREATE_POST_OPERATION,
       cause: error,
@@ -203,36 +216,17 @@ export async function updatePostInternal(
   }
   const parsed = postUpdateSchema.parse(input);
   const supabase = client ?? (await createServerClient());
-
-  const { data: existing, error: fetchError } = await supabase
-    .from('posts')
-    .select('status')
-    .eq('id', id)
-    .single();
-  if (fetchError) {
-    logMutationError(UPDATE_POST_OPERATION, fetchError);
-    throw new ServiceError(`${UPDATE_POST_OPERATION} failed`, {
-      operation: UPDATE_POST_OPERATION,
-      cause: fetchError,
-    });
-  }
-  const isPublished =
-    (existing as { status: PostStatus }).status === POST_PUBLISHED;
+  const existingRow = await fetchExistingPost(supabase, id);
+  const isPublished = existingRow.status === POST_PUBLISHED;
 
   const payload: Record<string, unknown> = {
     title: parsed.title,
     content: parsed.content,
     status: parsed.status,
+    image_id: parsed.image_id,
   };
   if (!isPublished) {
-    const slug = slugify(parsed.title);
-    if (slug.length === 0) {
-      throw new ServiceError('slug derives to empty from title', {
-        operation: UPDATE_POST_OPERATION,
-        cause: new Error('slugify(title) returned an empty string'),
-      });
-    }
-    payload.slug = slug;
+    payload.slug = deriveSlugOrThrow(parsed.title, UPDATE_POST_OPERATION);
   }
 
   const { data, error } = await supabase
@@ -242,12 +236,17 @@ export async function updatePostInternal(
     .select()
     .single();
   if (error) {
-    logMutationError(UPDATE_POST_OPERATION, error);
+    logSupabaseError(UPDATE_POST_OPERATION, error);
     throw new ServiceError(`${UPDATE_POST_OPERATION} failed`, {
       operation: UPDATE_POST_OPERATION,
       cause: error,
     });
   }
+  // T26: detach previous image on swap. See `orphanIfChanged` for rationale.
+  await orphanIfChanged(
+    supabase, UPDATE_POST_OPERATION, id,
+    existingRow.image_id, parsed.image_id,
+  );
   return data as Post;
 }
 
@@ -288,7 +287,7 @@ export async function deletePostInternal(
   const supabase = client ?? (await createServerClient());
   const { error } = await supabase.from('posts').delete().eq('id', id);
   if (error) {
-    logMutationError(DELETE_POST_OPERATION, error);
+    logSupabaseError(DELETE_POST_OPERATION, error);
     throw new ServiceError(`${DELETE_POST_OPERATION} failed`, {
       operation: DELETE_POST_OPERATION,
       cause: error,

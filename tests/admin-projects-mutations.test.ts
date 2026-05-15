@@ -223,13 +223,18 @@ describe('createProjectInternal', () => {
 describe('updateProjectInternal', () => {
   it('omits slug from the update payload when the existing row is published (CONSTRAINT-12)', async () => {
     const { client, calls } = makeUpdateStub({
-      fetchResult: { data: { status: 'published' }, error: null },
+      fetchResult: { data: { status: 'published', image_id: null }, error: null },
       updateResult: { data: { ...PUBLISHED_ROW, title: 'Renamed' }, error: null },
     });
 
     await updateProjectInternal(
       PUBLISHED_ROW.id,
-      { title: 'Renamed', description: 'still shipped', status: 'published' },
+      {
+        title: 'Renamed',
+        description: 'still shipped',
+        status: 'published',
+        image_id: null,
+      },
       client,
     );
 
@@ -247,13 +252,18 @@ describe('updateProjectInternal', () => {
 
   it('includes a derived slug in the update payload when the existing row is draft', async () => {
     const { client, calls } = makeUpdateStub({
-      fetchResult: { data: { status: 'draft' }, error: null },
+      fetchResult: { data: { status: 'draft', image_id: null }, error: null },
       updateResult: { data: { ...DRAFT_ROW, title: 'New Title' }, error: null },
     });
 
     await updateProjectInternal(
       DRAFT_ROW.id,
-      { title: 'New Title', description: DRAFT_ROW.description, status: 'draft' },
+      {
+        title: 'New Title',
+        description: DRAFT_ROW.description,
+        status: 'draft',
+        image_id: null,
+      },
       client,
     );
 
@@ -272,14 +282,19 @@ describe('updateProjectInternal', () => {
       message: 'slug is locked on published rows',
     };
     const { client } = makeUpdateStub({
-      fetchResult: { data: { status: 'published' }, error: null },
+      fetchResult: { data: { status: 'published', image_id: null }, error: null },
       updateResult: { data: null, error: triggerError },
     });
 
     await expect(
       updateProjectInternal(
         PUBLISHED_ROW.id,
-        { title: 'Renamed', description: 'still shipped', status: 'published' },
+        {
+          title: 'Renamed',
+          description: 'still shipped',
+          status: 'published',
+          image_id: null,
+        },
         client,
       ),
     ).rejects.toBeInstanceOf(ServiceError);
@@ -294,7 +309,7 @@ describe('updateProjectInternal', () => {
     await expect(
       updateProjectInternal(
         'unknown-id',
-        { title: 'X', description: 'X', status: 'draft' },
+        { title: 'X', description: 'X', status: 'draft', image_id: null },
         client,
       ),
     ).rejects.toBeInstanceOf(ServiceError);
@@ -309,11 +324,98 @@ describe('updateProjectInternal', () => {
     await expect(
       updateProjectInternal(
         '',
-        { title: 'X', description: 'X', status: 'draft' },
+        { title: 'X', description: 'X', status: 'draft', image_id: null },
         client,
       ),
     ).rejects.toBeInstanceOf(ServiceError);
     expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+  });
+
+  // T26 — image-attach + orphan-on-swap on the project update path.
+  // The stub returns the same chain object for every `.from(...)` call, so we
+  // distinguish parent vs orphan UPDATEs by the table name recorded on each
+  // `.from()` call and the order of `.update()` calls relative to it.
+  it('attaches an image_id on update and does NOT orphan when previous was null (T26)', async () => {
+    const NEW_IMAGE_ID = '00000000-0000-4000-8000-000000000aaa';
+    const { client, calls } = makeUpdateStub({
+      fetchResult: { data: { status: 'draft', image_id: null }, error: null },
+      updateResult: {
+        data: { ...DRAFT_ROW, image_id: NEW_IMAGE_ID },
+        error: null,
+      },
+    });
+
+    await updateProjectInternal(
+      DRAFT_ROW.id,
+      {
+        title: DRAFT_ROW.title,
+        description: DRAFT_ROW.description,
+        status: 'draft',
+        image_id: NEW_IMAGE_ID,
+      },
+      client,
+    );
+
+    // Parent UPDATE carries the new image_id.
+    const updateCall = calls.find((c) => c.method === 'update');
+    const payload = updateCall?.args[0] as Record<string, unknown>;
+    expect(payload.image_id).toBe(NEW_IMAGE_ID);
+
+    // No orphan path: only two `from()` calls (SELECT + UPDATE on `projects`),
+    // never `from('images')`. `orphanIfChanged` short-circuits on null previous.
+    const fromCalls = calls.filter((c) => c.method === 'from');
+    expect(fromCalls.map((c) => c.args[0])).toEqual(['projects', 'projects']);
+  });
+
+  it('orphans the previous image row when image_id changes on update (T26)', async () => {
+    const OLD_IMAGE_ID = '00000000-0000-4000-8000-000000000111';
+    const NEW_IMAGE_ID = '00000000-0000-4000-8000-000000000222';
+    const { client, calls } = makeUpdateStub({
+      fetchResult: {
+        data: { status: 'draft', image_id: OLD_IMAGE_ID },
+        error: null,
+      },
+      updateResult: {
+        data: { ...DRAFT_ROW, image_id: NEW_IMAGE_ID },
+        error: null,
+      },
+    });
+
+    await updateProjectInternal(
+      DRAFT_ROW.id,
+      {
+        title: DRAFT_ROW.title,
+        description: DRAFT_ROW.description,
+        status: 'draft',
+        image_id: NEW_IMAGE_ID,
+      },
+      client,
+    );
+
+    // Three `from()` calls in order: SELECT projects, UPDATE projects, UPDATE images.
+    const fromCalls = calls.filter((c) => c.method === 'from');
+    expect(fromCalls.map((c) => c.args[0])).toEqual([
+      'projects',
+      'projects',
+      'images',
+    ]);
+
+    // Two UPDATE payloads — first the parent row carries the new image_id,
+    // second the orphan call NULLs both pointer columns on the previous row.
+    const updateCalls = calls.filter((c) => c.method === 'update');
+    expect(updateCalls).toHaveLength(2);
+    expect((updateCalls[0]?.args[0] as Record<string, unknown>).image_id).toBe(
+      NEW_IMAGE_ID,
+    );
+    expect(updateCalls[1]?.args[0]).toEqual({
+      parent_id: null,
+      parent_type: null,
+    });
+
+    // The orphan UPDATE targets the OLD image id. The parent UPDATE targets the
+    // project row id, so eq('id', OLD_IMAGE_ID) must be among the eq calls.
+    const eqCalls = calls.filter((c) => c.method === 'eq');
+    expect(eqCalls.some((c) => c.args[1] === OLD_IMAGE_ID)).toBe(true);
   });
 });
 

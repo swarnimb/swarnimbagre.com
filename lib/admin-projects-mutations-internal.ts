@@ -2,8 +2,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { createServerClient } from './supabase';
 import { ServiceError } from './errors';
-import { slugify } from './slug';
 import type { Project, ProjectStatus } from './types';
+import { orphanIfChanged } from './admin-images-orphan';
+import { deriveSlugOrThrow } from './admin-slug';
+import { logSupabaseError } from './admin-mutation-log';
 
 /**
  * Module note (F-14 analogue, applied to PROJECT mutations).
@@ -63,42 +65,59 @@ export const projectCreateSchema = z.object({
 export type ProjectCreateInput = z.infer<typeof projectCreateSchema>;
 
 /**
- * Zod schema for the update-project boundary. Same shape as create — both
- * fields are required because the form re-submits the full row, not a patch.
- * The wrapper computes whether `slug` should be re-derived from the new title
+ * Zod schema for the update-project boundary. Same shape as create plus an
+ * optional `image_id` (T26 image-upload wiring) — both text fields are
+ * required because the form re-submits the full row, not a patch. The
+ * wrapper computes whether `slug` should be re-derived from the new title
  * (when the existing row is a `draft`) or omitted (when `published`).
+ *
+ * `image_id` is a UUID-or-null: the FormData read in
+ * `admin-projects-mutations.ts` coerces an empty string to `null` BEFORE
+ * the schema runs, so the parser only ever sees the post-coercion shape.
+ * A non-null value must be a valid UUID — anything else is rejected at the
+ * boundary (SEC-02).
  */
 export const projectUpdateSchema = z.object({
   title: z.string().trim().min(1, 'title is required').max(TITLE_MAX_LENGTH),
   description: z.string().trim().min(1, 'description is required'),
   status: z.enum(['draft', 'published']),
+  image_id: z.string().uuid('image_id must be a uuid').nullable(),
 }).strict();
 
 /** Inferred input shape for {@link updateProjectInternal}. */
 export type ProjectUpdateInput = z.infer<typeof projectUpdateSchema>;
 
 /**
- * Log a Supabase error without leaking row data or PII. Matches the shape of
- * `logDbError` in `lib/db.ts` so structured logs are uniform across the data
- * layer (EH-02, EH-03, SEC-05).
+ * Pre-fetch `status` (slug-lock gate, CONSTRAINT-12) and `image_id`
+ * (orphan-on-swap source, T26) for {@link updateProjectInternal}. Extracted
+ * to keep the orchestrator under CQ-01's 50-line cap.
+ *
+ * @throws ServiceError on any Supabase error.
  */
-function logMutationError(
-  operation: string,
-  error: { code?: string; message?: string } | null,
-): void {
-  console.error(`[admin-mutations] ${operation} failed`, {
-    operation,
-    errorCode: error?.code ?? null,
-    errorMessage: error?.message ?? null,
-    stack: new Error().stack,
-  });
+async function fetchExistingProject(
+  client: SupabaseClient,
+  id: string,
+): Promise<{ status: ProjectStatus; image_id: string | null }> {
+  const { data, error } = await client
+    .from('projects')
+    .select('status, image_id')
+    .eq('id', id)
+    .single();
+  if (error) {
+    logSupabaseError(UPDATE_PROJECT_OPERATION, error);
+    throw new ServiceError(`${UPDATE_PROJECT_OPERATION} failed`, {
+      operation: UPDATE_PROJECT_OPERATION,
+      cause: error,
+    });
+  }
+  return data as { status: ProjectStatus; image_id: string | null };
 }
 
 /**
  * Insert a new project row.
  *
  * Boundary-validates the input with {@link projectCreateSchema} (SEC-02),
- * derives the slug from `title` via {@link slugify}, and inserts via the
+ * derives the slug from `title` via {@link deriveSlugOrThrow}, and inserts via the
  * Supabase query builder (SEC-03). Slug uniqueness is enforced at the DB
  * (UNIQUE constraint on `projects.slug`) — a collision surfaces as a Postgres
  * `23505` and is wrapped in a {@link ServiceError} here, then swallowed to a
@@ -121,13 +140,7 @@ export async function createProjectInternal(
   client?: SupabaseClient,
 ): Promise<Project> {
   const parsed = projectCreateSchema.parse(input);
-  const slug = slugify(parsed.title);
-  if (slug.length === 0) {
-    throw new ServiceError('slug derives to empty from title', {
-      operation: CREATE_PROJECT_OPERATION,
-      cause: new Error('slugify(title) returned an empty string'),
-    });
-  }
+  const slug = deriveSlugOrThrow(parsed.title, CREATE_PROJECT_OPERATION);
   const supabase = client ?? (await createServerClient());
   const payload = {
     title: parsed.title,
@@ -141,7 +154,7 @@ export async function createProjectInternal(
     .select()
     .single();
   if (error) {
-    logMutationError(CREATE_PROJECT_OPERATION, error);
+    logSupabaseError(CREATE_PROJECT_OPERATION, error);
     throw new ServiceError(`${CREATE_PROJECT_OPERATION} failed`, {
       operation: CREATE_PROJECT_OPERATION,
       cause: error,
@@ -184,35 +197,17 @@ export async function updateProjectInternal(
   }
   const parsed = projectUpdateSchema.parse(input);
   const supabase = client ?? (await createServerClient());
-
-  const { data: existing, error: fetchError } = await supabase
-    .from('projects')
-    .select('status')
-    .eq('id', id)
-    .single();
-  if (fetchError) {
-    logMutationError(UPDATE_PROJECT_OPERATION, fetchError);
-    throw new ServiceError(`${UPDATE_PROJECT_OPERATION} failed`, {
-      operation: UPDATE_PROJECT_OPERATION,
-      cause: fetchError,
-    });
-  }
-  const isPublished = (existing as { status: ProjectStatus }).status === PUBLISHED;
+  const existingRow = await fetchExistingProject(supabase, id);
+  const isPublished = existingRow.status === PUBLISHED;
 
   const payload: Record<string, unknown> = {
     title: parsed.title,
     description: parsed.description,
     status: parsed.status,
+    image_id: parsed.image_id,
   };
   if (!isPublished) {
-    const slug = slugify(parsed.title);
-    if (slug.length === 0) {
-      throw new ServiceError('slug derives to empty from title', {
-        operation: UPDATE_PROJECT_OPERATION,
-        cause: new Error('slugify(title) returned an empty string'),
-      });
-    }
-    payload.slug = slug;
+    payload.slug = deriveSlugOrThrow(parsed.title, UPDATE_PROJECT_OPERATION);
   }
 
   const { data, error } = await supabase
@@ -222,12 +217,17 @@ export async function updateProjectInternal(
     .select()
     .single();
   if (error) {
-    logMutationError(UPDATE_PROJECT_OPERATION, error);
+    logSupabaseError(UPDATE_PROJECT_OPERATION, error);
     throw new ServiceError(`${UPDATE_PROJECT_OPERATION} failed`, {
       operation: UPDATE_PROJECT_OPERATION,
       cause: error,
     });
   }
+  // T26: detach previous image on swap. See `orphanIfChanged` for rationale.
+  await orphanIfChanged(
+    supabase, UPDATE_PROJECT_OPERATION, id,
+    existingRow.image_id, parsed.image_id,
+  );
   return data as Project;
 }
 
@@ -268,7 +268,7 @@ export async function deleteProjectInternal(
   const supabase = client ?? (await createServerClient());
   const { error } = await supabase.from('projects').delete().eq('id', id);
   if (error) {
-    logMutationError(DELETE_PROJECT_OPERATION, error);
+    logSupabaseError(DELETE_PROJECT_OPERATION, error);
     throw new ServiceError(`${DELETE_PROJECT_OPERATION} failed`, {
       operation: DELETE_PROJECT_OPERATION,
       cause: error,

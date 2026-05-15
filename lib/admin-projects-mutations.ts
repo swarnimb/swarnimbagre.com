@@ -69,15 +69,39 @@ function projectZodErrorToFieldErrors(
 }
 
 /**
- * Read FormData into the raw create/update payload. The cast is intentional:
- * unknown raw values flow through to the zod parser at the boundary, which is
- * the authoritative validator.
+ * Read FormData into the raw create payload. The cast is intentional:
+ * unknown raw values flow through to the zod parser at the boundary, which
+ * is the authoritative validator. Create does NOT carry `image_id`: image
+ * upload requires the parent's UUID, which only exists after the project
+ * row has been inserted. Images are attached on the subsequent edit.
  */
-function readProjectFormData(formData: FormData): unknown {
+function readProjectCreateFormData(formData: FormData): unknown {
   return {
     title: formData.get('title'),
     description: formData.get('description'),
     status: formData.get('status'),
+  };
+}
+
+/**
+ * Read FormData into the raw update payload, including the T26 `image_id`
+ * field. The form sends an empty string when no image is attached and the
+ * UUID string when one is. The zod schema accepts
+ * `z.string().uuid().nullable()`, so the empty-string case is normalized to
+ * `null` HERE rather than via `.transform()` — the authoritative validator
+ * stays a strict shape parser, not a coercion layer.
+ */
+function readProjectUpdateFormData(formData: FormData): unknown {
+  const rawImageId = formData.get('image_id');
+  const imageId =
+    typeof rawImageId === 'string' && rawImageId.trim().length > 0
+      ? rawImageId.trim()
+      : null;
+  return {
+    title: formData.get('title'),
+    description: formData.get('description'),
+    status: formData.get('status'),
+    image_id: imageId,
   };
 }
 
@@ -113,7 +137,7 @@ export async function createProject(
 ): Promise<ProjectMutationState> {
   const start = performance.now();
   try {
-    await createProjectInternal(readProjectFormData(formData));
+    await createProjectInternal(readProjectCreateFormData(formData));
     return { status: 'ok' };
   } catch (err) {
     if (err instanceof ZodError) {
@@ -150,7 +174,7 @@ export async function updateProject(
   try {
     const rawId = formData.get('id');
     const id = typeof rawId === 'string' ? rawId : '';
-    await updateProjectInternal(id, readProjectFormData(formData));
+    await updateProjectInternal(id, readProjectUpdateFormData(formData));
     return { status: 'ok' };
   } catch (err) {
     if (err instanceof ZodError) {

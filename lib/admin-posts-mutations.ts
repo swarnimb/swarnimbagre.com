@@ -70,16 +70,42 @@ function postZodErrorToFieldErrors(
 }
 
 /**
- * Read FormData into the raw post create/update payload. The cast is
- * intentional: unknown raw values flow through to the zod parser at the
- * boundary, which is the authoritative validator. CONSTRAINT-06: `content`
- * is read verbatim — no transformation, no HTML conversion.
+ * Read FormData into the raw post create payload. The cast is intentional:
+ * unknown raw values flow through to the zod parser at the boundary, which
+ * is the authoritative validator. CONSTRAINT-06: `content` is read
+ * verbatim — no transformation, no HTML conversion. Create does NOT carry
+ * `image_id`: image upload requires the parent's UUID, which only exists
+ * after the post row has been inserted. Images are attached on the
+ * subsequent edit.
  */
-function readPostFormData(formData: FormData): unknown {
+function readPostCreateFormData(formData: FormData): unknown {
   return {
     title: formData.get('title'),
     content: formData.get('content'),
     status: formData.get('status'),
+  };
+}
+
+/**
+ * Read FormData into the raw post update payload, including the T26
+ * `image_id` field. CONSTRAINT-06: `content` is read verbatim. The form
+ * sends an empty string when no image is attached and the UUID string when
+ * one is. The zod schema accepts `z.string().uuid().nullable()`, so the
+ * empty-string case is normalized to `null` HERE rather than via
+ * `.transform()` — the authoritative validator stays a strict shape parser,
+ * not a coercion layer.
+ */
+function readPostUpdateFormData(formData: FormData): unknown {
+  const rawImageId = formData.get('image_id');
+  const imageId =
+    typeof rawImageId === 'string' && rawImageId.trim().length > 0
+      ? rawImageId.trim()
+      : null;
+  return {
+    title: formData.get('title'),
+    content: formData.get('content'),
+    status: formData.get('status'),
+    image_id: imageId,
   };
 }
 
@@ -119,7 +145,7 @@ export async function createPost(
 ): Promise<PostMutationState> {
   const start = performance.now();
   try {
-    await createPostInternal(readPostFormData(formData));
+    await createPostInternal(readPostCreateFormData(formData));
     return { status: 'ok' };
   } catch (err) {
     if (err instanceof ZodError) {
@@ -156,7 +182,7 @@ export async function updatePost(
   try {
     const rawId = formData.get('id');
     const id = typeof rawId === 'string' ? rawId : '';
-    await updatePostInternal(id, readPostFormData(formData));
+    await updatePostInternal(id, readPostUpdateFormData(formData));
     return { status: 'ok' };
   } catch (err) {
     if (err instanceof ZodError) {

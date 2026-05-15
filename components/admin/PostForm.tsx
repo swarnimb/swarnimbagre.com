@@ -19,7 +19,8 @@ import {
   POST_MUTATION_INITIAL_STATE,
   type PostMutationState,
 } from '@/lib/admin-posts-mutations-types';
-import type { Post, PostStatus } from '@/lib/types';
+import type { ImageRecord, Post, PostStatus } from '@/lib/types';
+import ImageUpload from '@/components/admin/ImageUpload';
 
 /** Toast copy on success. CONSTRAINT-13: dry, no SaaS phrasing, no emoji. */
 const SAVE_SUCCESS_MESSAGE = 'Saved.';
@@ -27,23 +28,20 @@ const SAVE_SUCCESS_MESSAGE = 'Saved.';
 /** Hardcoded after-save destination — list view for both create and edit. */
 const POSTS_LIST_PATH = '/admin/posts';
 
-/**
- * Props for {@link PostForm}. `post` is omitted on the create screen and
- * present on the edit screen.
- */
+/** Props for {@link PostForm}. `post` absent => create mode. */
 export interface PostFormProps {
   /** Existing post row; absent for create. */
   post?: Post;
-  /** Optional injected action — tests override these to avoid Server Action wiring. */
+  /** Resolved image preview payload for the post's `image_id`. Null when the
+   * post has no image, or the image row was orphaned. Page-side loader
+   * handles the signed-URL resolution (CONSTRAINT-15). */
+  currentImage?: { id: string; signedUrl: string; altText: string } | null;
+  /** Optional injected actions — tests override these to avoid Server Action wiring. */
   createAction?: typeof createPost;
-  /** Optional injected action — tests override these to avoid Server Action wiring. */
   updateAction?: typeof updatePost;
 }
 
-/**
- * Read a field error from the action state, defaulting to empty string for
- * the inline `<p role="alert">` slot below each input.
- */
+/** Read a field error from the action state; '' renders no inline message. */
 function fieldError(
   state: PostMutationState,
   field: 'title' | 'content' | 'status',
@@ -52,34 +50,20 @@ function fieldError(
 }
 
 /**
- * Admin create / edit form for a post row.
- *
- * One component, two modes. Mode is inferred from the `post` prop:
- *
- * - **No `post`** → render the create form; submit calls `createPost`
- *   (the Server Action from `lib/admin-posts-mutations.ts`).
- * - **`post` present** → render the edit form prefilled from `post`; submit
- *   calls `updatePost` with a hidden `id` field. The slug input becomes
- *   read-only when `post.status === 'published'` to reflect CONSTRAINT-12
- *   (the migration 006 trigger `posts_prevent_slug_change` is the DB-side
- *   guard).
- *
- * CONSTRAINT-06: `content` is a plain `<Textarea>` storing raw Markdown.
- * No WYSIWYG; no HTML conversion at write time. The T12 client renderer
- * handles read-time rendering and sanitization.
- *
- * On a successful action resolution (`state.status === 'ok'`), the form
- * surfaces a sonner toast and pushes the user to `/admin/posts`. On error,
- * field-level zod messages render inline under each input, and a form-level
- * generic message renders above the form for any non-validation failure.
- * The action wrapper enforces six-channel uniformity for the non-validation
- * paths (`docs/auth-flow.md` §2a).
- *
- * @param props See {@link PostFormProps}.
- * @returns React element rendering the post form.
+ * Admin create / edit form for a post row. One component, two modes —
+ * inferred from the `post` prop. Edit mode renders with the row prefilled
+ * and submits `updatePost` with a hidden `id`; the slug input becomes
+ * read-only on `status === 'published'` (CONSTRAINT-12; migration 006 trigger
+ * `posts_prevent_slug_change` is the DB-side guard). `content` is a plain
+ * Textarea storing raw Markdown (CONSTRAINT-06) — the T12 client renderer
+ * handles read-time rendering and sanitization. On success: sonner toast +
+ * push to `/admin/posts`. On error: zod field messages inline; generic
+ * form-level message above the form. Six-channel uniformity is enforced by
+ * the action wrapper (see `docs/auth-flow.md` §2a).
  */
 export default function PostForm({
   post,
+  currentImage = null,
   createAction = createPost,
   updateAction = updatePost,
 }: PostFormProps): React.ReactElement {
@@ -91,13 +75,16 @@ export default function PostForm({
     FormData
   >(action, POST_MUTATION_INITIAL_STATE);
 
-  // Local state for the controlled `status` Select (FormData needs a name; the
-  // shadcn Select renders into a portal so a hidden input mirrors the value
-  // back into the form submission).
+  // Status: controlled Select (renders into a portal) mirrored back into the
+  // form submission via a hidden input below.
   const [status, setStatus] = useState<PostStatus>(post?.status ?? 'draft');
 
-  // On success: toast + redirect. Effect rather than render-time side-effect
-  // because `router.push` is forbidden during render.
+  // Image binding. `imageId` mirrors `image_id` after a fresh upload; the
+  // hidden `image_id` input carries it back to the server (empty string =>
+  // null per backend coercion contract).
+  const [imageId, setImageId] = useState<string | null>(currentImage?.id ?? null);
+  const [uploadedImage, setUploadedImage] = useState<ImageRecord | null>(null);
+
   useEffect(() => {
     if (state.status === 'ok') {
       toast.success(SAVE_SUCCESS_MESSAGE);
@@ -120,6 +107,7 @@ export default function PostForm({
       <form action={formAction} className="space-y-6" noValidate>
         {isEdit ? <input type="hidden" name="id" value={post.id} /> : null}
         <input type="hidden" name="status" value={status} />
+        <input type="hidden" name="image_id" value={imageId ?? ''} />
 
         <div className="space-y-2">
           <Label htmlFor="post-title">Title</Label>
@@ -156,6 +144,23 @@ export default function PostForm({
             </p>
           ) : null}
         </div>
+
+        {isEdit ? (
+          <div className="space-y-3">
+            <Label>Image</Label>
+            {imageId !== null && currentImage !== null && uploadedImage === null ? (
+              <img src={currentImage.signedUrl} alt={currentImage.altText} className="max-w-xs border border-border" />
+            ) : null}
+            {uploadedImage !== null ? (
+              <p className="text-sm text-muted-foreground">New image saved. Preview refreshes after save.</p>
+            ) : null}
+            <ImageUpload
+              parentType="posts"
+              parentId={post.id}
+              onUpload={(image) => { setImageId(image.id); setUploadedImage(image); }}
+            />
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           <Label htmlFor="post-status">Status</Label>

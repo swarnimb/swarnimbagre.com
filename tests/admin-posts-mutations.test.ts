@@ -182,7 +182,7 @@ describe('createPostInternal — TS-04 stores raw Markdown verbatim (CONSTRAINT-
 describe('updatePostInternal — TS-04 rejects slug change on published post (CONSTRAINT-12)', () => {
   it('omits slug from the update payload when the existing row is published, even if title changes', async () => {
     const { client, calls } = makeUpdateStub({
-      fetchResult: { data: { status: 'published' }, error: null },
+      fetchResult: { data: { status: 'published', image_id: null }, error: null },
       updateResult: {
         data: {
           id: 'post-pub',
@@ -204,6 +204,7 @@ describe('updatePostInternal — TS-04 rejects slug change on published post (CO
         title: 'Renamed Heading',
         content: 'body',
         status: 'published',
+        image_id: null,
       },
       client,
     );
