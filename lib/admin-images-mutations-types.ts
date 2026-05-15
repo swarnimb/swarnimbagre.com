@@ -98,3 +98,29 @@ export interface ImageMutationState {
 export const IMAGE_MUTATION_INITIAL_STATE: ImageMutationState = {
   status: 'idle',
 };
+
+/**
+ * Discriminated state shape returned by the orphan-cleanup Server Action
+ * (T27). Same envelope shape as the upload state minus the field-level
+ * concerns (the action takes no inputs — there are no fields to validate).
+ *
+ * **Payload deviation:** `deleted` and `freedBytes` ride the success
+ * envelope so the UI can surface "Deleted N images, freed ~M MB" without
+ * a follow-up fetch. Same boundary discipline as
+ * {@link ImageMutationState}'s `image` payload — pure data, no PII.
+ */
+export interface OrphanCleanupState {
+  /** `'idle'` is the initial state used by `useActionState`. */
+  status: 'idle' | 'ok' | 'error';
+  /** Form-level error string. Generic copy across resources (Channel 1). */
+  formError?: string;
+  /** Number of `images` rows hard-deleted on success. */
+  deleted?: number;
+  /** Sum of Storage object sizes (bytes) freed on success. */
+  freedBytes?: number;
+}
+
+/** Initial state shipped to `useActionState` for the orphan-cleanup action. */
+export const ORPHAN_CLEANUP_INITIAL_STATE: OrphanCleanupState = {
+  status: 'idle',
+};

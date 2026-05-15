@@ -10,6 +10,7 @@ import {
 } from '@/lib/admin-posts-mutations-internal';
 import { statInsertSchema } from '@/lib/admin-stats-mutations-internal';
 import { uploadImageSchema } from '@/lib/admin-images-mutations-internal';
+import { deleteOrphanImages } from '@/lib/admin-images-mutations';
 
 /**
  * Omnibus regression guard for F-26 (zod `.strict()` defense-in-depth on the
@@ -68,6 +69,7 @@ describe('admin mutation schemas — .strict() defense-in-depth (F-26)', () => {
       title: 'Valid title',
       description: 'Valid description',
       status: 'draft',
+      image_id: null,
       extra: 'should-fail',
     };
     expectUnrecognizedKeys(() => projectUpdateSchema.parse(payload));
@@ -88,6 +90,7 @@ describe('admin mutation schemas — .strict() defense-in-depth (F-26)', () => {
       title: 'Valid title',
       content: 'Valid content',
       status: 'draft',
+      image_id: null,
       extra: 'should-fail',
     };
     expectUnrecognizedKeys(() => postUpdateSchema.parse(payload));
@@ -112,5 +115,18 @@ describe('admin mutation schemas — .strict() defense-in-depth (F-26)', () => {
       extra: 'should-fail',
     };
     expectUnrecognizedKeys(() => uploadImageSchema.parse(payload));
+  });
+
+  /**
+   * `deleteOrphanImages` (T27) takes no inputs — there is no zod schema to
+   * append `.strict()` to. The empty-input contract is enforced by the
+   * action's TypeScript signature (`(): Promise<OrphanCleanupState>`); this
+   * test asserts the runtime function arity is 0 so a future refactor that
+   * smuggles in an `unknown` arg (then forgets to validate it) breaks the
+   * suite. This is the F-26 analogue for an arg-less action — the boundary
+   * is "no input is accepted at all", and arity is its observable invariant.
+   */
+  it('deleteOrphanImages enforces an empty-input contract (no args)', () => {
+    expect(deleteOrphanImages.length).toBe(0);
   });
 });

@@ -13,22 +13,18 @@ import { execSync } from 'node:child_process';
 
 // Single source of truth for the SEC-09 allowlist. Adding a new Server Action
 // requires updating BOTH the `'use server'` module(s) AND this constant in
-// lock-step. After T25 (commit 2 — image upload trio + ImageUpload component),
-// the allowlist remains ten IDs spread across four modules. The new
-// `lib/admin-images-mutations.ts` ships its `uploadImage` Server Action but
-// the build manifest only includes Server Actions reachable from an app/**
-// route — `ImageUpload.tsx` is not imported by any page until T26 wires it
-// into ProjectForm and PostForm. The allowlist therefore lifts from 10 to 11
-// at T26, not at T25 commit 2. The `uploadImage` export still exists in
-// `lib/admin-images-mutations.ts`; it lands in the manifest exactly when the
-// component starts being rendered. See `docs/plan-phase-2-admin.md` T25
-// completion note for the full rationale.
+// lock-step. The allowlist is twelve IDs spread across five modules. Next.js
+// only includes Server Actions in the manifest when they are reachable from
+// an app/** route, so an action stays out of the manifest until a page
+// renders a component (or directly calls the action).
 //   - `lib/auth.ts`                     — `signInWithMagicLink`, `signOut`
 //   - `lib/admin-projects-mutations.ts` — `createProject`, `updateProject`,
 //                                         `deleteProject`
 //   - `lib/admin-posts-mutations.ts`    — `createPost`, `updatePost`,
 //                                         `deletePost`
 //   - `lib/admin-stats-mutations.ts`    — `insertStat`, `deleteStat`
+//   - `lib/admin-images-mutations.ts`   — `uploadImage`, `deleteOrphanImages`
+//                                         (T27 — orphan cleanup sweep)
 const SERVER_ACTION_ALLOWLIST = new Set<string>([
   'signInWithMagicLink',
   'signOut',
@@ -40,6 +36,8 @@ const SERVER_ACTION_ALLOWLIST = new Set<string>([
   'deletePost',
   'insertStat',
   'deleteStat',
+  'uploadImage',
+  'deleteOrphanImages',
 ]);
 
 const MANIFEST_PATH = resolve(

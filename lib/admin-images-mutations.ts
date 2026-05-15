@@ -2,7 +2,11 @@
 
 import { ZodError } from 'zod';
 import { uploadImageInternal } from './admin-images-mutations-internal';
-import type { ImageMutationState } from './admin-images-mutations-types';
+import { deleteOrphanImagesInternal } from './admin-images-cleanup';
+import type {
+  ImageMutationState,
+  OrphanCleanupState,
+} from './admin-images-mutations-types';
 import { GENERIC_FORM_ERROR, MIN_DURATION_MS } from './auth-constants';
 
 /**
@@ -19,11 +23,12 @@ import { GENERIC_FORM_ERROR, MIN_DURATION_MS } from './auth-constants';
  * `'use server'`.
  *
  * SEC-09 allowlist (enforced by `tests/server-actions-manifest.test.ts`)
- * IDs landed by this module: `uploadImage`. Image mutations are
- * upload-only at T25 — there is no edit (replace + orphan via T26
- * `image_id` swap), no separate delete (orphan-cleanup is the deferred
- * 7-day sweep per CONSTRAINT-07). Every export of this module must be an
- * async function — the state shape, initial state, and generic error
+ * IDs landed by this module: `uploadImage`, `deleteOrphanImages`. Image
+ * mutations cover upload (T25) and the deferred 7-day orphan-cleanup
+ * sweep (T27); there is no per-image edit or per-image delete — replacement
+ * is via the parent's `image_id` swap (T26), and orphan rows are reclaimed
+ * in batch by the cleanup action. Every export of this module must be an
+ * async function — the state shapes, initial states, and generic error
  * string all live in sibling modules for exactly that reason.
  *
  * This is the per-resource Server Action entry-point module per
@@ -124,6 +129,48 @@ export async function uploadImage(
     if (err instanceof ZodError) {
       return { status: 'error', fieldErrors: imageZodErrorToFieldErrors(err) };
     }
+    return { status: 'error', formError: GENERIC_FORM_ERROR };
+  } finally {
+    await padToFloor(start);
+  }
+}
+
+/**
+ * Server Action — hard-delete every orphaned `images` row older than the
+ * `ORPHAN_CLEANUP_THRESHOLD_DAYS` grace period AND its Storage object.
+ *
+ * Takes no inputs — the cutoff is the wall-clock `now()` minus the grace
+ * period; orphan-ness is the per-row predicate `parent_id IS NULL AND
+ * parent_type IS NULL`. The throwing helper in `lib/admin-images-orphan.ts`
+ * is the single boundary; all SEC-03 parameterization happens there.
+ *
+ * Channel 1 (UI text): on success, surfaces `deleted` + `freedBytes` so
+ * the page can render "Deleted N images, freed ~M MB". On error, surfaces
+ * the shared `GENERIC_FORM_ERROR` for any throw — same resource-agnostic
+ * copy as the project / post / stat / image mutations.
+ *
+ * Channel 2 (response body): the returned envelope is the same shape
+ * across outcomes — `{ status, formError?, deleted?, freedBytes? }`. Never
+ * throws to the wire (the inner helper's throws are caught here).
+ *
+ * Channel 3 (timing): every outcome pads to {@link MIN_DURATION_MS}.
+ *
+ * Channel 4 (Server Action surface): exactly one action ID is added by
+ * this export. The throwing helper is imported from a sibling
+ * non-`'use server'` module so it does not become a second endpoint.
+ *
+ * @returns The new state envelope. Always resolves; never throws.
+ */
+export async function deleteOrphanImages(): Promise<OrphanCleanupState> {
+  const start = performance.now();
+  try {
+    const result = await deleteOrphanImagesInternal();
+    return {
+      status: 'ok',
+      deleted: result.deleted,
+      freedBytes: result.freedBytes,
+    };
+  } catch {
     return { status: 'error', formError: GENERIC_FORM_ERROR };
   } finally {
     await padToFloor(start);
