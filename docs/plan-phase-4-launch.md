@@ -10,7 +10,9 @@ End state: site is live at `swarnimbagre.com`, monitored, the post-launch checkl
 
 ---
 
-## T32 — Error monitoring (Sentry) — option A deploy or option B defer
+## T32 — Error monitoring (Sentry) — option A deploy or option B defer [x]
+
+**Option chosen:** B (defer) — picked 2026-05-14 by `@cto` consultation, approved by builder. Rationale: pre-launch bundle weight on the public site (CONSTRAINT-05) outweighs zero-traffic monitoring value; reversibility high. Full rationale in `docs/founder-brief.md` entry 23 and `docs/monitoring.md`.
 
 **Files:**
 - `lib/sentry.ts` (create — if deploying)
@@ -31,8 +33,8 @@ End state: site is live at `swarnimbagre.com`, monitored, the post-launch checkl
 - [ ] No `console.log` debug aids left in (CQ-05).
 
 **Option B — defer:**
-- [ ] `.env.example` lists `SENTRY_DSN` with a comment "deferred — set when monitoring is added".
-- [ ] `docs/monitoring.md` documents that Sentry is deferred and what the builder should look at instead in the meantime (Vercel logs, Supabase Edge Function logs).
+- [x] `.env.example` lists `SENTRY_DSN` with a comment "deferred — set when monitoring is added".
+- [x] `docs/monitoring.md` documents that Sentry is deferred and what the builder should look at instead in the meantime (Vercel logs, Supabase Edge Function logs).
 
 The builder picks A or B at task start. Either choice is valid; record the choice in `docs/session-log.md`.
 
@@ -46,7 +48,7 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 
 ---
 
-## T33 — README finalization
+## T33 — README finalization [x]
 
 **Files:**
 - `README.md` (finalize)
@@ -54,15 +56,15 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 **Functions to implement:** [documentation only]
 
 **Acceptance criteria:**
-- [ ] README contains the five required sections (DS-05):
+- [x] README contains the five required sections (DS-05):
   - **Project description** — one paragraph, voice-rule compliant (CONSTRAINT-13). No SaaS phrases.
   - **Setup** — exact commands: `cp .env.example .env.local`, fill values, `npm install`, `npm run dev`, open `http://localhost:3000`.
   - **Environment variables** — names only, reference `.env.example`. No real values (SEC-01).
   - **Tests** — `npm test`.
   - **Deploy** — `git push origin main` triggers Vercel auto-deploy.
-- [ ] Additional sections (kept terse): admin login flow link to `docs/auth-flow.md`; design rules link to `docs/design-decisions.md`; voice rules link to `docs/constraints.md`.
-- [ ] No `TODO` lines left in (CQ-05).
-- [ ] DS-05 verification: a fresh checkout, following only the README, reaches a working `npm run dev` state.
+- [x] Additional sections (kept terse): admin login flow link to `docs/auth-flow.md`; design rules link to `docs/design-decisions.md`; voice rules link to `docs/constraints.md`.
+- [x] No `TODO` lines left in (CQ-05).
+- [ ] DS-05 verification: a fresh checkout, following only the README, reaches a working `npm run dev` state. — **Deferred to builder; manual run on a clean clone.**
 
 **Tests required:**
 - Manual: builder runs through README setup on a fresh clone, confirms steps work as written. Logged in `docs/session-log.md`.

@@ -1,7 +1,7 @@
 # Constraints: swarnimbagre.com
 
 **Date seeded:** 2026-05-06 (by `@plan` Phase 4)
-**Last updated:** 2026-05-12 (CONSTRAINT-18 added; CONSTRAINT-16 amended)
+**Last updated:** 2026-05-14 (CONSTRAINT-20 added)
 
 > Loaded by `@session-start` every session. Active binding decisions only — not history, not options considered. New constraints are added when `@plan`, `@cto`, or the builder makes a binding decision. A constraint is removed only when the decision is explicitly reversed, with the reversal noted in `docs/session-log.md`.
 
@@ -256,6 +256,18 @@ or a re-evaluation of header uniformity under PKCE.
 
 ---
 
+### [CONSTRAINT-20] Storage bucket RLS policies must accompany table FK migrations
+
+**Decision:** Every Supabase Storage bucket in use must have an explicit RLS policy on `storage.objects` scoped to `bucket_id`, applied in the same migration that creates (or first references) the bucket. Policy MUST specify both USING and WITH CHECK clauses for INSERT / UPDATE writes to be permitted — a policy with USING alone denies INSERT because there is no clause to satisfy on the new row.
+
+**What it means in practice:** Storage's RLS layer is separate from per-table RLS and must be considered explicitly during schema work. The Storage analogue of CONSTRAINT-08 (default-deny RLS on every table) — `storage.objects` is RLS-enabled by default in Supabase, so a bucket without a permissive policy is fully denied for `authenticated` and `anon`. New buckets get the same shape as `images_storage_admin_all` from migration 007: `for all to authenticated using (bucket_id = '<name>') with check (bucket_id = '<name>')`. The bucket-id predicate keeps each policy scoped so future buckets start default-denied.
+
+**Who decided and when:** `@supabase` diagnosis + main-thread lock during T28 BLOCKING-02 resolution, 2026-05-14.
+
+**What this closes off:** The "table policy is sufficient" assumption. Migration 005 added the `images` bucket but deferred its `storage.objects` policy to "T15"; the deferral was forgotten. T28's first real upload caught the gap. Migration 007 closed it for `images`; CONSTRAINT-20 ensures the next bucket doesn't repeat the mistake. See `docs/founder-brief.md` (`storage.objects` RLS policy entry, 2026-05-14).
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -279,3 +291,4 @@ or a re-evaluation of header uniformity under PKCE.
 | 17 | Admin URL pattern locked to `/admin/*` | URL = layout = Tailwind = middleware = robots boundary | `@cto` pre-T16 | 2026-05-12 |
 | 18 | Supabase SSR client locked to flowType: implicit | No PKCE verifier cookie; header channel uniform | `@security` audit 3 | 2026-05-12 |
 | 19 | Dev-only routes use bracket NODE_ENV indirection | Defeats Next 15 compile-time inlining; runtime gate enforced | `@dev` + T19.2 | 2026-05-12 |
+| 20 | Storage bucket RLS policies accompany table FK migrations | Every bucket gets a `storage.objects` policy scoped to `bucket_id` (USING + WITH CHECK); default-deny applies to Storage | `@supabase` + T28 | 2026-05-14 |

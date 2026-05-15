@@ -1,7 +1,7 @@
 # Plan — Phase 3: OpenClaw Ingestion
 
 **Date:** 2026-05-06
-**Status:** Pending
+**Status:** Active
 **Tasks:** T29–T31 (3 tasks)
 **Predecessor:** [`plan-phase-2-admin.md`](plan-phase-2-admin.md)
 **Successor:** [`plan-phase-4-launch.md`](plan-phase-4-launch.md)
@@ -36,7 +36,7 @@ The locked decision (CONSTRAINT-04, ASSUMPTION-06 option (a)) is: **Edge Functio
 
 ---
 
-## T30 — Edge Function `stats-ingest`
+## T30 — Edge Function `stats-ingest` [x]
 
 **Files:**
 - `supabase/functions/stats-ingest/index.ts` (create)
@@ -50,18 +50,18 @@ The locked decision (CONSTRAINT-04, ASSUMPTION-06 option (a)) is: **Edge Functio
 - `insertStat(payload: StatsInput): Promise<void>` (≤50 lines, CQ-01) — INSERT into `stats` using a Supabase client constructed with the service role key.
 
 **Acceptance criteria:**
-- [ ] Endpoint: `POST /functions/v1/stats-ingest`.
-- [ ] Required header: `X-Stats-Secret`. Required body: JSON with `category` (string, non-empty), `label` (string, non-empty), `value` (string, non-empty), `unit` (string or null) (SEC-02).
-- [ ] **Constant-time secret comparison** (SEC-04). The implementation does not return early on length mismatch in a way that leaks a timing oracle — short-circuit only after both buffers have been compared with a fixed-size operation, or use a vetted constant-time library.
-- [ ] On valid secret + valid payload: INSERT via service role, return `201 Created` with body `{"ok": true}`.
-- [ ] On missing or wrong secret: return `401 Unauthorized` with body `{"error": "unauthorized"}`. Log the attempt with context (IP if available, presence flag for the header — never the value, SEC-05).
-- [ ] On malformed payload: return `400 Bad Request` with a generic field-level message (EH-04). Log the parse error internally with the offending field name only — no value (SEC-05).
-- [ ] **No detail leak:** the 401 response is identical regardless of whether the header was missing, empty, or wrong. The 400 response does not echo back the payload or stack.
-- [ ] Service role key is loaded from the Edge Function env (`SUPABASE_SERVICE_ROLE_KEY`) — never hardcoded (SEC-01).
-- [ ] Errors are logged with operation name and stack trace (EH-02, EH-03). Re-thrown as `ServiceError` for the runtime to surface (EH-01, EH-05).
-- [ ] **Rate-limit prep:** the handler includes a rate-limit hook — a no-op function `checkRateLimit(req: Request): Promise<void>` is called at the top of `handler` and currently always passes. The hook is in place so enforcement (e.g., Supabase invocation count threshold or a token-bucket keyed by source IP) can be added without redeploying app code. A comment marks the hook clearly (CQ-04).
-- [ ] Idempotence: the function does not de-duplicate. The same `(category, label, value, unit)` tuple submitted twice creates two rows. Append-only semantics are preserved (PRD §4).
-- [ ] All public functions have doc comments (DS-01) listing params, return, and thrown errors.
+- [x] Endpoint: `POST /functions/v1/stats-ingest`.
+- [x] Required header: `X-Stats-Secret`. Required body: JSON with `category` (string, non-empty), `label` (string, non-empty), `value` (string, non-empty), `unit` (string or null) (SEC-02).
+- [x] **Constant-time secret comparison** (SEC-04). The implementation does not return early on length mismatch in a way that leaks a timing oracle — short-circuit only after both buffers have been compared with a fixed-size operation, or use a vetted constant-time library.
+- [x] On valid secret + valid payload: INSERT via service role, return `201 Created` with body `{"ok": true}`.
+- [x] On missing or wrong secret: return `401 Unauthorized` with body `{"error": "unauthorized"}`. Log the attempt with context (IP if available, presence flag for the header — never the value, SEC-05).
+- [x] On malformed payload: return `400 Bad Request` with a generic field-level message (EH-04). Log the parse error internally with the offending field name only — no value (SEC-05).
+- [x] **No detail leak:** the 401 response is identical regardless of whether the header was missing, empty, or wrong. The 400 response does not echo back the payload or stack.
+- [x] Service role key is loaded from the Edge Function env (`SUPABASE_SERVICE_ROLE_KEY`) — never hardcoded (SEC-01).
+- [x] Errors are logged with operation name and stack trace (EH-02, EH-03). Re-thrown as `ServiceError` for the runtime to surface (EH-01, EH-05).
+- [x] **Rate-limit prep:** the handler includes a rate-limit hook — a no-op function `checkRateLimit(req: Request): Promise<void>` is called at the top of `handler` and currently always passes. The hook is in place so enforcement (e.g., Supabase invocation count threshold or a token-bucket keyed by source IP) can be added without redeploying app code. A comment marks the hook clearly (CQ-04).
+- [x] Idempotence: the function does not de-duplicate. The same `(category, label, value, unit)` tuple submitted twice creates two rows. Append-only semantics are preserved (PRD §4).
+- [x] All public functions have doc comments (DS-01) listing params, return, and thrown errors.
 
 **Tests required:**
 - `validateSharedSecret returns false when header is null` (TS-01 error).

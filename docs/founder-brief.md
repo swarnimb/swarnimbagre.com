@@ -32,6 +32,9 @@ This file is the plain-language record of every architectural decision. The audi
 | 18 | Supabase auth client locked to `flowType: 'implicit'` | [§6.6.3](architecture.md#663) + CONSTRAINT-18 |
 | 19 | Admin mutation modules split per resource (§6.6.6 evolved) | [§6.6.5](architecture.md#665-build-invariants-f-14-sec-09) + [§6.6.6](architecture.md#666-admin-mutation-surface--three-module-file-split-per-resource) + [§4.3](architecture.md#43-file-and-function-size-budgets) |
 | 20 | Zod .strict() adopted across admin mutation schemas (F-26 closure) | architecture.md §6.6.6 footnote / security-report.md F-26 |
+| 21 | `useActionState` dispatch from inside a parent form (BLOCKING-01 closure) | [§6.6.7](architecture.md#667-useactionstate-dispatch-from-inside-a-parent-form) |
+| 22 | `storage.objects` RLS policy required per Storage bucket (migration 007) | [§2.4](architecture.md#24-images) + CONSTRAINT-20 |
+| 23 | Defer Sentry pre-launch — manual log review until launch (T32 Option B) | [`monitoring.md`](monitoring.md) + CONSTRAINT-05 |
 
 ---
 
@@ -468,6 +471,54 @@ wall-clock proves the wrapper ran end-to-end).
 **What this closes off:** Schema laxness as a "future-proofing" defense ("we might want to add a field later, so let zod ignore extras"). From T25 onward, adding a new field to the admin write surface means adding it to the schema explicitly — there is no quiet path where a field flows from form to database without appearing in the schema. Removing `.strict()` from any of the six schemas is a security regression and the strict-batch tests will fail loudly.
 
 **Implemented in:** T25 commit 3, 2026-05-13. Six schemas updated in lock-step across four per-resource internal modules. Six-case omnibus test file added (`tests/admin-mutations-strict.test.ts`). F-26 marked CLOSED in the next `@security` audit (audit 12).
+
+---
+
+## 2026-05-14 — `useActionState` dispatch from inside a parent form (BLOCKING-01 closure)
+
+**Architecture reference:** §6.6.7 + `tests/ImageUpload.test.tsx` regression pin
+
+**Decided:** When an admin client component holds a Server Action and lives inside a parent `<form>` (e.g., the image upload widget embedded in `ProjectForm` / `PostForm`), it must NOT wrap itself in another `<form>`. It uses `useActionState` + `useTransition.startTransition(() => dispatch(formData))` with a `<button type="button" onClick={...}>` trigger. The `FormData` is constructed from refs / state inside the click handler.
+
+**Means for your product:** Image upload from the project + post edit pages now actually works. Before this fix, the image upload looked functional in the UI but silently failed on submit because HTML disallows nested forms — the browser dropped the inner form and the outer form's submit handler intercepted everything. T15-T27 mocked the dispatch path in unit tests, so the bug only triggered against a real browser at T28's smoke run. Future inner-form components in admin will follow the same `<div>` + `useTransition` + manual `dispatch(formData)` pattern.
+
+**Check before approving:** Try uploading an image while editing an existing project. The new image should appear and replace the old one, with the previous image flowing as an orphan to `/admin/images` (eligible for the 7-day cleanup sweep). T28's smoke test verifies this end-to-end now; the regression test in `tests/ImageUpload.test.tsx` pins `<form>` absence so the nested-form bug cannot return.
+
+**What this closes off:** The naive `<form action={serverAction}>` composition inside another form is now banned in admin client components. Future feature work cannot use that shape — and the regression test will fail loud if anyone tries.
+
+**Implemented in:** `@dev` targeted-fix during T28, 2026-05-14. `components/admin/ImageUpload.tsx` (185 → 198 lines): `<form action={formAction}>` → `<div>` wrapper, `<button type="submit">` → `<button type="button" onClick={handleUpload}>`, manual `FormData` construction inside `useTransition.startTransition()`. `useActionState` envelope unchanged. `lib/admin-images-mutations.ts` (the Server Action wrapper) and `lib/admin-images-mutations-internal.ts` (throwing helper) byte-identical — wire shape and zod boundary unchanged. `@security` audit 15 CLEAR — six-channel uniformity preserved by construction.
+
+---
+
+## 2026-05-14 — `storage.objects` RLS policy required per Storage bucket (migration 007)
+
+**Architecture reference:** §2.4 (storage-layer RLS paragraph) + CONSTRAINT-20
+
+**Decided:** Every Supabase Storage bucket in use must carry an explicit `storage.objects` RLS policy scoped to `bucket_id`, applied in the same migration as the table FK that references it. Default-deny applies on Storage just like on tables (the Storage analogue of CONSTRAINT-08, now formalized as CONSTRAINT-20). Policy MUST specify both `USING` and `WITH CHECK` clauses for INSERT / UPDATE writes to be permitted.
+
+**Means for your product:** Image upload is now actually permitted at the database layer. Migration 005 added the `images` bucket but deferred the policy to "T15" — the deferral was forgotten and T15-T27 never landed it because every unit test mocked the Storage client. T28's first real upload hit the deferred work as a hard RLS denial. Six months from now you'll add another bucket (e.g. for project file attachments); CONSTRAINT-20 ensures you don't repeat the mistake — the bucket starts default-denied and the policy ships in the same migration.
+
+**Check before approving:** Image upload during the T28 smoke test reaches and successfully INSERTs into `storage.objects`. Re-run `npm run test:e2e -- admin-smoke.spec.ts` and confirm green. Live verification via `pg_policies` shows `images_storage_admin_all` with both `qual` and `with_check` set to `(bucket_id = 'images'::text)`.
+
+**What this closes off:** The "table policy is sufficient" assumption. New buckets without an accompanying `storage.objects` policy will be caught by CONSTRAINT-20 review. The sibling diagnostic anchor (§2.4) — that the Supabase JS SDK strips the `for table "X"` suffix from RLS error messages — is captured for future debugging so the next time a Storage RLS denial surfaces it doesn't look like a `public.{table}` failure.
+
+**Implemented in:** `@supabase` diagnosis + migration during T28, 2026-05-14. `supabase/migrations/007_rls_storage_images.sql` installs `images_storage_admin_all` (FOR ALL on `authenticated`, USING and WITH CHECK both `bucket_id = 'images'`). Applied via `mcp__supabase__apply_migration`. The `public.images` policies from migration 005 are unchanged.
+
+---
+
+## 2026-05-14 — Defer Sentry pre-launch — manual log review until launch (T32 Option B)
+
+**Architecture reference:** [`docs/monitoring.md`](monitoring.md) (canonical) + CONSTRAINT-05 (bundle weight invariant). No `architecture.md` section — observability posture is operational, not structural.
+
+**Decided:** Error monitoring via Sentry is deferred. Pre-launch the project relies on Vercel Runtime Logs + Supabase logs (Edge Function, Postgres, Auth, Storage) for visibility. `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN` are stubbed in `.env.example` with a deferred-status comment; `lib/sentry.ts` and `next.config.ts` Sentry plugin wiring are not added. Two named gate conditions trigger flipping to Option A (full Sentry deploy): first external share of the site URL, or first production bug discovered hours/days after it happened.
+
+**Means for your product:** The public site ships Day 1 with zero third-party tracking bytes — CONSTRAINT-05's verbatim-bundle invariant stays clean. You do not get error emails or push notifications during the first weeks of traffic. When something breaks, you go look — Vercel dashboard for runtime errors, Supabase dashboard for DB/RLS/auth/storage/edge-function errors. `docs/monitoring.md` lists exact log locations for every failure mode the app can produce (admin Server Action, magic-link, image upload, OpenClaw ingest, public 5xx, RLS denial). The accepted blind spot is post-hydration client-side errors on the public site — if a component throws after the page loads, no log captures it, and that is the primary motivation for the gate condition to flip Option A on.
+
+**Check before approving:** Are you OK with no push-style alerts during the first weeks of traffic? You have to remember to look. The `docs/monitoring.md` playbook is concrete (named dashboards, named filters) so triage is fast, but it is still manual. The first time you find a bug that was live for a day before you noticed, that is the signal to flip to Option A — do not wait for a second.
+
+**What this closes off:** Almost nothing material. `@sentry/nextjs` is a ~30-min wizard install; reversibility is high. The only thing forfeited is automatic capture of errors during pre-launch QA — reproducible manually because the builder is the only user. PII-scrubbing rules are deliberately not authored speculatively; they get designed against real event payloads when Option A is activated, which is a feature, not a cost. A future builder reading this entry should not interpret "deferred" as "rejected" — it is a sequencing call.
+
+**Implemented in:** `@cto` consultation + `@dev` execution during T32, 2026-05-14. `.env.example` adds `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN` stubs with deferred-status comment block. `docs/monitoring.md` created — interim playbook + flip-to-A gate condition. `docs/plan-phase-4-launch.md` T32 marked `[x]` with "Option chosen: B" header note. No `lib/sentry.ts`, no `next.config.ts` change, no tests (Option A's two tests are gated on actually wiring Sentry). Public bundle untouched.
 
 ---
 

@@ -1,7 +1,7 @@
 # Plan — Phase 2: Admin Panel
 
 **Date:** 2026-05-06
-**Status:** Pending
+**Status:** Done (2026-05-14)
 **Tasks:** T15–T28 (14 tasks)
 **Predecessor:** [`plan-phase-1-foundation.md`](plan-phase-1-foundation.md)
 **Successor:** [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md)
@@ -10,7 +10,7 @@ End state: admin can log in via magic link, do full CRUD on projects and posts (
 
 ---
 
-## T15 — Admin layout + Tailwind/shadcn scoped CSS
+## T15 — Admin layout + Tailwind/shadcn scoped CSS [x]
 
 **Files:**
 - `app/(admin)/layout.tsx` (modify — add Tailwind/shadcn import via admin.css)
@@ -111,7 +111,7 @@ _F-14 + F-15 targeted fix applied 2026-05-12 (fourth architectural pass on T17 �
 
 ---
 
-## T18 — Auth middleware + session gating
+## T18 — Auth middleware + session gating [x]
 
 **Files:**
 - `middleware.ts` (modify — add admin auth gate alongside the UA detection from T10)
@@ -143,7 +143,7 @@ _Completed 2026-05-12 (pre-`@security`). Created `lib/auth-constants.ts` (extrac
 
 ---
 
-## T19 — Admin home + nav
+## T19 — Admin home + nav [x]
 
 **Files:**
 - `app/(admin)/admin/page.tsx` (replace stub — admin home)
@@ -173,7 +173,7 @@ _Completed 2026-05-12. Implementation complete; `@security` audit pass 6 returne
 
 ---
 
-## T19.1 — SEC-09 build-invariant test
+## T19.1 — SEC-09 build-invariant test [x]
 
 **Files:**
 - `tests/server-actions-manifest.test.ts` (create — post-build assertion)
@@ -195,7 +195,7 @@ _Completed 2026-05-12. The `assertServerActionAllowlist()` logic ships inline in
 
 ---
 
-## T19.2 — Playwright auth fixture + back-button e2e
+## T19.2 — Playwright auth fixture + back-button e2e [x]
 
 **Files:**
 - `tests/e2e/admin-logout.spec.ts` (existing file — remove the two `.fixme` markers)
@@ -222,7 +222,7 @@ _Completed 2026-05-12. Playwright 2/2 passing. `@supabase` consult locked option
 
 ---
 
-## T20 — Projects admin: list view
+## T20 — Projects admin: list view [x]
 
 **Files:**
 - `app/(admin)/admin/projects/page.tsx` (create)
@@ -253,7 +253,7 @@ _Completed 2026-05-12. Playwright 2/2 passing. `@supabase` consult locked option
 
 ---
 
-## T21 — Projects admin: create + edit forms
+## T21 — Projects admin: create + edit forms [x]
 
 **Files:**
 - `app/(admin)/admin/projects/new/page.tsx` (create)
@@ -295,7 +295,7 @@ _Completed 2026-05-13. Created `lib/slug.ts` (NFKD diacritic strip + dash-collap
 
 ---
 
-## T22 — Projects admin: delete with confirm modal
+## T22 — Projects admin: delete with confirm modal [x]
 
 **Files:**
 - `components/admin/DeleteConfirmModal.tsx` (create — reusable)
@@ -329,7 +329,7 @@ _Completed 2026-05-13. Created `components/admin/DeleteConfirmModal.tsx` (reusab
 
 ---
 
-## T23 — Posts admin: list, create, edit, delete (same pattern as T20–T22)
+## T23 — Posts admin: list, create, edit, delete (same pattern as T20–T22) [x]
 
 **Files:**
 - `app/(admin)/admin/posts/page.tsx`
@@ -420,15 +420,15 @@ _Completed 2026-05-13 (Session 18). Shipped end-to-end in a single session acros
 - `<ImageUpload onUpload, onError, parentType, parentId>` (≤200 lines, CQ-02).
 
 **Acceptance criteria:**
-- [ ] File type whitelist enforced at the boundary (SEC-02).
-- [ ] File size ≤ 2 MB enforced at the boundary AND by Storage policy (SEC-02; defense in depth).
-- [ ] `alt_text` is a required form field. Submit is disabled until non-empty.
-- [ ] Path scheme is exactly `images/{parentType}/{parentId}/{uuid}_{filename}` (CONSTRAINT-07).
-- [ ] On success: `images` row inserted with `bucket_path`, `alt_text`, `parent_id`, `parent_type`. Component calls `onUpload(image)`.
-- [ ] On error: caught, logged with context (operation + sanitized inputs — never log file content) (EH-01, EH-02, EH-03). Component shows inline error (EH-04).
-- [ ] Storage SDK used (no hardcoded URLs) (SEC-01, CQ-04).
-- [ ] Doc comment on `uploadImage` lists params, return, throws (DS-01).
-- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
+- [x] File type whitelist enforced at the boundary (SEC-02).
+- [x] File size ≤ 2 MB enforced at the boundary AND by Storage policy (SEC-02; defense in depth).
+- [x] `alt_text` is a required form field. Submit is disabled until non-empty.
+- [x] Path scheme is exactly `images/{parentType}/{parentId}/{uuid}_{filename}` (CONSTRAINT-07).
+- [x] On success: `images` row inserted with `bucket_path`, `alt_text`, `parent_id`, `parent_type`. Component calls `onUpload(image)`.
+- [x] On error: caught, logged with context (operation + sanitized inputs — never log file content) (EH-01, EH-02, EH-03). Component shows inline error (EH-04).
+- [x] Storage SDK used (no hardcoded URLs) (SEC-01, CQ-04).
+- [x] Doc comment on `uploadImage` lists params, return, throws (DS-01).
+- [x] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `uploadImage rejects file > 2MB` (TS-01 error, TS-04 data write critical).
@@ -445,7 +445,7 @@ _Completed 2026-05-13. Shipped over three commits — commit 1 (refactor: shared
 
 ---
 
-## T26 — Wire image upload into Project + Post forms
+## T26 — Wire image upload into Project + Post forms [x]
 
 **Files:**
 - `app/(admin)/admin/projects/[id]/page.tsx` (modify)
@@ -457,13 +457,13 @@ _Completed 2026-05-13. Shipped over three commits — commit 1 (refactor: shared
 **Functions to implement:** [composition — wires existing components]
 
 **Acceptance criteria:**
-- [ ] Project edit page shows the current image thumbnail (if any) plus an `<ImageUpload>` to replace.
-- [ ] Post edit page same as project.
-- [ ] When a new image is uploaded, the parent's `image_id` is updated to the new image's id.
-- [ ] The previous image record becomes orphaned (parent_id NULL, parent_type NULL) by the update — eligible for cleanup after 7 days (CONSTRAINT-07).
-- [ ] Alt text persists on the `images` row; reading the parent re-fetches the alt and renders it in the public components from T13.
-- [ ] No image is allowed to be saved with empty alt (UI prevents submit; DB column is NOT NULL).
-- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
+- [x] Project edit page shows the current image thumbnail (if any) plus an `<ImageUpload>` to replace.
+- [x] Post edit page same as project.
+- [x] When a new image is uploaded, the parent's `image_id` is updated to the new image's id.
+- [x] The previous image record becomes orphaned (parent_id NULL, parent_type NULL) by the update — eligible for cleanup after 7 days (CONSTRAINT-07).
+- [x] Alt text persists on the `images` row; reading the parent re-fetches the alt and renders it in the public components from T13.
+- [x] No image is allowed to be saved with empty alt (UI prevents submit; DB column is NOT NULL).
+- [x] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `attaching an image updates parent.image_id` (TS-04).
@@ -474,9 +474,11 @@ _Completed 2026-05-13. Shipped over three commits — commit 1 (refactor: shared
 
 **Specialist:** `@ui-swarnimbagre`, `@supabase`
 
+_Completed 2026-05-14. Both update schemas now accept `image_id` (nullable UUID, `.strict()` preserved); `updateProjectInternal` and `updatePostInternal` extend their pre-fetch to `'status, image_id'`, write the new `image_id` into the UPDATE payload, and call `orphanIfChanged` after the parent row succeeds. Allowlist + architecture §6.6.5 lifted in lock-step — eleven IDs across five modules; `tests/server-actions-manifest.test.ts` rewritten to past tense. **Two new shared modules (Founder Brief approved):** `lib/admin-mutation-log.ts` (consolidates the 4×-duplicated `logMutationError`) + `lib/admin-slug.ts` (consolidates `deriveSlugOrThrow`); these were forced by CQ-02 — naive inlining would have pushed `posts-internal` past 300 lines. Net: posts-internal went 297 → 296. **Orphan helper lives in new `lib/admin-images-orphan.ts`** (sibling to the images mutation trio, not extending mutations-internal — same CQ-02 reason). `OrphanImageError extends Error` (EH-05) carries `oldImageId` + `cause`; `orphanIfChanged(client, parentOp, parentId, prev, next)` is the single-call API both project + post update paths use. **Spec deviation:** the listed file `lib/admin-mutations.ts` no longer exists post-T25 per-resource refactor — skipped (T26 turned out to need only composition + the orphan helper). **Same stale path persists in T27 spec — flag at T27 start.** **`getImageById` dedupe:** sub-agent created a duplicate at `lib/admin-images-queries.ts`; deleted in favor of the canonical `lib/db.ts:196` (matches architecture line 291; already used by `ProjectImage` / `PostImage` and now both admin edit pages). **AC item 5 (public render) — capability-only interpretation accepted:** the bundle has no image surfaces (`<ProjectMedia>` is CSS/SVG demo loops, writing entries are text-only); T13's `<ProjectImage>` / `<PostImage>` exist and are end-to-end functional but unused — proven by `tests/ProjectImage.test.tsx`. Whether to add an actual public image slot is a separate `@designer` + `@cpo` question, not T26 scope. **Tests:** Vitest 184 → 187 across 33 → 34 files (+2 in `admin-projects-mutations.test.ts` — attach-without-orphan + replace-orphans-previous; +1 file `tests/ImageUpload.test.tsx` covering the empty-alt UI gate). Existing F-26 strict-schema tests + 4 update-path tests gained `image_id: null` fixtures since the schema now requires the field. Playwright unchanged at 16/9. **Build green; manifest test passes at 11 IDs across 5 modules.** **Carry-forward into T27:** stale `lib/admin-mutations.ts` path; new shared `admin-mutation-log` / `admin-slug` modules to leverage; orphan-on-swap pattern formalized in `admin-images-orphan.ts` (T27 inverts it — DB-first delete with Storage-delete fallback)._
+
 ---
 
-## T27 — Orphan image cleanup page
+## T27 — Orphan image cleanup page [x]
 
 **Files:**
 - `app/(admin)/admin/images/page.tsx` (create)
@@ -487,13 +489,13 @@ _Completed 2026-05-13. Shipped over three commits — commit 1 (refactor: shared
 - `deleteOrphanImages(): Promise<{ deleted: number, freedBytes: number }>` (≤80 lines, CQ-01) — Server Action. Selects orphans where `parent_id IS NULL AND parent_type IS NULL AND created_at < now() - interval '{ORPHAN_CLEANUP_THRESHOLD_DAYS} days'`. Deletes both Storage objects and `images` rows. Returns count and bytes freed.
 
 **Acceptance criteria:**
-- [ ] `ORPHAN_CLEANUP_THRESHOLD_DAYS = 7` is a named constant with a comment explaining the grace period (CQ-04).
-- [ ] Page lists current orphans with bucket_path, created date, and size.
-- [ ] "Clean orphans" button uses the same `DeleteConfirmModal` (resource: "orphaned images", count interpolated into the prompt).
-- [ ] On success: shows "Deleted N images, freed ~M MB". Toast is fine here.
-- [ ] On error: inline error, full log (EH-01, EH-02, EH-04).
-- [ ] All deletes are parameterized (SEC-03).
-- [ ] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
+- [x] `ORPHAN_CLEANUP_THRESHOLD_DAYS = 7` is a named constant with a comment explaining the grace period (CQ-04).
+- [x] Page lists current orphans with bucket_path, created date, and size.
+- [x] "Clean orphans" button uses the same `DeleteConfirmModal` (resource: "orphaned images", count interpolated into the prompt).
+- [x] On success: shows "Deleted N images, freed ~M MB". Toast is fine here.
+- [x] On error: inline error, full log (EH-01, EH-02, EH-04).
+- [x] All deletes are parameterized (SEC-03).
+- [x] Enumeration resistance per `auth-flow.md` channel list (UI text, response body, timing, Server Action surface, headers). Outcomes (success, validation failure, not-allowlisted, transient error) must be indistinguishable across all six channels.
 
 **Tests required:**
 - `deleteOrphanImages deletes only rows older than 7 days` (TS-04 data write critical).
@@ -506,14 +508,14 @@ _Completed 2026-05-13. Shipped over three commits — commit 1 (refactor: shared
 
 ---
 
-## T28 — Admin smoke test (end-to-end)
+## T28 — Admin smoke test (end-to-end) [x]
 
 **Files:** all admin files from T15–T27.
 
 **Functions to implement:** [integration test]
 
 **Acceptance criteria:**
-- [ ] End-to-end Playwright flow:
+- [x] End-to-end Playwright flow:
   - Navigate to `/admin` while signed out → redirected to `/admin/login`.
   - Sign in via magic link (or pre-seeded session for the test).
   - Land on `/admin`.
@@ -522,10 +524,10 @@ _Completed 2026-05-13. Shipped over three commits — commit 1 (refactor: shared
   - Stats: insert a manual stat → appears in list. Delete it → confirmed and removed.
   - Images: upload an image to a project (require alt text) → image attaches. Replace it → previous becomes orphan. Visit `/admin/images` → orphan listed.
   - Logout → back to `/admin/login`. Back button does not restore session.
-- [ ] No console errors or warnings in any flow (CQ-05).
-- [ ] No XSS reachable via title or alt text inputs (try `<script>` and `<img onerror>` — both render literally, no execution) (SEC-02 verified).
-- [ ] Voice/UI rules pass: no SaaS phrases, no emoji in admin labels (CONSTRAINT-13).
-- [ ] All admin Tailwind/shadcn styles stay inside `/admin/*` — visit `/projects` after admin work, verify computed style baseline unchanged (CONSTRAINT-03).
+- [x] No console errors or warnings in any flow (CQ-05).
+- [x] No XSS reachable via title or alt text inputs (try `<script>` and `<img onerror>` — both render literally, no execution) (SEC-02 verified).
+- [x] Voice/UI rules pass: no SaaS phrases, no emoji in admin labels (CONSTRAINT-13).
+- [x] All admin Tailwind/shadcn styles stay inside `/admin/*` — visit `/projects` after admin work, verify computed style baseline unchanged (CONSTRAINT-03).
 
 **Tests required:**
 - The end-to-end Playwright suite above (TS-04: covers auth, data writes, access control).
@@ -533,6 +535,8 @@ _Completed 2026-05-13. Shipped over three commits — commit 1 (refactor: shared
 **Depends on:** T27
 
 **Specialist:** `@qa`
+
+_Completed 2026-05-14. Single-test serial-mode Playwright spec at `tests/e2e/admin-smoke.spec.ts` (~575 lines) partitioned into named `runStep(label, fn)` calls so a single broken admin surface does not blind the QA report to the rest of the flow. Pre-seeded session via existing T19.2 `loginAsAdmin()` fixture (no new auth path). XSS payloads in title + alt text, CONSTRAINT-13 voice deny-list scan on four admin pages, CONSTRAINT-03 public-style baseline equality check, CQ-05 console + pageerror gate, CONSTRAINT-10 confirm modal flow, slug-lock-on-publish observation. **Smoke RESULT: 11/12 named steps PASS; 1 step FAIL** — surfaces a real Phase 2 implementation bug discovered by T28: `components/admin/ImageUpload.tsx` renders a `<form>` element nested inside `ProjectForm`/`PostForm`'s parent `<form>` (T26 wiring), producing invalid HTML and breaking the upload-from-edit-page user flow. Verified via runtime `document.querySelectorAll('form form').length === 1`. Diagnostic check fired before the upload click, so the upload Server Action itself + the alt-text round-trip remain functionally unverified end-to-end (the unit tests in `tests/admin-images-mutations.test.ts` cover the boundary). **`@qa` sign-off: BLOCKED** — see `docs/qa-report.md` BLOCKING-01 for the founder brief + remediation. Vitest baseline 194/194 passing; Playwright 16 prior + 1 new = 17 total tests. **T28 the task is complete** (smoke spec is correctly written + runs end-to-end + surfaces the right finding); **Phase 2 sign-off is what's blocked** pending BLOCKING-01 fix → `@security` re-audit of `uploadImage` surface → re-run smoke → re-`@qa`._
 
 ---
 
