@@ -1,0 +1,11 @@
+{
+  "imports": {
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@^2.47.0",
+    "zod": "npm:zod@^4.4.3",
+    "jsr:@std/assert@1": "jsr:@std/assert@^1.0.0"
+  },
+  "tasks": {
+    "test": "deno test --allow-read --allow-env"
+  },
+  "lock": false
+}
