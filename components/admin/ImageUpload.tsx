@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useRef, useState } from 'react';
+import { useActionState, useEffect, useRef, useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -43,12 +43,19 @@ export interface ImageUploadProps {
 }
 
 /**
- * Admin image upload form. File picker + required alt-text + hidden
- * parentType/parentId. Submit disabled until a file is selected AND alt-text
- * is non-empty (mirrors the zod `.min(1)` boundary). Client-side pre-checks
- * size + MIME on file pick (UX only — server is authoritative). Success
- * effect dedupes via `handledStateRef` so `onUpload(image)` fires once per
- * submit; mirrors the `StatsInsertForm` pattern.
+ * Admin image upload widget. File picker + required alt-text + parentType /
+ * parentId values appended to FormData via a manual dispatch handler. Submit
+ * disabled until a file is selected AND alt-text is non-empty (mirrors the
+ * zod `.min(1)` boundary). Client-side pre-checks size + MIME on file pick
+ * (UX only — server is authoritative). Success effect dedupes via
+ * `handledStateRef` so `onUpload(image)` fires once per submit; mirrors the
+ * `StatsInsertForm` pattern.
+ *
+ * **Non-form wrapper (BLOCKING-01 fix):** renders a `<div>`, not a `<form>`,
+ * because `ProjectForm` / `PostForm` compose this widget inside their own
+ * `<form>` (nested `<form>` is invalid HTML and silently breaks submit).
+ * `dispatch(formData)` is called inside a `useTransition` so the
+ * `useActionState` envelope (state shape, `isPending`) is preserved.
  */
 export default function ImageUpload({
   parentType,
@@ -57,10 +64,11 @@ export default function ImageUpload({
   onError,
   uploadAction = uploadImage,
 }: ImageUploadProps): React.ReactElement {
-  const [state, formAction, isPending] = useActionState<
+  const [state, dispatch, isPending] = useActionState<
     ImageMutationState,
     FormData
   >(uploadAction, IMAGE_MUTATION_INITIAL_STATE);
+  const [, startTransition] = useTransition();
 
   // File state — controlled via `useState`. The `<input type="file">` itself
   // is uncontrolled (React deliberately disallows controlling its `value`
@@ -118,6 +126,25 @@ export default function ImageUpload({
   const altTextError = state.fieldErrors?.altText ?? '';
   const fileError = state.fieldErrors?.file ?? clientError;
 
+  /**
+   * Build the FormData payload from current state and dispatch the Server
+   * Action. Fields appended here mirror what the previous inner `<form>`
+   * carried — `parentType`, `parentId`, `file`, `altText` — so the server
+   * boundary sees an identical wire shape. Wrapped in `startTransition`
+   * because `dispatch` is invoked outside a `<form action={...}>` binding;
+   * React requires Action calls to occur inside a transition for `isPending`
+   * to track the in-flight action.
+   */
+  function handleUpload(): void {
+    if (submitDisabled || file === null) return;
+    const formData = new FormData();
+    formData.append('parentType', parentType);
+    formData.append('parentId', parentId);
+    formData.append('file', file);
+    formData.append('altText', altText);
+    startTransition(() => dispatch(formData));
+  }
+
   return (
     <section className="space-y-4">
       {state.status === 'error' && state.formError ? (
@@ -125,9 +152,7 @@ export default function ImageUpload({
           {state.formError}
         </p>
       ) : null}
-      <form action={formAction} className="space-y-4" noValidate>
-        <input type="hidden" name="parentType" value={parentType} />
-        <input type="hidden" name="parentId" value={parentId} />
+      <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="image-file">Choose image</Label>
           <Input
@@ -175,11 +200,11 @@ export default function ImageUpload({
           ) : null}
         </div>
         <div className="flex items-center gap-2">
-          <Button type="submit" disabled={submitDisabled}>
+          <Button type="button" onClick={handleUpload} disabled={submitDisabled}>
             {isPending ? 'Uploading' : 'Upload'}
           </Button>
         </div>
-      </form>
+      </div>
     </section>
   );
 }
