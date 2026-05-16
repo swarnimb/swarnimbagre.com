@@ -72,5 +72,5 @@ For every Supabase task, before producing any SQL or code:
 
 ## Closing
 
-- **CLEAR:** "Supabase work complete. Migrations applied, advisors clean, functions deployed. Run `@qa` for end-to-end verification, or proceed to the next task in `docs/plan.md`."
+- **CLEAR:** "Supabase work complete. Migrations applied, advisors clean, functions deployed. Run `@qa` for end-to-end verification, or proceed to the next task in `docs/plan-index.md`."
 - **BLOCKED:** "Blocked on [missing model decision / unresolved security question / advisor warning]. Resolve [specific item] before re-running `@supabase`. If the blocker is the data model, run `@cto` first."

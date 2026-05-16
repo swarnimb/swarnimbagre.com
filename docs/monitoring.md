@@ -38,7 +38,7 @@ See `docs/founder-brief.md` entry 23 for the full rationale.
 
 - **Supabase dashboard → Authentication → Logs.** Filter by event: `magiclink` / `token`.
 - Cross-check the email allowlist: `ADMIN_ALLOWED_EMAIL` in Vercel Production env must match the sender. CONSTRAINT-09 enforces single-user.
-- If the token loop redirects oddly, also check Vercel Runtime Logs for the `/auth/callback` and `/auth/confirm` routes (CONSTRAINT-18 — `flowType: 'implicit'`).
+- If the token loop redirects oddly, also check Vercel Runtime Logs for the `/admin/auth/callback` route (CONSTRAINT-18 — `flowType: 'implicit'`).
 
 ### Image upload fails
 

@@ -66,7 +66,7 @@ Single user, magic link auth. Lean CRUD only. No analytics, no scheduling, no da
 ### 3.1 Auth
 
 **Provider:** Supabase Auth, email magic link, Email provider only.
-**Sole account:** swarnim.build@gmail.com. Enforced in two places: Supabase Auth user table AND the `ADMIN_ALLOWED_EMAIL` environment variable. Both must match for sign-in to succeed.
+**Sole account:** the configured admin email (held in `ADMIN_ALLOWED_EMAIL` and the Supabase Auth user record; not committed to the repo). Enforced in two places: Supabase Auth user table AND the `ADMIN_ALLOWED_EMAIL` environment variable. Both must match for sign-in to succeed.
 **JWT:** 1 hour (Supabase default).
 **Refresh:** 30 days inactivity (Supabase default).
 **Lockout fallback:** if email is unreachable, recover by manually invalidating session in the Supabase dashboard.

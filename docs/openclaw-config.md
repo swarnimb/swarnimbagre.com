@@ -1,7 +1,7 @@
 # OpenClaw Configuration: swarnimbagre.com
 
 **Date:** 2026-05-14
-**Status:** Spec only. Implementation lives in Phase 3 T30 (the `stats-ingest` Edge Function itself) and T31 (integration test + final doc pass). T29 establishes the shared secret and this doc; the Edge Function code does not yet exist.
+**Status:** T29 established the shared secret and this doc. The Edge Function code now exists — it shipped in T30 (`supabase/functions/stats-ingest/index.ts`, with `supabase/functions/stats-ingest/index.test.ts`). T31 remains: integration test + final doc pass.
 
 This document is the operational spec for the shared-secret authentication that gates the `stats-ingest` Edge Function. It satisfies DS-02 — the secret and its lifecycle are documented before the function that consumes it is written. OpenClaw is a Telegram-bot ingestion agent (Python, runs on a separate machine, separate repository). It is the only party authorized to write to the `stats` table (CONSTRAINT-04), and it does so by including the shared secret in an HTTP header on every request.
 
@@ -73,7 +73,7 @@ Content-Type: application/json
 
 The exact `{project-ref}` and the request body schema come from `docs/architecture.md` §3.3. The endpoint URL is captured in OpenClaw's config alongside the secret. Both are deployment-time config; neither is hard-coded in OpenClaw source.
 
-OpenClaw expects 201 on success and treats 401 as a fatal config error (rotate-then-retry, not retry-loop). 400 is treated as a bot bug (malformed body) and surfaces to the operator. Any 5xx is retried with backoff per OpenClaw's own retry policy (defined in the OpenClaw repo, not here).
+OpenClaw expects 201 on success and treats 401 as a fatal config error (rotate-then-retry, not retry-loop). 400 is treated as a bot bug (malformed body) and surfaces to the operator; the 400 response body includes a `field` naming the offending input field (never its value) to aid OpenClaw-side debugging — consistent with SEC-05, it never echoes the secret, the header, or the field value. Any 5xx is retried with backoff per OpenClaw's own retry policy (defined in the OpenClaw repo, not here).
 
 ---
 

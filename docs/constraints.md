@@ -111,7 +111,7 @@
 
 ### [CONSTRAINT-09] Magic link auth, single user
 
-**Decision:** Supabase Auth with Email provider only. Magic link flow. One account: swarnim.build@gmail.com. JWT 1 hour, refresh 30 days inactivity (Supabase defaults). Lockout fallback is manual session invalidation in the Supabase dashboard.
+**Decision:** Supabase Auth with Email provider only. Magic link flow. One account: the configured admin email (held in `ADMIN_ALLOWED_EMAIL` and the Supabase Auth user record; intentionally not committed to the repo). JWT 1 hour, refresh 30 days inactivity (Supabase defaults). Lockout fallback is manual session invalidation in the Supabase dashboard.
 
 **What it means in practice:** No password storage. No social login. No multi-user logic. The middleware's auth check is pure session-presence — no role check is needed because there is exactly one user. Adding a second user is a non-trivial feature.
 

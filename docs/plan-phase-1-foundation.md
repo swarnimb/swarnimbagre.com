@@ -228,7 +228,7 @@ Foundation phase covers external-deps prep, Next.js 15 App Router scaffolding, S
 
 **Acceptance criteria:**
 - [x] Email provider enabled in Supabase Auth. All other providers disabled (CONSTRAINT-09).
-- [x] Single user `swarnim.build@gmail.com` created in Supabase Auth dashboard.
+- [x] Single admin user created in the Supabase Auth dashboard (address held in `ADMIN_ALLOWED_EMAIL`; not recorded here).
 - [x] JWT expiry: 1 hour (default). Refresh expiry: 30 days inactivity (default). No customization (CONSTRAINT-09).
 - [x] `docs/auth-flow.md` documents: (1) admin clicks Login, (2) enters email, (3) receives magic link, (4) clicks link → callback → session set, (5) redirects to `/admin`, (6) logout clears session, (7) lockout fallback = manual session invalidation in Supabase dashboard (DS-02).
 - [x] `.env.example` confirms `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (SEC-01).
@@ -510,7 +510,7 @@ Sub-phased on 2026-05-07 into T10a–T10d. Track progress at sub-phase level. Or
 
 **Files:**
 - `.env.example` (finalize)
-- `docs/env-vars.md` (create — DS-02)
+- `docs/env-checklist.md` (create — DS-02)
 - Vercel project settings (operational)
 - `next.config.ts` (modify — add a startup check for required env vars; throw if missing — EH-01)
 
@@ -520,8 +520,8 @@ Sub-phased on 2026-05-07 into T10a–T10d. Track progress at sub-phase level. Or
 **Acceptance criteria:**
 - [x] `.env.example` is final for Phase 1: all three Supabase vars listed, no values, header comments distinguish public vs server-only (SEC-01).
 - [x] Vercel project environment variables set for production with the same three names. Service role key is server-only (Production + Preview).
-- [x] `docs/env-vars.md` documents: each var name, public vs server-only, where to get the value (Supabase dashboard), where to set locally (`.env.local`), where to set in production (Vercel dashboard) (DS-02).
-- [x] Startup check fails loudly with a descriptive error if any var is missing (EH-01, EH-02). Verified — local build threw on missing SUPABASE_SERVICE_ROLE_KEY with a clear message listing the missing var and pointing at `docs/env-vars.md`.
+- [x] `docs/env-checklist.md` documents: each var name, public vs server-only, where to get the value (Supabase dashboard), where to set locally (`.env.local`), where to set in production (Vercel dashboard) (DS-02).
+- [x] Startup check fails loudly with a descriptive error if any var is missing (EH-01, EH-02). Verified — local build threw on missing SUPABASE_SERVICE_ROLE_KEY with a clear message listing the missing var and pointing at `docs/env-checklist.md`.
 - [x] `npm run build` succeeds with no warnings (CQ-05). Initial run logged 3 Dynamic-server-usage errors caught by `safeLoad`; resolved by declaring `/projects /writing /other` as `export const dynamic = 'force-dynamic'` since they call `cookies()` via `createServerClient`. Second build is clean.
 - [x] First Vercel production deploy succeeds. After a one-time framework-preset fix (Vercel had it set to "Other" instead of "Next.js"), deploy is green; route table shows all DB-driven pages as `ƒ` dynamic on-demand.
 - [x] Supabase logs show no errors from the deploy. Verified via `mcp__supabase__get_logs` — postgres logs clean (the only ERRORs are dashboard-side `supabase_migrations.schema_migrations does not exist` quirks unrelated to the app); API logs show 200s on `/rest/v1/projects`, `/rest/v1/posts`, `/rest/v1/stats` in the deploy window.

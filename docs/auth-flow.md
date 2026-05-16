@@ -1,9 +1,9 @@
 # Auth Flow: swarnimbagre.com
 
-**Date:** 2026-05-07
-**Status:** Spec only. Implementation lives in Phase 2 T17 (admin middleware + login page wiring).
+**Date:** 2026-05-07 (originated as pre-T17 spec; reconciled to as-built at T38, 2026-05-15)
+**Status:** As-built reference. T17 has shipped — the login page, callback route, and `/admin/*` middleware exist; §2–§4 describe what the code actually does, not a requirement against future work.
 
-This document is the specification for admin authentication on swarnimbagre.com. It satisfies DS-02 — the architectural decision (magic-link, single user, no passwords) is documented before the code that depends on it is written. Configuration of Supabase Auth and creation of the admin user happen in Phase 1 T9; the application-side login page, callback route, and `/admin/*` middleware ship in Phase 2 T17. Anything described here as "the middleware does X" is a requirement against T17, not a description of code that exists today.
+This document originated as the DS-02 specification for admin authentication on swarnimbagre.com — the architectural decision (magic-link, single user, no passwords) documented before the code was written. T17 has since shipped and this doc has been reconciled against the implementation (`lib/auth.ts`, `lib/auth-internal.ts`, `app/(admin)/admin/auth/callback/route.ts`, `middleware.ts`, `lib/supabase.ts`). The contract holds: this doc and the code agree.
 
 Out of scope: public-site auth (there is none — all public reads are anon role + RLS), the OpenClaw write path (shared-secret Edge Function — see CONSTRAINT-04), and any future multi-user model (closed off by CONSTRAINT-09).
 
@@ -13,7 +13,7 @@ Out of scope: public-site auth (there is none — all public reads are anon role
 
 - Magic-link only. No passwords are stored or accepted.
 - Email provider only. No OAuth, no phone, no SAML (CONSTRAINT-09).
-- Single allowed user: `swarnim.build@gmail.com`.
+- Single allowed user: whatever `ADMIN_ALLOWED_EMAIL` is set to. The address is env-configured, not hardcoded, and deliberately not committed to the repo — see `lib/env.ts::getAdminAllowedEmail`.
 - JWT expiry: 1 hour (Supabase default — no customization).
 - Refresh expiry: 30 days inactivity (Supabase default — no customization).
 - No "remember me" toggle. No role tiers. No password reset (no passwords to reset).
@@ -24,14 +24,14 @@ Out of scope: public-site auth (there is none — all public reads are anon role
 ## 2. Login Flow
 
 1. User navigates to `/admin/login`.
-2. The page renders a single-field form: email. The user enters `swarnim.build@gmail.com`.
-3. Client calls `supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: 'https://swarnimbagre.com/admin/auth/callback' } })`. Supabase sends a magic link to the inbox.
+2. The page renders a single-field form: email. The user enters the admin email.
+3. The form submits to the `signInWithMagicLink` Server Action (`lib/auth.ts`, `'use server'`), which wraps the internal helper `attemptMagicLink` (`lib/auth-internal.ts`). The sign-in is server-side — there is no browser/client Supabase call on this path. The helper zod-validates the email, runs the allowlist check (`assertAllowlistedEmail`), then calls `supabase.auth.signInWithOtp({ email, options: { emailRedirectTo, shouldCreateUser: false } })`. `emailRedirectTo` is built dynamically as `${getSiteUrl()}/admin/auth/callback`, where `getSiteUrl()` resolves `NEXT_PUBLIC_SITE_URL` first and falls back to a `https://`-prefixed `NEXT_PUBLIC_VERCEL_URL` — it is **not** a hardcoded host. `shouldCreateUser: false` is security-load-bearing: an unknown email cannot auto-provision an authenticated user even if the dashboard signup toggle is misconfigured (Layer 1, §3). On success Supabase sends a magic link to the inbox.
 4. Regardless of whether the email matches the allowlisted address, the response must be uniform across all six observable channels enumerated in §2a (UI text, response body, response timing, Server Action surface, response headers, status code). This avoids leaking which addresses are valid (SEC-04 — defense against user enumeration). The literal UI text is a single template: "If an account exists for that address, a sign-in link has been sent." The other channels are not optional and not separable — see §2a.
-5. User opens the email and clicks the magic link. The link points at `https://swarnimbagre.com/admin/auth/callback?token_hash=...&type=email`.
-6. The `/admin/auth/callback` route handler calls `supabase.auth.verifyOtp({ token_hash, type: 'email' })` to exchange the token for a session. (`verifyOtp` is the correct method for the `token_hash` + `type` query-param shape that `signInWithOtp` produces. `exchangeCodeForSession` is for the PKCE/`?code=...` flow, which is not used here.)
-7. On success, `@supabase/ssr` writes the session cookies — `sb-access-token` and `sb-refresh-token` — as `httpOnly`, `Secure`, `SameSite=Lax`.
+5. User opens the email and clicks the magic link. The link points at `${getSiteUrl()}/admin/auth/callback?token_hash=...&type=email` (the origin is whatever `getSiteUrl()` resolved at send time, not a hardcoded host).
+6. The `/admin/auth/callback` route handler supports two payload shapes. The production magic-link path is `?token_hash=...&type=email`, verified via `supabase.auth.verifyOtp({ token_hash, type })`. The handler also retains a live `?code=...` branch verified via `supabase.auth.exchangeCodeForSession(code)` — the PKCE shape — intentionally kept for a future OAuth path even though the current single-user magic-link model does not exercise it. Both branches, on success, run the `rejectIfNotAllowlisted` check (§3 Layer 2) before redirecting.
+7. On success, `@supabase/ssr` persists the session via `httpOnly` cookies. The exact cookie names and attributes are managed internally by the SSR library and are not set explicitly by application code — modern `@supabase/ssr` uses a chunked `sb-<project-ref>-auth-token` cookie scheme rather than discrete `sb-access-token` / `sb-refresh-token` cookies. The `httpOnly`, `Secure`, `SameSite=Lax` behavior is library-managed, not asserted by app code.
 8. The callback redirects to `/admin` (the dashboard home).
-9. On every subsequent request to `/admin/*`, the Next.js middleware (T17) checks for a valid session. No session, expired session, or wrong user email → redirect to `/admin/login`.
+9. On every subsequent request to a gated `/admin/*` path, the Next.js middleware checks for a valid session via `getSession()`. No session or a `getSession()` error → redirect to `/admin/login`. The middleware does not compare the user email; that comparison already happened at steps 3 and 6 (§3 Layer 2).
 
 ---
 
@@ -63,22 +63,25 @@ Out of scope: public-site auth (there is none — all public reads are anon role
 
 ## 3. Email Allowlist Enforcement
 
-The auth provider does not by itself restrict which email addresses may sign in. Enforcement is layered:
+The auth provider does not by itself restrict which email addresses may sign in. Enforcement is layered. It does **not** live in the `/admin/*` middleware — the middleware checks session presence/validity only (see Layer 3). The email comparison happens at the sign-in helper (before the magic link is sent) and again at the callback route (after the session is established), so a non-allowlisted email never obtains a valid admin session.
 
 | Layer | Where | What it does | Failure mode |
 |---|---|---|---|
-| 1. Operational | Supabase Auth dashboard | Exactly one user record exists, for `swarnim.build@gmail.com`. "Allow new users to sign up" is OFF, so an OTP request for a non-existent email does not auto-create an account. | If "Allow new users" is ever flipped on, anyone could create an account. Treat this setting as a config-level invariant. |
-| 2. Defense in depth | `/admin/*` middleware (T17) | Reads `session.user.email`. If it is not equal to `process.env.ADMIN_ALLOWED_EMAIL`, clears the session and redirects to `/admin/login`. | Catches the case where Layer 1 is misconfigured or a second user is ever created. |
+| 1. Operational | Supabase Auth dashboard | Exactly one user record exists, for the configured admin email. "Allow new users to sign up" is OFF, so an OTP request for a non-existent email does not auto-create an account. Reinforced in code: `attemptMagicLink` passes `shouldCreateUser: false` to `signInWithOtp`. | If "Allow new users" is ever flipped on, the `shouldCreateUser: false` flag still blocks auto-provisioning. Treat the dashboard setting as a config-level invariant regardless. |
+| 2. Allowlist comparison | `lib/auth-internal.ts` (`assertAllowlistedEmail`, pre-send) and `app/(admin)/admin/auth/callback/route.ts` (`rejectIfNotAllowlisted`, post-session) | Sign-in helper: compares the submitted email to `getAdminAllowedEmail()` before `signInWithOtp` is called; a mismatch throws and no link is sent. Callback: after `verifyOtp`/`exchangeCodeForSession` succeeds, calls `getUser()` (a Supabase round-trip, not a cookie read), compares `data.user.email` to `getAdminAllowedEmail()`, and on mismatch calls `signOut()` then redirects to `/admin/login?error=callback_failed`. | The callback `signOut()` ensures a forged or replayed token cannot leave a live cookie behind even if a non-allowlisted token somehow reaches the callback. |
+| 3. Session gate | `/admin/*` middleware (`middleware.ts`) | Checks session presence/validity only via `getSession()`. No session or `getSession()` error → redirect to `/admin/login`. Adds the SEC-09 timing floor and emits no `Set-Cookie` on the redirect outcomes so all three redirect cases are byte-uniform. Does **not** perform any email comparison. | Catches expired or absent sessions. Email allowlisting is already enforced upstream by Layer 2, so the gate does not need to re-check the address. |
 
-`ADMIN_ALLOWED_EMAIL` is a server-only env var set to `swarnim.build@gmail.com` in Vercel and in local `.env.local`. It is added to `.env.example` as part of T17, **not** T9. T9's `.env.example` carries only the three Supabase vars listed in Section 8 below.
+`ADMIN_ALLOWED_EMAIL` is a server-only env var set to the admin email in Vercel and in local `.env.local` (the real value is never committed to the repo), read via `getAdminAllowedEmail()`. It is added to `.env.example` as part of T17, **not** T9. T9's `.env.example` carries only the three Supabase vars listed in Section 8 below.
+
+**Follow-up (non-blocking):** An optional redundant email check could be added to the middleware (compare the session user's email to `ADMIN_ALLOWED_EMAIL` and clear the session on mismatch) purely as additional defense in depth. This is not required and does not block anything. The callback-route check is already effective and is in fact stronger than a middleware cookie read would be: `rejectIfNotAllowlisted` uses a `getUser()` round-trip to Supabase to obtain the authoritative user record, whereas the middleware only has the cookie session available. Combined with the pre-send check in the sign-in helper, a non-allowlisted address has no path to a valid admin session, so the middleware addition is an optional hardening, not a gap.
 
 ---
 
 ## 4. Logout Flow
 
 1. User clicks "Logout" in the admin UI.
-2. Client (or Server Action) calls `supabase.auth.signOut()`. This clears the session cookies and revokes the refresh token server-side.
-3. Redirect to `/` (public home).
+2. The `signOut` Server Action (`lib/auth.ts`, `'use server'`) calls `supabase.auth.signOut()`. This clears the session cookies and revokes the refresh token server-side. The same six-channel discipline as sign-in applies — the catch is silent and the timing floor is enforced before redirect.
+3. Redirect to `/admin/login`.
 
 ---
 
@@ -87,7 +90,7 @@ The auth provider does not by itself restrict which email addresses may sign in.
 If the magic link cannot be received (lost inbox access, email provider outage, deliverability issue):
 
 1. Open the Supabase dashboard → Authentication → Users.
-2. Locate `swarnim.build@gmail.com` and either trigger "Send magic link" / "Send password recovery" from the row actions, or copy a one-time recovery URL.
+2. Locate the admin user row and either trigger "Send magic link" / "Send password recovery" from the row actions, or copy a one-time recovery URL.
 3. If the user record itself is unrecoverable (account fully compromised or destroyed), delete the record and recreate it with the same email. **Data loss risk: zero.** All admin-managed data lives in `projects`, `posts`, `stats`, `images` — none of it is keyed off the auth user's UUID. The admin's identity is the email, not the UUID. RLS uses role-based policies (`authenticated` vs `anon`), not user-id matching.
 
 This is a single-user system. If the only inbox is permanently lost, recovery requires Supabase dashboard access, which is a separate failure mode (Supabase dashboard login uses GitHub or a GitHub-linked email — losing both inboxes simultaneously is the unrecoverable case, and it falls outside this system's scope).
@@ -102,15 +105,16 @@ This is a single-user system. If the only inbox is permanently lost, recovery re
 
 ---
 
-## 7. What's NOT in this document
+## 7. Implementation lineage
 
-This is the spec. Implementation tasks:
+Where the pieces this doc describes were built:
 
-- **T9 (Phase 1):** Supabase Auth dashboard configuration (email provider on, all others off; user created; signup disabled). This document.
-- **T17 (Phase 2):** `/admin/login` page, `/admin/auth/callback` route handler, `middleware.ts` admin gate, `ADMIN_ALLOWED_EMAIL` env var added to `.env.example`. Tests for the full flow.
-- **Subsequent admin tasks:** Logout button wiring, session-expiry redirect UX.
+- **T9 (Phase 1):** Supabase Auth dashboard configuration (email provider on, all others off; user created; signup disabled).
+- **T17 (Phase 2):** `/admin/login` page, `/admin/auth/callback` route handler, `middleware.ts` admin gate, `ADMIN_ALLOWED_EMAIL` env var added to `.env.example`, tests for the full flow.
+- **Subsequent admin tasks:** logout button wiring, session-expiry redirect UX.
+- **T38 (Phase 4):** this doc reconciled to as-built — allowlist enforcement location corrected (callback + sign-in helper, not middleware), logout redirect corrected to `/admin/login`, §2 narrative aligned to §2a, cookie naming softened to library-managed.
 
-If anything in this document conflicts with what is actually implemented in T17, update this document at that time. The contract is: this doc and the code agree at all times after T17 ships.
+The contract: this doc and the code agree. Any future change to the auth flow updates this document in the same task.
 
 ---
 

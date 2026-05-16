@@ -35,6 +35,9 @@ This file is the plain-language record of every architectural decision. The audi
 | 21 | `useActionState` dispatch from inside a parent form (BLOCKING-01 closure) | [§6.6.7](architecture.md#667-useactionstate-dispatch-from-inside-a-parent-form) |
 | 22 | `storage.objects` RLS policy required per Storage bucket (migration 007) | [§2.4](architecture.md#24-images) + CONSTRAINT-20 |
 | 23 | Defer Sentry pre-launch — manual log review until launch (T32 Option B) | [`monitoring.md`](monitoring.md) + CONSTRAINT-05 |
+| 24 | Admin query modules split per resource + shared `logQueryError` (T37) | [§6.6.8](architecture.md#668-admin-query-surface--per-resource-split--shared-query-error-helper-t37-cq-02cq-07) |
+| 25 | Image-bucket size/MIME limits codified in migration 008 (F-30) | [§2.4](architecture.md#24-images) + [§5.2](architecture.md#52-supabase) |
+| 26 | `/api/admin/*` route handlers self-gate via `getServerSession()` (F-17) | [§6.6.4](architecture.md#664-apiadmin-route-handler-gate-f-17-audit-pass-5) |
 
 ---
 
@@ -519,6 +522,54 @@ wall-clock proves the wrapper ran end-to-end).
 **What this closes off:** Almost nothing material. `@sentry/nextjs` is a ~30-min wizard install; reversibility is high. The only thing forfeited is automatic capture of errors during pre-launch QA — reproducible manually because the builder is the only user. PII-scrubbing rules are deliberately not authored speculatively; they get designed against real event payloads when Option A is activated, which is a feature, not a cost. A future builder reading this entry should not interpret "deferred" as "rejected" — it is a sequencing call.
 
 **Implemented in:** `@cto` consultation + `@dev` execution during T32, 2026-05-14. `.env.example` adds `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN` stubs with deferred-status comment block. `docs/monitoring.md` created — interim playbook + flip-to-A gate condition. `docs/plan-phase-4-launch.md` T32 marked `[x]` with "Option chosen: B" header note. No `lib/sentry.ts`, no `next.config.ts` change, no tests (Option A's two tests are gated on actually wiring Sentry). Public bundle untouched.
+
+---
+
+## 2026-05-15 — Admin query modules split per resource + shared `logQueryError` (T37)
+
+**Architecture reference:** §6.6.8
+
+**Decided:** The admin read code (`lib/admin-queries.ts`) was split into one module per resource — `admin-queries-projects.ts`, `admin-queries-posts.ts`, `admin-queries-stats.ts` — exactly mirroring the mutation-side per-resource split (decision #19). The original `lib/admin-queries.ts` path is kept as a thin barrel that re-exports the new modules, so nothing that imported it had to change. The structured error-logging helper that had been copy-pasted into each query module was collapsed into one `logQueryError` in `lib/admin-mutation-log.ts` (the module that already owns the mutation-side `logMutationError`).
+
+**Means for your product:** No behaviour change — this is structural hygiene. `lib/admin-queries.ts` had grown past the 300-line file budget (CQ-02) and carried three near-identical copies of the same logging helper (CQ-07). Splitting it keeps each file small enough to read in one sitting and means a future bug in, say, the posts query path can't accidentally touch the projects path. The barrel keeps the change invisible to every caller.
+
+**Check before approving:** `npm run build` and `npx tsc --noEmit` clean, the full Vitest suite green (201/201), and the Server Action manifest still exactly 12 IDs — confirmed at T37. No consumer import path changed.
+
+**What this closes off:** The "one big admin-queries file" shape, and per-module duplicate log helpers. New admin resources get their own `admin-queries-<resource>.ts`; the barrel re-exports it; query-error logging always goes through `logQueryError`.
+
+**Implemented in:** `@dev` parallel-fix during T37 code review, 2026-05-15. Documented in architecture.md §6.6.8 at T38.
+
+---
+
+## 2026-05-15 — Image-bucket size/MIME limits codified in migration 008 (F-30)
+
+**Architecture reference:** §2.4 (storage bucket path scheme) + §5.2 (Supabase)
+
+**Decided:** The `images` bucket's 2 MB size cap and JPEG/PNG/WebP MIME allowlist are now codified in version control as `supabase/migrations/008_storage_images_limits.sql`. This supersedes the original arrangement, where those limits were hand-set in the Supabase Dashboard and only described in a trailing comment of migration 005. Migration 005's comment is left unedited (applied migrations are immutable — you write a new migration, you never rewrite an old one); 008 is the source of truth from here on.
+
+**Means for your product:** A fresh clone or a disaster-recovery rebuild now reproduces the exact bucket limits from the repo — you are not relying on someone remembering to click the right Dashboard fields. The limits already live in the bucket (hand-set 2026-05-07); 008 is idempotent and only makes production match version control. This closed security finding F-30 (audit 16).
+
+**Check before approving:** Migration 008 is NOT yet applied to the remote project — it is applied during the T39 deploy step (single prod project, no staging, per CONSTRAINT-02). After applying, `storage.buckets` for `images` shows `file_size_limit = 2097152` and `allowed_mime_types = {image/jpeg,image/png,image/webp}`.
+
+**What this closes off:** The "Storage limits live only in the Dashboard" reproducibility gap. New buckets follow the same rule — limits codified in a migration, not hand-set and described in prose.
+
+**Implemented in:** `@dev` during T37 (security audit 16 follow-up), 2026-05-15. Documented in architecture.md §2.4 + §5.2 at T38. Apply-to-prod step tracked in `docs/launch-checklist.md` for T39.
+
+---
+
+## 2026-05-15 — `/api/admin/*` route handlers self-gate via `getServerSession()` (F-17)
+
+**Architecture reference:** §6.6.4
+
+**Decided:** The Next.js middleware matcher deliberately excludes `/api/*`, so any admin endpoint added under `app/api/admin/**` would NOT be protected by the middleware admin-gate. The standing rule: every such handler must call `getServerSession()` from `lib/session.ts` before any business logic and return a uniform bare 401 if there is no session — the API analogue of the page gate's redirect-uniformity contract.
+
+**Means for your product:** Today there are no `/api/admin/*` routes (the only `app/api/` route is the env-gated test-sign-in fixture, which self-protects and never runs in production). This entry exists so that the first time you or a future session adds an admin API route — image upload, a batch operation — it ships protected by construction instead of silently bypassing auth. It is a guardrail recorded ahead of the code that will need it.
+
+**Check before approving:** When the first `app/api/admin/**` route ships: code review confirms a `getServerSession()` call precedes all logic and the unauthenticated response is a bodyless 401.
+
+**What this closes off:** The silent-bypass failure mode where an admin endpoint added under `/api/` looks protected (because the page routes are) but isn't. Caught at code review, not in production.
+
+**Implemented in:** Standing rule from security audit pass 5 (F-17); no code yet — guardrail only. Founder Brief entry added at T38, 2026-05-15, to close the architecture.md §6.6.4 / brief coverage gap.
 
 ---
 

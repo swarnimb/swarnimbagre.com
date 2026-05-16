@@ -100,7 +100,7 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 
 **CHECK constraint:** `parent_type IN ('projects', 'posts') OR parent_type IS NULL`.
 
-**Storage bucket path scheme:** `images/{projects|posts}/{parent_id}/{uuid}_{filename}`. The 2 MB cap is enforced both client-side at upload and via a Supabase Storage policy. **Founder Brief:** "Image data layer" in [`founder-brief.md`](founder-brief.md).
+**Storage bucket path scheme:** `images/{projects|posts}/{parent_id}/{uuid}_{filename}`. The 2 MB size cap and the JPEG/PNG/WebP MIME allowlist are enforced at three layers: client-side at upload, the `lib/admin-images-mutations-types.ts` constants (`MAX_FILE_BYTES`, `ALLOWED_MIME_TYPES`), and the `images` bucket itself. The bucket-level limits are codified in `supabase/migrations/008_storage_images_limits.sql` (F-30, security audit 16) — that migration is now the source of truth and supersedes the "configured by hand in the Supabase Dashboard" note at the tail of `supabase/migrations/005_rls_images.sql` (left unedited because applied migrations are immutable). **Founder Brief:** "Image data layer" and "Image-bucket limits codified in migration 008" in [`founder-brief.md`](founder-brief.md).
 
 **Orphan cleanup (T27):** `images` row is "orphaned" when both `parent_id IS NULL` and `parent_type IS NULL`. The admin "Clean orphans" button at `/admin/images` deletes orphans where `created_at < now() - interval '7 days'` from both the table and the Storage bucket. The 7-day grace period is a named constant: `const ORPHAN_CLEANUP_THRESHOLD_DAYS = 7;` in `lib/admin-images-cleanup.ts` (CQ-04). Order is **DB-first then Storage-remove** — inverted from the upload-side compensating-delete invariant — because the failure-mode trade-off is different: a failed Storage remove on cleanup leaves a true orphan storage object whose row pointer is already gone (acceptable, loud-logged with bucket paths so a human can reconcile), whereas a failed DB delete with the Storage object already gone would leave a row pointing at nothing (bad UX in any subsequent listing). Re-running the sweep is idempotent on the storage side because the rows no longer exist to be re-listed.
 
@@ -205,7 +205,8 @@ swarnimbagre.com/
 ├── lib/
 │   ├── supabase.ts                   # client factories (server, browser)
 │   ├── db.ts                         # public reads
-│   ├── admin-queries.ts              # admin reads
+│   ├── admin-queries.ts              # admin reads — thin barrel re-exporting the per-resource modules (T37; see §6.6.8)
+│   ├── admin-queries-{projects,posts,stats}.ts  # admin reads, split per resource (T37)
 │   ├── admin-{projects,posts,stats}-mutations.ts  # admin writes (per-resource Server Actions; see §6.6.6)
 │   ├── admin-{projects,posts,stats}-mutations-internal.ts  # throwing helpers (no 'use server')
 │   ├── admin-{projects,posts,stats}-mutations-types.ts     # client-safe envelopes
@@ -356,7 +357,7 @@ Single Vercel project linked to the GitHub repo. Production branch: `main`. Prev
 Single free-tier project. Migrations applied via Supabase CLI from `supabase/migrations/` (or via the Supabase MCP `apply_migration` tool during development).
 
 **Tables:** `projects`, `posts`, `stats`, `images` — all with RLS enabled.
-**Storage:** bucket `images` (private bucket — public read goes through signed URLs or RLS-checked policy). Max file size 2 MB enforced via bucket policy.
+**Storage:** bucket `images` (private bucket — public read goes through signed URLs or RLS-checked policy). Max file size 2 MB and the JPEG/PNG/WebP MIME allowlist are codified in `supabase/migrations/008_storage_images_limits.sql` (see §2.4).
 **Edge Functions:** `stats-ingest`.
 **Auth:** Email provider only, magic link enabled, SMTP defaults.
 
@@ -372,7 +373,7 @@ Single free-tier project. Migrations applied via Supabase CLI from `supabase/mig
 | `NEXT_PUBLIC_SITE_URL` | Vercel + local `.env.local` | yes | Absolute site URL for magic-link `emailRedirectTo`. Falls back to `NEXT_PUBLIC_VERCEL_URL` when unset. See `lib/auth-internal.ts::getSiteUrl`. |
 | `NEXT_PUBLIC_TWEAKS` | Vercel (preview only, never production) | yes (boolean) | Gates the tweaks panel |
 
-`.env.example` lists every variable name with no values (SEC-01). Service role key is loaded only in server contexts; never imported in client components. `NEXT_PUBLIC_TWEAKS` is unset in production.
+`.env.example` lists every Next.js-runtime variable name with no values (SEC-01). The one exception is `STATS_INGEST_SECRET`: it is Edge-Function-only (read via `Deno.env.get`, never by the Next.js app), so it appears in `.env.example` only as a documented comment block — not as an assignable key — pointing at the Supabase secret-store lifecycle in `docs/openclaw-config.md`. Service role key is loaded only in server contexts; never imported in client components. `NEXT_PUBLIC_TWEAKS` is unset in production.
 
 ---
 
@@ -446,7 +447,7 @@ Auth-adjacent Server Actions whose internal helpers have outcome-dependent timin
 
 #### 6.6.4 `/api/admin/*` route handler gate (F-17, audit pass 5)
 
-The middleware matcher `'/((?!api|_next/static|_next/image|favicon.ico).*)'` excludes `/api/*` (Next.js convention to avoid running middleware on API routes that handle their own auth). No `/api/*` routes exist today — `app/api/` is empty as of T18 — but the natural growth path lands admin-only endpoints (image upload, batch operations, deletes) under `/api/admin/*`, where the middleware admin-gate would not run. To prevent silent bypass, every route handler added under `app/api/admin/**` MUST: (1) call `getServerSession()` from `lib/session.ts` at the top of the handler, before any business logic; (2) return `new Response(null, { status: 401 })` if the session is null. Use the same uniform 401 across every admin API route — no body, no error detail — paralleling the SEC-09 redirect-uniformity contract that the page gate already satisfies. The alternative — tightening the middleware matcher to gate `/api/admin/*` directly — is acceptable but not preferred: per-handler protection keeps API routes self-protective and decouples them from the matcher's evolution. Document the choice when the first `/api/admin/*` route ships. **Code-review checklist:** any new file under `app/api/admin/**` must contain a `getServerSession()` call before any business logic. See `docs/security-report.md` audit-5 F-17.
+The middleware matcher `'/((?!api|_next/static|_next/image|favicon.ico).*)'` excludes `/api/*` (Next.js convention to avoid running middleware on API routes that handle their own auth). No `/api/admin/*` routes exist today — the only route under `app/api/` is the `NODE_ENV`-gated test fixture `app/api/test/sign-in/route.ts` (§4.7), which self-protects via its own secret + env gates and is unreachable in production — but the natural growth path lands admin-only endpoints (image upload, batch operations, deletes) under `/api/admin/*`, where the middleware admin-gate would not run. To prevent silent bypass, every route handler added under `app/api/admin/**` MUST: (1) call `getServerSession()` from `lib/session.ts` at the top of the handler, before any business logic; (2) return `new Response(null, { status: 401 })` if the session is null. Use the same uniform 401 across every admin API route — no body, no error detail — paralleling the SEC-09 redirect-uniformity contract that the page gate already satisfies. The alternative — tightening the middleware matcher to gate `/api/admin/*` directly — is acceptable but not preferred: per-handler protection keeps API routes self-protective and decouples them from the matcher's evolution. Document the choice when the first `/api/admin/*` route ships. **Code-review checklist:** any new file under `app/api/admin/**` must contain a `getServerSession()` call before any business logic. See `docs/security-report.md` audit-5 F-17.
 
 #### 6.6.5 Build invariants (F-14, SEC-09)
 
@@ -483,6 +484,19 @@ When a Server Action must dispatch from inside an existing parent `<form>` — e
 The Server Action wrapper itself is byte-identical to the form-bound case — same wire shape, same RSC dispatch path, same six-channel uniformity contract. The fix is a client-side composition refactor only.
 
 **Reference implementation:** `components/admin/ImageUpload.tsx`. **Regression pin:** `tests/ImageUpload.test.tsx` — the "renders no <form> element" test asserts `container.querySelector('form')` is `null`. **Origin:** BLOCKING-01 from T28's first smoke run, 2026-05-14 — surfaced because T15-T27 mocked the dispatch path in unit tests, so the nested-form bug only triggered against a real browser.
+
+#### 6.6.8 Admin query surface — per-resource split + shared query-error helper (T37, CQ-02/CQ-07)
+
+The admin read surface mirrors the per-resource decomposition of the mutation surface (§6.6.6), for the same reason: at T37 the single `lib/admin-queries.ts` had grown to 364 lines, over CQ-02's 300-line service-file budget. It was split into per-resource modules and `lib/admin-queries.ts` was retained as a thin re-export barrel at the original path, so no consumer import changed:
+
+- **`lib/admin-queries-projects.ts`** — `ProjectFilter`, `ProjectRow`, `getAllProjects`, `getProjectById`.
+- **`lib/admin-queries-posts.ts`** — `PostFilter`, `PostRow`, `getAllPosts`, `getPostById`.
+- **`lib/admin-queries-stats.ts`** — `getAllStats`.
+- **`lib/admin-queries.ts`** — barrel only; re-exports the symbols above. No logic.
+
+The per-module structured-log helpers were duplicated across the three (a CQ-07 DRY violation). They were collapsed into a single `logQueryError(operation, error)` in `lib/admin-mutation-log.ts` — the same module that owns the mutation-side `logMutationError` — and imported by each query module. Admin reads do not route through `lib/safe-load.ts` (that boundary is public-Server-Component-only, EH-01); admin query failures are surfaced loud to the operator via `logQueryError` and an empty/typed result, not silently swallowed.
+
+**Code-review checklist:** a new admin resource gets its own `admin-queries-<resource>.ts`; the barrel re-exports it; query-error logging goes through `logQueryError` — do not reintroduce per-module copies.
 
 ---
 
