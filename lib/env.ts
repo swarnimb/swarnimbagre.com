@@ -1,17 +1,23 @@
-const REQUIRED_ENV_VARS = [
+/** Env var that names the sole email allowed to sign in to the admin panel. */
+const ADMIN_ALLOWED_EMAIL_VAR = 'ADMIN_ALLOWED_EMAIL';
+
+/**
+ * Single source of truth for the env vars asserted at startup. A missing entry
+ * fails `next dev` / `next build` via `assertRequiredEnv()`. Tests import this
+ * array directly so the required list never drifts.
+ */
+export const REQUIRED_ENV_VARS = [
   'NEXT_PUBLIC_SUPABASE_URL',
   'NEXT_PUBLIC_SUPABASE_ANON_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
+  ADMIN_ALLOWED_EMAIL_VAR,
 ] as const;
-
-/** Env var that names the sole email allowed to sign in to the admin panel. */
-const ADMIN_ALLOWED_EMAIL_VAR = 'ADMIN_ALLOWED_EMAIL';
 
 /**
  * Fail loud at startup if any required env var is missing. Called from
  * `next.config.ts` so a missing var blocks both `next dev` and `next build`.
  *
- * @throws Error listing every missing variable, pointing at `docs/env-vars.md`.
+ * @throws Error listing every missing variable, pointing at `docs/env-checklist.md`.
  */
 export function assertRequiredEnv(): void {
   const missing = REQUIRED_ENV_VARS.filter((name) => !process.env[name]);
@@ -20,7 +26,7 @@ export function assertRequiredEnv(): void {
   throw new Error(
     `Missing required environment variable(s): ${missing.join(', ')}. ` +
       `Set them in .env.local (local development) or the Vercel dashboard ` +
-      `(Preview + Production). See docs/env-vars.md for source values.`,
+      `(Preview + Production). See docs/env-checklist.md for source values.`,
   );
 }
 
@@ -43,7 +49,7 @@ export function getAdminAllowedEmail(): string {
     throw new Error(
       `Missing required environment variable: ${ADMIN_ALLOWED_EMAIL_VAR}. ` +
         `This var enforces CONSTRAINT-09 (single-user admin allowlist). ` +
-        `Set it in .env.local and the Vercel dashboard. See docs/env-vars.md.`,
+        `Set it in .env.local and the Vercel dashboard. See docs/env-checklist.md.`,
     );
   }
   return raw.trim().toLowerCase();

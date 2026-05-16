@@ -41,16 +41,19 @@
 
 import type { ImageRecord } from './types';
 
-/** Storage bucket name. Mirrors the bucket configured by hand in the Supabase
- * Dashboard — see comment block at the end of
- * `supabase/migrations/005_rls_images.sql`. */
+/** Storage bucket name. The bucket itself is created during Phase-2 Dashboard
+ * setup (see comment block at the end of
+ * `supabase/migrations/005_rls_images.sql`); its size/MIME limits are codified
+ * in `supabase/migrations/008_storage_images_limits.sql`. */
 export const IMAGES_BUCKET = 'images';
 
-// 2 MB; mirrors bucket policy in supabase/migrations/005_rls_images.sql
+// 2 MB; mirrors the bucket file_size_limit in
+// supabase/migrations/008_storage_images_limits.sql — keep the two in lockstep.
 export const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
-/** MIME types the upload boundary accepts. Mirrors the bucket-level allowlist
- * configured in the Supabase Dashboard (see migration 005 trailing comment).
+/** MIME types the upload boundary accepts. Mirrors the bucket-level
+ * `allowed_mime_types` in
+ * `supabase/migrations/008_storage_images_limits.sql`.
  * SVG is intentionally excluded — the rendered-HTML attack surface is wider
  * than raster formats and the use case (project / post hero images) is
  * raster-only. */

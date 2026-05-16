@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { createServerClient } from './supabase';
 import { ServiceError } from './errors';
+import { logSupabaseError } from './admin-mutation-log';
 import type { Stat } from './types';
 
 /**
@@ -56,23 +57,6 @@ const STAT_FIELD_MAX_LENGTH = 200;
 const INSERT_STAT_OPERATION = 'insertStat';
 /** Operation tag for stat delete-side logs and ServiceError instances. */
 const DELETE_STAT_OPERATION = 'deleteStat';
-
-/**
- * Log a Supabase error without leaking row data or PII. Matches the shape of
- * `logDbError` in `lib/db.ts` so structured logs are uniform across the data
- * layer (EH-02, EH-03, SEC-05).
- */
-function logMutationError(
-  operation: string,
-  error: { code?: string; message?: string } | null,
-): void {
-  console.error(`[admin-mutations] ${operation} failed`, {
-    operation,
-    errorCode: error?.code ?? null,
-    errorMessage: error?.message ?? null,
-    stack: new Error().stack,
-  });
-}
 
 /**
  * Zod schema for the insert-stat boundary.
@@ -150,7 +134,7 @@ export async function insertStatInternal(
     .select()
     .single();
   if (error) {
-    logMutationError(INSERT_STAT_OPERATION, error);
+    logSupabaseError(INSERT_STAT_OPERATION, error);
     throw new ServiceError(`${INSERT_STAT_OPERATION} failed`, {
       operation: INSERT_STAT_OPERATION,
       cause: error,
@@ -196,7 +180,7 @@ export async function deleteStatInternal(
   const supabase = client ?? (await createServerClient());
   const { error } = await supabase.from('stats').delete().eq('id', id);
   if (error) {
-    logMutationError(DELETE_STAT_OPERATION, error);
+    logSupabaseError(DELETE_STAT_OPERATION, error);
     throw new ServiceError(`${DELETE_STAT_OPERATION} failed`, {
       operation: DELETE_STAT_OPERATION,
       cause: error,

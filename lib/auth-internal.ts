@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createServerClient } from './supabase';
 import { getAdminAllowedEmail } from './env';
-import { ServiceError, ValidationError } from './errors';
+import { ServiceError, ValidationError, toLogSafeError } from './errors';
 
 /**
  * Module note (F-14): this file deliberately does NOT carry the `'use server'`
@@ -118,7 +118,7 @@ export async function attemptMagicLink(email: string): Promise<void> {
     console.error(`[auth] ${SIGN_IN_OPERATION} failed`, {
       operation: SIGN_IN_OPERATION,
       emailProvided: true,
-      error,
+      error: toLogSafeError(error),
     });
     throw new ServiceError(`${SIGN_IN_OPERATION} failed`, {
       operation: SIGN_IN_OPERATION,

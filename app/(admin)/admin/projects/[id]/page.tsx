@@ -3,29 +3,7 @@ import AdminNav from '@/components/admin/AdminNav';
 import ProjectForm from '@/components/admin/ProjectForm';
 import DeleteProjectButton from '@/components/admin/DeleteProjectButton';
 import { getProjectById } from '@/lib/admin-queries';
-import { getImageById } from '@/lib/db';
-import { getImageUrl } from '@/lib/images';
-
-/**
- * Shape passed to {@link ProjectForm} for the existing-image preview.
- * `null` when the project has no `image_id` or the row was orphaned.
- */
-type CurrentImage = { id: string; signedUrl: string; altText: string } | null;
-
-/**
- * Resolve the project's `image_id` to a signed-URL preview payload.
- *
- * CONSTRAINT-15: reads go through `getImageUrl` (signed URL, TTL 3600s) —
- * the `images` bucket is private and `getPublicUrl` would return 404.
- * Throws bubble loudly per the admin-loud carve-out from CONSTRAINT-14.
- */
-async function loadCurrentImage(imageId: string | null): Promise<CurrentImage> {
-  if (imageId === null) return null;
-  const record = await getImageById(imageId);
-  if (record === null) return null;
-  const signedUrl = await getImageUrl(record.bucket_path);
-  return { id: record.id, signedUrl, altText: record.alt_text };
-}
+import { loadCurrentImage } from '@/lib/admin-image-preview';
 
 /**
  * Admin "edit project" page (`/admin/projects/[id]`).

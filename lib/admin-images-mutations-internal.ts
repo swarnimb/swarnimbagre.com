@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { createServerClient } from './supabase';
 import { ServiceError } from './errors';
+import { logMutationError } from './admin-mutation-log';
 import type { ImageRecord } from './types';
 import {
   ALLOWED_MIME_TYPES,
@@ -58,23 +59,6 @@ const UPLOAD_IMAGE_OPERATION = 'uploadImage';
 /** Cap on sanitised filename length (post-sanitise) before extension. Hard
  * upper bound on the path length each upload contributes to Storage. */
 const FILENAME_MAX_LENGTH = 100;
-
-/**
- * Log a Supabase error (or a structured payload) without leaking row data or
- * PII. Matches the shape of `logDbError` in `lib/db.ts` and the sibling
- * `logMutationError` helpers in the project / post / stat trios so structured
- * logs are uniform across the data layer (EH-02, EH-03, SEC-05).
- */
-function logMutationError(
-  operation: string,
-  payload: Record<string, unknown>,
-): void {
-  console.error(`[admin-mutations] ${operation} failed`, {
-    operation,
-    ...payload,
-    stack: new Error().stack,
-  });
-}
 
 /**
  * Zod schema for the upload-image metadata boundary.

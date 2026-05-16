@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import { getAdminAllowedEmail } from '@/lib/env';
+import { toLogSafeError } from '@/lib/errors';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /** Operation tag for structured log lines emitted from this route. */
@@ -34,7 +35,9 @@ function buildRedirect(request: NextRequest, path: string): URL {
 
 /**
  * Log a callback failure with structured context. Never logs raw tokens or
- * the magic-link query string (SEC-05).
+ * the magic-link query string (SEC-05). Callers MUST pass a pre-reduced
+ * `toLogSafeError(...)` shape (or an already-safe literal) — never a raw
+ * caught error, whose `message` can echo the submitted email (F-29).
  */
 function logCallbackFailure(reason: string, error?: unknown): void {
   console.error(`[auth] ${CALLBACK_OPERATION} failed`, {
@@ -71,13 +74,16 @@ async function rejectIfNotAllowlisted(
   try {
     allowed = getAdminAllowedEmail();
   } catch (error) {
-    logCallbackFailure('allowlist env not configured', error);
+    logCallbackFailure('allowlist env not configured', toLogSafeError(error));
     await supabase.auth.signOut();
     return NextResponse.redirect(buildRedirect(request, FAILURE_REDIRECT));
   }
   const { data, error } = await supabase.auth.getUser();
   if (error || !data?.user) {
-    logCallbackFailure('getUser returned no user after session establish', error);
+    logCallbackFailure(
+      'getUser returned no user after session establish',
+      toLogSafeError(error),
+    );
     await supabase.auth.signOut();
     return NextResponse.redirect(buildRedirect(request, FAILURE_REDIRECT));
   }
@@ -127,7 +133,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       type: type as 'email',
     });
     if (error) {
-      logCallbackFailure('verifyOtp returned error', error);
+      logCallbackFailure('verifyOtp returned error', toLogSafeError(error));
       return NextResponse.redirect(buildRedirect(request, FAILURE_REDIRECT));
     }
     const rejection = await rejectIfNotAllowlisted(supabase, request);
@@ -138,7 +144,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (error) {
-      logCallbackFailure('exchangeCodeForSession returned error', error);
+      logCallbackFailure('exchangeCodeForSession returned error', toLogSafeError(error));
       return NextResponse.redirect(buildRedirect(request, FAILURE_REDIRECT));
     }
     const rejection = await rejectIfNotAllowlisted(supabase, request);

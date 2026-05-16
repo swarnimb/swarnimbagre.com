@@ -1,11 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { assertRequiredEnv } from '@/lib/env';
-
-const ALL_VARS = [
-  'NEXT_PUBLIC_SUPABASE_URL',
-  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
-  'SUPABASE_SERVICE_ROLE_KEY',
-] as const;
+import { assertRequiredEnv, REQUIRED_ENV_VARS } from '@/lib/env';
 
 describe('assertRequiredEnv', () => {
   afterEach(() => {
@@ -13,14 +7,14 @@ describe('assertRequiredEnv', () => {
   });
 
   it('does not throw when all required vars are present', () => {
-    for (const name of ALL_VARS) {
+    for (const name of REQUIRED_ENV_VARS) {
       vi.stubEnv(name, 'placeholder-value');
     }
     expect(() => assertRequiredEnv()).not.toThrow();
   });
 
   it('throws and names the missing var when one is unset', () => {
-    for (const name of ALL_VARS) {
+    for (const name of REQUIRED_ENV_VARS) {
       vi.stubEnv(name, 'placeholder-value');
     }
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', '');
@@ -29,8 +23,18 @@ describe('assertRequiredEnv', () => {
     expect(() => assertRequiredEnv()).toThrow(/Missing required environment variable/);
   });
 
+  it('throws and names ADMIN_ALLOWED_EMAIL when it is the only missing var', () => {
+    for (const name of REQUIRED_ENV_VARS) {
+      vi.stubEnv(name, 'placeholder-value');
+    }
+    vi.stubEnv('ADMIN_ALLOWED_EMAIL', '');
+
+    expect(() => assertRequiredEnv()).toThrow(/ADMIN_ALLOWED_EMAIL/);
+    expect(() => assertRequiredEnv()).toThrow(/Missing required environment variable/);
+  });
+
   it('throws and names every missing var when several are unset', () => {
-    for (const name of ALL_VARS) {
+    for (const name of REQUIRED_ENV_VARS) {
       vi.stubEnv(name, '');
     }
 
@@ -43,9 +47,9 @@ describe('assertRequiredEnv', () => {
 
     expect(caught).toBeInstanceOf(Error);
     const msg = (caught as Error).message;
-    for (const name of ALL_VARS) {
+    for (const name of REQUIRED_ENV_VARS) {
       expect(msg).toContain(name);
     }
-    expect(msg).toContain('docs/env-vars.md');
+    expect(msg).toContain('docs/env-checklist.md');
   });
 });

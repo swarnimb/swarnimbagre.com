@@ -9,15 +9,10 @@ import {
   ALLOWED_MIME_TYPES,
   ALT_TEXT_MAX_LENGTH,
   IMAGE_MUTATION_INITIAL_STATE,
-  MAX_FILE_BYTES,
   type ImageMutationState,
 } from '@/lib/admin-images-mutations-types';
+import { precheckImageFile } from '@/lib/admin-image-file-precheck';
 import type { ImageRecord } from '@/lib/types';
-
-/** Inline error copy for the client-side file pre-check. CONSTRAINT-13: dry.
- * Server boundary is authoritative — pre-check is UX-side feedback only. */
-const FILE_TOO_LARGE_MESSAGE = 'File is too large.';
-const FILE_TYPE_NOT_ALLOWED_MESSAGE = 'File type not accepted.';
 
 /**
  * Props for {@link ImageUpload}.
@@ -106,15 +101,7 @@ export default function ImageUpload({
 
   function onFileChange(next: File | null): void {
     setFile(next);
-    setClientError('');
-    if (next === null) return;
-    if (!(ALLOWED_MIME_TYPES as readonly string[]).includes(next.type)) {
-      setClientError(FILE_TYPE_NOT_ALLOWED_MESSAGE);
-      return;
-    }
-    if (next.size > MAX_FILE_BYTES) {
-      setClientError(FILE_TOO_LARGE_MESSAGE);
-    }
+    setClientError(precheckImageFile(next));
   }
 
   const submitDisabled =

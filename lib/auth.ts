@@ -2,7 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { attemptMagicLink } from './auth-internal';
-import { MIN_DURATION_MS } from './auth-constants';
+import { padToFloor } from './timing';
 import { createServerClient } from './supabase';
 
 /**
@@ -54,11 +54,7 @@ export async function signInWithMagicLink(email: string): Promise<void> {
     // introduce a timing difference between success and failure paths and
     // reopen F-12 at a smaller scale (SEC-04).
   } finally {
-    const elapsed = performance.now() - start;
-    const remaining = MIN_DURATION_MS - elapsed;
-    if (remaining > 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, remaining));
-    }
+    await padToFloor(start);
   }
 }
 
@@ -95,11 +91,7 @@ export async function signOut(): Promise<void> {
     // Deliberately silent — re-logging here would reopen the F-12 timing
     // oracle by introducing a side-effect cost only on the failure path.
   } finally {
-    const elapsed = performance.now() - start;
-    const remaining = MIN_DURATION_MS - elapsed;
-    if (remaining > 0) {
-      await new Promise<void>((resolve) => setTimeout(resolve, remaining));
-    }
+    await padToFloor(start);
   }
   redirect('/admin/login');
 }

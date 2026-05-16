@@ -7,7 +7,8 @@ import {
   updatePostInternal,
 } from './admin-posts-mutations-internal';
 import type { PostMutationState } from './admin-posts-mutations-types';
-import { GENERIC_FORM_ERROR, MIN_DURATION_MS } from './auth-constants';
+import { GENERIC_FORM_ERROR } from './auth-constants';
+import { padToFloor } from './timing';
 
 /**
  * Module note (F-14 analogue, applied to POST mutations).
@@ -30,22 +31,6 @@ import { GENERIC_FORM_ERROR, MIN_DURATION_MS } from './auth-constants';
  * This is the per-resource Server Action entry-point module per
  * `architecture.md` §6.6.6.
  */
-
-/**
- * Pad the response time to the `MIN_DURATION_MS` floor (Channel 3 — timing).
- *
- * Same discipline as `lib/auth.ts::signInWithMagicLink`: every outcome flows
- * through the `finally` block, so the bound applies uniformly. Slow paths
- * run over the floor without truncation (a ceiling would itself be an
- * oracle). Floor is a project-wide constant in `lib/auth-constants.ts`.
- */
-async function padToFloor(startedAt: number): Promise<void> {
-  const elapsed = performance.now() - startedAt;
-  const remaining = MIN_DURATION_MS - elapsed;
-  if (remaining > 0) {
-    await new Promise<void>((resolve) => setTimeout(resolve, remaining));
-  }
-}
 
 /**
  * Convert a `ZodError` into the per-field state shape for the post form.
@@ -122,7 +107,8 @@ function readPostUpdateFormData(formData: FormData): unknown {
  * outcomes — `{ status, fieldErrors?, formError? }`. Never throws to the
  * wire (the inner helper's throws are caught here).
  *
- * Channel 3 (timing): every outcome pads to {@link MIN_DURATION_MS}.
+ * Channel 3 (timing): every outcome pads to the response-timing floor via
+ * {@link padToFloor} (the `MIN_DURATION_MS` bound, `lib/auth-constants.ts`).
  *
  * Channel 4 (Server Action surface): exactly one action ID is added by this
  * export. The throwing helper is imported from a sibling non-`'use server'`
@@ -212,7 +198,8 @@ export async function updatePost(
  * Channel 1 (UI text): on error, surfaces only the generic form error.
  * Channel 2 (response body): uniform `{ status, formError? }` envelope —
  * never throws to the wire.
- * Channel 3 (timing): every outcome pads to {@link MIN_DURATION_MS}.
+ * Channel 3 (timing): every outcome pads to the response-timing floor via
+ * {@link padToFloor} (the `MIN_DURATION_MS` bound, `lib/auth-constants.ts`).
  * Channel 4 (Server Action surface): exactly one action ID is added by this
  * export. The throwing helper is imported from a sibling non-`'use server'`
  * module so it does not become a second endpoint.

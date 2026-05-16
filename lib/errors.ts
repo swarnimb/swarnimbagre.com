@@ -40,3 +40,35 @@ export class ValidationError extends Error {
     this.field = field;
   }
 }
+
+/** Log-safe classifier shape — the error *kind*, never its message/cause. */
+export interface LogSafeError {
+  name: string;
+  status?: number;
+  code?: string;
+}
+
+/**
+ * Reduce an arbitrary thrown value to a log-safe classifier shape (SEC-05).
+ *
+ * Keeps only the error *kind* — `name`, an HTTP-ish `status`, and a string
+ * `code` — and deliberately drops `message`, `cause`, and any nested payload.
+ * Supabase `AuthError.message` can echo the submitted email or rate-limit
+ * detail, and SEC-05 forbids PII in logs without qualification. Spread the
+ * result into a structured log line instead of a raw caught error. Closes
+ * finding F-29 (docs/security-report.md audit 16).
+ *
+ * @param error Any caught value (`AuthError`, `ServiceError`, `Error`, or non-Error).
+ * @returns A flat object safe to serialize into a log line.
+ */
+export function toLogSafeError(error: unknown): LogSafeError {
+  if (error !== null && typeof error === 'object') {
+    const e = error as { name?: unknown; status?: unknown; code?: unknown };
+    return {
+      name: typeof e.name === 'string' ? e.name : 'UnknownError',
+      ...(typeof e.status === 'number' ? { status: e.status } : {}),
+      ...(typeof e.code === 'string' ? { code: e.code } : {}),
+    };
+  }
+  return { name: 'NonError' };
+}

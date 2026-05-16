@@ -55,3 +55,29 @@ export function logSupabaseError(
     errorMessage: error?.message ?? null,
   });
 }
+
+/**
+ * Log a structured Supabase read failure for the admin query surface
+ * (`lib/admin-queries-*.ts`). Same payload shape as {@link logSupabaseError}
+ * (EH-02, EH-03, SEC-05) but tagged `[admin-queries]` so log triage can
+ * distinguish a read-path failure from a mutation-path failure. Centralised
+ * here under CQ-07 — the admin query modules previously each carried a
+ * byte-duplicate private copy.
+ *
+ * @param operation Identifier of the failing read call site (e.g.
+ *                  `'getAllProjects'`).
+ * @param error     Supabase error object (or any object with `code` /
+ *                  `message`). `null` is accepted for parity with the
+ *                  previous private implementation.
+ */
+export function logQueryError(
+  operation: string,
+  error: { code?: string; message?: string } | null,
+): void {
+  console.error(`[admin-queries] ${operation} failed`, {
+    operation,
+    errorCode: error?.code ?? null,
+    errorMessage: error?.message ?? null,
+    stack: new Error().stack,
+  });
+}
