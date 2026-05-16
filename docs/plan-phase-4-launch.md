@@ -246,15 +246,15 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 **Functions to implement:** [deployment task]
 
 **Acceptance criteria:**
-- [ ] Final commit on `main`. Vercel auto-deploy succeeds (verify in dashboard).
-- [ ] DNS for `swarnimbagre.com` apex and `www` cut over to Vercel. TTL is set sensibly (e.g., 300s for cutover, raise to 3600+ once stable).
-- [ ] HTTPS is live; `http://swarnimbagre.com` redirects to `https://swarnimbagre.com`.
-- [ ] All four public pages return 200 with valid HTML at the production URL.
-- [ ] Mobile UA serves the mobile component variant; desktop UA serves the desktop variant.
-- [ ] Admin login redirects work; magic link to the configured admin email (`ADMIN_ALLOWED_EMAIL`) lands and produces a working session.
-- [ ] Projects, Posts, Stats, Images CRUD all work against production (verified by the T28 flow against the live URL).
-- [ ] OpenClaw test message produces a row visible at `/admin/stats` and `/other`.
-- [ ] No console errors on any page in production browser DevTools (CQ-05 in production runtime).
+- [x] Final commit on `main`. Vercel auto-deploy succeeds (verify in dashboard). — S26 (2026-05-16): commits `f8181ae` (docs) + `8d02d93` (code) pushed; Vercel deploy green (`ADMIN_ALLOWED_EMAIL` present — no hard-fail).
+- [x] DNS for `swarnimbagre.com` apex and `www` cut over to Vercel. TTL is set sensibly (e.g., 300s for cutover, raise to 3600+ once stable). — S26: domain via Cloudflare, **DNS-only (grey cloud)**; resolves to Vercel `76.76.21.21`.
+- [x] HTTPS is live; `http://swarnimbagre.com` redirects to `https://swarnimbagre.com`. — S26: HTTPS + HSTS live. NOTE: apex currently 307→`www`; canonical = apex per CONSTRAINT-21; Vercel domain primary-flip still pending.
+- [x] All four public pages return 200 with valid HTML at the production URL. — S26: verified on `www.swarnimbagre.com` (Home/Projects/Writing/Other all 200; `<title>Swarnim Bagre</title>`).
+- [x] Mobile UA serves the mobile component variant; desktop UA serves the desktop variant. — S26: verified (desktop 24.6 KB vs mobile 15.0 KB; distinct variants per UA).
+- [ ] Admin login redirects work; magic link to the configured admin email (`ADMIN_ALLOWED_EMAIL`) lands and produces a working session. — S26: **NOT verified.** Two Supabase config bugs found + fixed: (1) email pointed to `localhost` (Site URL + redirect allowlist + `NEXT_PUBLIC_SITE_URL` + redeploy); (2) default Magic Link email template incompatible with the server `token_hash` callback → template customized to `{{ .SiteURL }}/admin/auth/callback?token_hash={{ .TokenHash }}&type=email`. Blocked on Supabase free-tier email rate-limit cooldown + one clean retest. If still broken after retest, the CONSTRAINT-21 apex primary-flip is the prime suspect.
+- [ ] Projects, Posts, Stats, Images CRUD all work against production (verified by the T28 flow against the live URL). — pending admin login.
+- [~] OpenClaw test message produces a row visible at `/admin/stats` and `/other`. — SUPERSEDED by Decision 1 (S25 decouple): post-launch; T39 scope narrows to "stats-ingest path deployed + smoke-verifiable".
+- [ ] No console errors on any page in production browser DevTools (CQ-05 in production runtime). — pending (needs a browser/Playwright pass against the live URL).
 
 **Tests required:**
 - Playwright smoke against the live URL covering: each public page renders; admin login redirects; one full admin flow (create project, view in public list after publish, delete) (TS-04).

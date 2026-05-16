@@ -1,7 +1,7 @@
 # Constraints: swarnimbagre.com
 
 **Date seeded:** 2026-05-06 (by `@plan` Phase 4)
-**Last updated:** 2026-05-14 (CONSTRAINT-20 added)
+**Last updated:** 2026-05-16 (CONSTRAINT-21 added)
 
 > Loaded by `@session-start` every session. Active binding decisions only — not history, not options considered. New constraints are added when `@plan`, `@cto`, or the builder makes a binding decision. A constraint is removed only when the decision is explicitly reversed, with the reversal noted in `docs/session-log.md`.
 
@@ -268,6 +268,18 @@ or a re-evaluation of header uniformity under PKCE.
 
 ---
 
+### [CONSTRAINT-21] Canonical domain is the apex `swarnimbagre.com` (no `www`)
+
+**Decision:** The canonical public origin is the bare apex `https://swarnimbagre.com`. `www.swarnimbagre.com` is a non-canonical alias that redirects to the apex. Every origin-bearing setting must resolve to the apex: Vercel primary domain, Supabase Auth Site URL, Supabase redirect-URL allowlist, `NEXT_PUBLIC_SITE_URL`, and the magic-link email template's `{{ .SiteURL }}` base.
+
+**What it means in practice:** One canonical host avoids split auth-cookie domains and a double redirect on the magic-link callback. As of 2026-05-16 the Vercel project still has `www` as primary (apex 307→www) — the Vercel primary-flip is the remaining action to make reality match this constraint. Until flipped, the auth callback crosses an apex→www hop; the query string survives a 307 so it functions, but the cookie/canonical fragility remains until corrected.
+
+**Who decided and when:** Main thread on the builder's behalf during the T39 launch (builder overwhelmed, delegated the call), confirmed by the builder at `@end-session`, 2026-05-16.
+
+**What this closes off:** A `www`-canonical or dual-canonical setup. Reversing means re-pointing Vercel primary, Supabase Site URL + redirect allowlist, `NEXT_PUBLIC_SITE_URL`, and the email template base, then re-testing the magic-link callback end-to-end.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -292,3 +304,4 @@ or a re-evaluation of header uniformity under PKCE.
 | 18 | Supabase SSR client locked to flowType: implicit | No PKCE verifier cookie; header channel uniform | `@security` audit 3 | 2026-05-12 |
 | 19 | Dev-only routes use bracket NODE_ENV indirection | Defeats Next 15 compile-time inlining; runtime gate enforced | `@dev` + T19.2 | 2026-05-12 |
 | 20 | Storage bucket RLS policies accompany table FK migrations | Every bucket gets a `storage.objects` policy scoped to `bucket_id` (USING + WITH CHECK); default-deny applies to Storage | `@supabase` + T28 | 2026-05-14 |
+| 21 | Canonical domain = apex `swarnimbagre.com` (no `www`) | All origin config (Vercel/Supabase/env/email) resolves to apex; `www` redirects to it | Main thread on builder behalf, confirmed by builder | 2026-05-16 |
