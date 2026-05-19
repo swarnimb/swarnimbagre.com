@@ -52,6 +52,7 @@ export default function ProjectsList({
       heading="Projects"
       emptyState={EMPTY_STATE}
       editSegment="projects"
+      newLabel="New project"
       renderDeleteButton={(row) => (
         <DeleteProjectButton
           id={row.id}

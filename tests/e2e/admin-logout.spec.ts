@@ -53,7 +53,7 @@ test.describe('TS-04 — admin sign-out flow', () => {
     await page.goto(ADMIN_URL);
 
     // Sanity: we actually rendered the authenticated surface before clicking.
-    await expect(page.getByRole('heading', { level: 1, name: 'Admin' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toBeVisible();
 
     await page.getByRole('button', { name: /^sign out$/i }).click();
 
@@ -83,7 +83,8 @@ test.describe('TS-04 — admin sign-out flow', () => {
     await page.goBack();
     await expect(page).toHaveURL(LOGIN_URL_RE);
 
-    // Re-assert the negative: no admin heading is visible.
-    await expect(page.getByRole('heading', { level: 1, name: 'Admin' })).toHaveCount(0);
+    // Re-assert the negative: no admin landing heading is visible. (Post-redirect:
+    // the signed-in admin lands on /admin/projects with heading "Projects".)
+    await expect(page.getByRole('heading', { level: 1, name: 'Projects' })).toHaveCount(0);
   });
 });

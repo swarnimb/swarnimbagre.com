@@ -66,8 +66,11 @@ export interface ResourceListProps<
   /** Copy shown when `rows` is empty, e.g. `'No projects yet'`. */
   emptyState: string;
   /** Path segment after `/admin/` for the Edit link, e.g. `'projects'`
-   * → `/admin/projects/[id]`. No leading or trailing slash. */
+   * → `/admin/projects/[id]`. No leading or trailing slash. Also drives
+   * the create-route href (`/admin/${editSegment}/new`). */
   editSegment: string;
+  /** Label for the create-resource button, e.g. `'New project'`. */
+  newLabel: string;
   /** Render prop for the per-row delete control. Given the row's id and
    * title, returns the resource-specific delete button. */
   renderDeleteButton: (row: { id: string; title: string }) => React.ReactNode;
@@ -94,6 +97,7 @@ export default function ResourceList<
   heading,
   emptyState,
   editSegment,
+  newLabel,
   renderDeleteButton,
 }: ResourceListProps<TRow, TFilter>): React.ReactElement {
   const { buildHref, pushParams, onFilterChange } =
@@ -107,16 +111,21 @@ export default function ResourceList<
     <section className="px-6 py-10 space-y-6">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-foreground">{heading}</h1>
-        <Select value={filter} onValueChange={onFilterChange}>
-          <SelectTrigger className="w-40" aria-label="Filter by status">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All</SelectItem>
-            <SelectItem value="published">Published</SelectItem>
-            <SelectItem value="draft">Draft</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Select value={filter} onValueChange={onFilterChange}>
+            <SelectTrigger className="w-40" aria-label="Filter by status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="published">Published</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button asChild size="sm">
+            <Link href={`/admin/${editSegment}/new`}>{newLabel}</Link>
+          </Button>
+        </div>
       </header>
 
       {rows.length === 0 ? (

@@ -268,13 +268,16 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
     });
 
     // Sign in once for the rest of the flow.
-    await runStep(failures, 'pre-seeded session lands on /admin', async () => {
+    // /admin redirects to /admin/projects (server-side redirect — there is no
+    // standalone admin landing surface). The landing assertion targets the
+    // Projects list heading rendered by ResourceList.tsx.
+    await runStep(failures, 'pre-seeded session lands on /admin/projects', async () => {
       await loginAsAdmin(page, context);
-      await expect(page).toHaveURL(/\/admin$/);
+      await expect(page).toHaveURL(/\/admin\/projects$/);
       await expect(
-        page.getByRole('heading', { level: 1, name: 'Admin' }),
+        page.getByRole('heading', { level: 1, name: 'Projects' }),
       ).toBeVisible();
-      await assertVoiceClean(page, '/admin');
+      await assertVoiceClean(page, '/admin/projects');
     });
 
     // Projects CRUD.
@@ -465,7 +468,7 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await page.goBack();
       await expect(page).toHaveURL(LOGIN_URL_RE);
       await expect(
-        page.getByRole('heading', { level: 1, name: 'Admin' }),
+        page.getByRole('heading', { level: 1, name: 'Projects' }),
       ).toHaveCount(0);
     });
 

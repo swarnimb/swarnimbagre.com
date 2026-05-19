@@ -52,6 +52,7 @@ export default function PostsList({
       heading="Posts"
       emptyState={EMPTY_STATE}
       editSegment="posts"
+      newLabel="New post"
       renderDeleteButton={(row) => (
         <DeletePostButton
           id={row.id}

@@ -104,5 +104,9 @@ export async function loginAsAdmin(
   }
 
   await page.goto('/admin');
-  await page.waitForURL('**/admin');
+  // /admin redirects server-side to /admin/projects (see app/(admin)/admin/page.tsx).
+  // Accept either the pre-redirect or post-redirect URL so this helper stays
+  // valid if the redirect target moves; callers assert the concrete landing
+  // surface (heading, etc.) themselves.
+  await page.waitForURL(/\/admin(\/projects)?$/);
 }
