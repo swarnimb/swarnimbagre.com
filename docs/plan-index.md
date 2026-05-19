@@ -1,7 +1,7 @@
 # Plan Index: swarnimbagre.com
 
 **Date:** 2026-05-06
-**Total tasks:** 41 across 4 phases (40 original + T10.5 testing-infra inserted 2026-05-07).
+**Total tasks:** 43 across 4 phases (40 original + T10.5 testing-infra inserted 2026-05-07; T41 + T42 added 2026-05-19, Session 28).
 **Entry point for `@session-start`** — load this file to find the active phase file, then load that phase file.
 
 ---
@@ -13,7 +13,7 @@
 | 1 — Foundation | [`plan-phase-1-foundation.md`](plan-phase-1-foundation.md) | T1–T14 + T10.5 (15 tasks) | External-deps prep, Next.js scaffold, Supabase project + schema + RLS, public reads, Markdown render, Storage integration, testing harness, first deploy | Done (2026-05-11) |
 | 2 — Admin panel | [`plan-phase-2-admin.md`](plan-phase-2-admin.md) | T15–T28 (14 tasks) | Admin layout, Tailwind scoping, shadcn install, magic link auth, projects + posts CRUD, stats view + manual insert, image upload, orphan cleanup | Done (2026-05-14) |
 | 3 — OpenClaw ingestion | [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md) | T29–T31 (3 tasks) | Edge Function `stats-ingest`, OpenClaw config notes, monitoring setup | **Deferred — T30 done; T29 + T31 await OpenClaw operator gate (see session-handoff)** |
-| 4 — Polish + launch | [`plan-phase-4-launch.md`](plan-phase-4-launch.md) | T32–T40 (9 tasks) | Admin smoke test, error monitoring, README, env checklist, launch checklist, security review, code review, doc audit, production deploy + post-launch ops | **Active (T32–T38 done; T39 in progress — deployed + live on `www.swarnimbagre.com`, admin-login verification pending; see session-handoff)** |
+| 4 — Polish + launch | [`plan-phase-4-launch.md`](plan-phase-4-launch.md) | T32–T42 (11 tasks; T41 trigger-gated deferred, not an exit blocker) | Admin smoke test, error monitoring, README, env checklist, launch checklist, security review, code review, doc audit, production deploy + post-launch ops + project content-model expansion | **Active (T32–T39 done; T39 closed 2026-05-19, Session 27 — site live on apex canonical; T42 next — project content-model expansion blocks T40 content-addition; T40 partial-blocked + 24h log review calendar-bounded; T41 deferred trigger-gated; see session-handoff)** |
 
 ---
 
@@ -32,7 +32,7 @@ The earliest-blocking task is T1 (external-deps prep): Vercel project link, Supa
 
 ## Locked Decisions Reflected in the Plan
 
-The 40 tasks below already reflect the architectural decisions in [`architecture.md`](architecture.md), the constraints in [`constraints.md`](constraints.md), and the Founder Briefs in [`founder-brief.md`](founder-brief.md). Specifically:
+The 43 tasks across the 4 phase files reflect the architectural decisions in [`architecture.md`](architecture.md), the constraints in [`constraints.md`](constraints.md), and the Founder Briefs in [`founder-brief.md`](founder-brief.md). T41 + T42 (added 2026-05-19, Session 28) extend the original 40-task plan with: discoverability + resilience deferred follow-up (T41) and project content-model expansion (T42). Specifically:
 
 - Phase A (static-bundle deploy) is **dropped**. Phase 1 starts at Next.js scaffolding.
 - T30 (in Phase 3) is **Edge Function `stats-ingest` only** — no "Path A vs Path B" branching.

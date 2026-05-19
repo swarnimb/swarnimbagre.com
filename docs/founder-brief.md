@@ -38,6 +38,7 @@ This file is the plain-language record of every architectural decision. The audi
 | 24 | Admin query modules split per resource + shared `logQueryError` (T37) | [§6.6.8](architecture.md#668-admin-query-surface--per-resource-split--shared-query-error-helper-t37-cq-02cq-07) |
 | 25 | Image-bucket size/MIME limits codified in migration 008 (F-30) | [§2.4](architecture.md#24-images) + [§5.2](architecture.md#52-supabase) |
 | 26 | `/api/admin/*` route handlers self-gate via `getServerSession()` (F-17) | [§6.6.4](architecture.md#664-apiadmin-route-handler-gate-f-17-audit-pass-5) |
+| 27 | Admin theming tokens declared at `:root` to survive Radix portal escape | [§4.2](architecture.md#42-tailwind-scoping-decision-3--resolves-assumption-04) |
 
 ---
 
@@ -570,6 +571,22 @@ wall-clock proves the wrapper ran end-to-end).
 **What this closes off:** The silent-bypass failure mode where an admin endpoint added under `/api/` looks protected (because the page routes are) but isn't. Caught at code review, not in production.
 
 **Implemented in:** Standing rule from security audit pass 5 (F-17); no code yet — guardrail only. Founder Brief entry added at T38, 2026-05-15, to close the architecture.md §6.6.4 / brief coverage gap.
+
+---
+
+## 2026-05-19 — Admin theming tokens declared at `:root` to survive Radix portal escape
+
+**Architecture reference:** §4.2 (Tailwind scoping — "Declaration site" paragraph)
+
+**Decided:** The eight `--admin-*` CSS custom properties (`--admin-bg`, `--admin-surface`, `--admin-fg`, `--admin-accent`, `--admin-destructive`, `--admin-destructive-fg`, `--admin-border`, `--admin-muted-fg`) are declared at `:root` in `app/styles/admin.css` instead of being scoped to the `.admin-root` subtree. The dark visual chrome — background colour, text colour, Inter font, full-viewport height — stays on the `.admin-root` selector, so the admin theme is still visually scoped to admin routes. Token names and values are unchanged; only the declaration site moved.
+
+**Means for your product:** Dropdown menus and other overlay popovers inside the admin panel now render with the correct dark surface and gold accent. Before this change they painted transparent and let the table rows behind bleed through — the bug you reported on 2026-05-19. The cause was specific to how Radix UI primitives (`DropdownMenu`, `Select`, `Popover`, `Tooltip`) render: their overlay content is portalled to `document.body`, which sits outside `.admin-root`. CSS variables only resolve inside the selector they are declared on, so the popover utilities (`bg-popover` etc.) hit undefined and the menus came up transparent. Moving the variables to `:root` makes them resolvable everywhere in the document.
+
+**Check before approving:** Open `/admin/projects` and click the row actions dropdown — it should paint as a solid dark menu with gold focus, not see-through. Token names and values are unchanged from CONSTRAINT-16; only the declaration site differs. The public site does not reference any `--admin-*` variables (Tailwind is admin-only), so the public bundle and its styling are unaffected.
+
+**What this closes off:** Future Radix primitives — `DropdownMenu`, `Popover`, `Tooltip`, `HoverCard`, anything that portals — will Just Work in admin because they resolve the variables from `:root`. Without this change, every new Radix overlay would have hit the same bug. Do NOT revert the tokens back to a `.admin-root`-scoped declaration without first solving portal-resolvability another way (e.g., a portal target inside `.admin-root`, or re-declaring the tokens on every Radix `Content` component). A scope-only revert will re-break every overlay in admin.
+
+**Implemented in:** `@dev` fix during Session 27, 2026-05-19. `app/styles/admin.css` — eight `--admin-*` declarations moved from `.admin-root { ... }` to `:root { ... }`; visual chrome rules (`background-color`, `color`, `font-family`, `min-height`) left on `.admin-root`. No callers changed — every consumer reads via `var(--admin-*)` or via Tailwind slot mapping, both of which resolve identically from `:root`. Also added in the same session: `app/(admin)/error.tsx`, a LOUD-failure error boundary for the admin route segment — uncaught render throws now surface `error.message` and `error.digest` verbatim with a `reset()` retry, no swallowed-error path. See architecture.md §4.4.
 
 ---
 

@@ -1,8 +1,8 @@
 # Plan — Phase 4: Polish + Launch
 
 **Date:** 2026-05-06
-**Status:** Active — T32–T38 done (T38 doc audit complete; 9/10 criteria met, only the DS-05 fresh-clone manual run outstanding — tracked separately); T39–T40 remaining (as of 2026-05-15, Session 25)
-**Tasks:** T32–T40 (9 tasks)
+**Status:** Active — T32–T39 done (T38 doc audit complete; 9/10 criteria met, only the DS-05 fresh-clone manual run outstanding — tracked separately. T39 closed 2026-05-19, Session 27: deploy live on apex canonical `swarnimbagre.com`, admin verified end-to-end including CRUD round-trip); T42 + T40 next (T42 blocks T40 content-addition criteria); T41 added 2026-05-19 as trigger-gated deferred follow-up (not a Phase 4 exit blocker)
+**Tasks:** T32–T42 (11 tasks; T41 is trigger-gated and does not block Phase 4 exit — same pattern as Phase 3's T29/T31 operator-gated deferrals; T42 added 2026-05-19 as a pre-T40 schema + render expansion to make the public project card meaningfully render real DB content)
 **Predecessor:** [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md)
 **Successor:** none — final phase
 
@@ -248,13 +248,15 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 **Acceptance criteria:**
 - [x] Final commit on `main`. Vercel auto-deploy succeeds (verify in dashboard). — S26 (2026-05-16): commits `f8181ae` (docs) + `8d02d93` (code) pushed; Vercel deploy green (`ADMIN_ALLOWED_EMAIL` present — no hard-fail).
 - [x] DNS for `swarnimbagre.com` apex and `www` cut over to Vercel. TTL is set sensibly (e.g., 300s for cutover, raise to 3600+ once stable). — S26: domain via Cloudflare, **DNS-only (grey cloud)**; resolves to Vercel `76.76.21.21`.
-- [x] HTTPS is live; `http://swarnimbagre.com` redirects to `https://swarnimbagre.com`. — S26: HTTPS + HSTS live. NOTE: apex currently 307→`www`; canonical = apex per CONSTRAINT-21; Vercel domain primary-flip still pending.
+- [x] HTTPS is live; `http://swarnimbagre.com` redirects to `https://swarnimbagre.com`. — S26: HTTPS + HSTS live. S27 (2026-05-19): Vercel apex primary-flip done; `www → apex` chain verified (`www/admin → 307 → apex/admin → 307 → apex/admin/login → 200`). CONSTRAINT-21 satisfied. Minor non-blocking follow-up: `www → apex` returns 307 (temporary); 308 would be more conventional for permanent canonical moves — single-toggle change in Vercel Domains panel.
 - [x] All four public pages return 200 with valid HTML at the production URL. — S26: verified on `www.swarnimbagre.com` (Home/Projects/Writing/Other all 200; `<title>Swarnim Bagre</title>`).
 - [x] Mobile UA serves the mobile component variant; desktop UA serves the desktop variant. — S26: verified (desktop 24.6 KB vs mobile 15.0 KB; distinct variants per UA).
-- [ ] Admin login redirects work; magic link to the configured admin email (`ADMIN_ALLOWED_EMAIL`) lands and produces a working session. — S26: **NOT verified.** Two Supabase config bugs found + fixed: (1) email pointed to `localhost` (Site URL + redirect allowlist + `NEXT_PUBLIC_SITE_URL` + redeploy); (2) default Magic Link email template incompatible with the server `token_hash` callback → template customized to `{{ .SiteURL }}/admin/auth/callback?token_hash={{ .TokenHash }}&type=email`. Blocked on Supabase free-tier email rate-limit cooldown + one clean retest. If still broken after retest, the CONSTRAINT-21 apex primary-flip is the prime suspect.
-- [ ] Projects, Posts, Stats, Images CRUD all work against production (verified by the T28 flow against the live URL). — pending admin login.
+- [x] Admin login redirects work; magic link to the configured admin email (`ADMIN_ALLOWED_EMAIL`) lands and produces a working session. — S26: NOT verified (rate-limit cooldown). S27 (2026-05-19): verified live — magic link to `bagreswarnim@gmail.com` lands authenticated; user reaches `/admin/projects` directly via the new `/admin → /admin/projects` redirect.
+- [x] Projects, Posts, Stats, Images CRUD all work against production (verified by the T28 flow against the live URL). — S27 (2026-05-19): operator CRUD round-trip done on live (create project → publish → confirm visible on public `/projects` → delete). Same for a post. Images-page anomaly from the 2026-05-15 screenshot resolved: live page renders the orphan-images section with "No orphaned images." empty state correctly — the prior screenshot was stale (pre-fix).
 - [~] OpenClaw test message produces a row visible at `/admin/stats` and `/other`. — SUPERSEDED by Decision 1 (S25 decouple): post-launch; T39 scope narrows to "stats-ingest path deployed + smoke-verifiable".
-- [ ] No console errors on any page in production browser DevTools (CQ-05 in production runtime). — pending (needs a browser/Playwright pass against the live URL).
+- [x] No console errors on any page in production browser DevTools (CQ-05 in production runtime). — S27 (2026-05-19): operator confirmed clean console pass on live URL across the 4 public pages and the admin landing.
+
+**T39 in-session fixes (S27, 2026-05-19):** Three admin UI bugs surfaced during operator smoke and fixed in commit `5b88f24` before T39 closure: (1) `/admin` index was a blank placeholder → now `redirect('/admin/projects')`; (2) no "New project" / "New post" entry point on list pages → added `newLabel` prop + `<Button asChild><Link href={...}>` in shared `ResourceList.tsx` header (create routes/forms already existed, just not linked); (3) shadcn `Select` popover rendered transparent over the table because Radix portals to `document.body` while `--admin-*` CSS variables lived only on `.admin-root` → moved the 8 tokens to `:root` in `app/styles/admin.css` (dark chrome stays scoped to `.admin-root`). Plus: new `app/(admin)/error.tsx` LOUD-failure boundary closes a gap in the admin segment (no segment-level error.tsx previously). E2E auth fixture + smoke heading assertions updated for the new redirect target (admin-smoke + admin-logout PASS serially; parallel-execution fixture race surfaced as non-blocking post-launch follow-up).
 
 **Tests required:**
 - Playwright smoke against the live URL covering: each public page renders; admin login redirects; one full admin flow (create project, view in public list after publish, delete) (TS-04).
@@ -290,9 +292,182 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 
 ---
 
+## T41 — Discoverability + public-route resilience (DEFERRED, trigger-gated)
+
+**Status:** Deferred — trigger-gated. Logged 2026-05-19 (Session 27 follow-up). Not a Phase 4 exit blocker.
+
+**Trigger condition (start when ANY of these is true):**
+- About to share the production URL publicly for the first time (Twitter / HN / LinkedIn post / job application / portfolio link in a bio). Run T41 **the day before** so OG previews cache correctly on first share.
+- A visitor reports they couldn't find the site by Googling "Swarnim Bagre" and you've given Google ≥3 weeks since the apex flip (2026-05-19) to index naturally.
+- A render crash on a public route is discovered after the fact (would also re-trigger T32 Sentry reconsideration).
+
+**Rationale for deferral:** Public site has 0 ambient traffic in week 1 post-launch. Discoverability infra (sitemap, GSC submission, OG previews) and public-route resilience (error boundary, 404 page) have no value until there are visitors to discover the site or to crash on it. Building this now is optimizing for users that do not exist — the same trap that bloats SaaS products pre-PMF. Logged here for visibility; will execute when one of the triggers above fires. Aligns with the T32 deferral pattern (Option B, 2026-05-14): defer infra until evidence of need.
+
+**Files:**
+- `app/robots.ts` (create)
+- `app/sitemap.ts` (create)
+- `app/layout.tsx` (modify — extend Metadata with `openGraph` + `twitter` objects + favicon link)
+- `app/opengraph-image.tsx` or `app/opengraph-image.png` (create — 1200×630 image with site name in Fraunces, matching the public bundle palette; consult `@designer` for spec)
+- `app/icon.svg` or `app/favicon.ico` (create — wire `site/assets/favicon.svg` to the Next.js app root)
+- `app/error.tsx` (create — public-route LOUD-failure error boundary, styled to match the public bundle voice and palette; mirrors `app/(admin)/error.tsx` but with public bundle styling, NOT shadcn)
+- `app/not-found.tsx` (create — public 404 page styled to match the bundle; voice-rule compliant per CONSTRAINT-13)
+- `docs/founder-brief.md` (modify — add entry for the discoverability + resilience decisions)
+
+**Functions to implement:**
+- `robots(): MetadataRoute.Robots` — allow all crawlers, point at sitemap.
+- `sitemap(): Promise<MetadataRoute.Sitemap>` — emit static routes (`/`, `/projects`, `/writing`, `/other`) + dynamic published project/post URLs queried from Supabase. Honor `published` status; skip drafts.
+
+**Acceptance criteria:**
+- [ ] `app/robots.ts` emits a valid `/robots.txt` allowing all crawlers; references the sitemap URL.
+- [ ] `app/sitemap.ts` emits a valid `/sitemap.xml` listing all 4 public root routes + every published project + every published post. Drafts excluded.
+- [ ] Open Graph + Twitter Card metadata is set in `app/layout.tsx` (site-wide defaults) and overridden per route on `app/projects/[slug]/page.tsx` + `app/writing/[slug]/page.tsx` (title, description, image).
+- [ ] OG image is wired and validates via `https://www.opengraph.xyz/url/https%3A%2F%2Fswarnimbagre.com` or equivalent.
+- [ ] Favicon visible in browser tab (no more default Next.js icon).
+- [ ] `app/error.tsx` catches client-side render crashes on public routes; styled to match the bundle (no shadcn); message follows voice rules (CONSTRAINT-13: dry, no SaaS phrases, no emoji).
+- [ ] `app/not-found.tsx` renders for unknown public URLs; styled to match the bundle; same voice rules.
+- [ ] Site verified in Google Search Console (DNS TXT or HTML meta tag method); sitemap submitted via Search Console.
+- [ ] `docs/founder-brief.md` has a new entry covering the discoverability decisions (DS-02).
+- [ ] No console errors on `/error` or `/not-found` test routes (CQ-05).
+
+**Tests required:**
+- `robots() emits expected User-agent and Sitemap directives` (TS-01).
+- `sitemap() includes published items and excludes drafts` (TS-01 happy + error).
+- Manual: paste production URL into Twitter compose / iMessage / Slack — preview card renders with image, title, description.
+- Manual: visit a known-bad URL like `/projects/this-does-not-exist` — `not-found.tsx` renders with bundle styling, not the default Next.js 404.
+
+**Depends on:** T40 (sample content exists, so sitemap has actual rows)
+
+**Specialist:** `@cto`, `@designer` (OG image spec only), `@content-writer` (error + not-found copy per voice rules)
+
+---
+
+## T42 — Project content-model expansion + public-card redesign
+
+**Status:** Planned 2026-05-19. Brainstorm complete (Session 28). Approved by builder. Supersedes the parked `docs/content-model-expansion.md` (which proposed a heavier Option C schema with new tables + JSONB — T42 ships a lighter "6 nullable columns, zero new tables" variant after Session 28 brainstorm closed scope).
+
+**Decisions locked in brainstorm (Session 28):**
+- Progress: integer percent (0–100), ring visual with auto "full circle + subtle glow" done state at 100. No lifecycle vocabulary.
+- Links: 3 fixed nullable URL columns (`github_url`, `live_url`, `post_url`). No `project_links` table.
+- Demo image: static images only for v1 (clips deferred post-launch). One project will use before/after slider — handled by new `image_after_id` FK + existing `BeforeAfterMedia.tsx` component.
+- Home thumbnail: 6 hand-tuned SVG motifs already in `ProjectThumb.tsx` (`disc | coin | nodes | bars | racquet | dots`). New motifs added in code over time — no migration cost (no CHECK constraint on `thumb_kind`).
+- Projects page demo: real screenshots via `image_id`. Bundle's animated `DemoLoop` variants (`rings | bars | wave | agent`) dropped from the data path; code stays in case revived later.
+- CONSTRAINT-05 override approved. Documented as Override 1 in `docs/design-decisions.md` + `docs/founder-brief.md`.
+
+**Files:**
+
+*Schema + types:*
+- `supabase/migrations/009_projects_content_model.sql` (create) — 6 ALTER TABLE ADD COLUMN statements, all nullable, with CHECK on `progress_percent` only.
+- `lib/types.ts` (modify) — extend `Project` interface with 6 new optional fields.
+
+*Server Actions + validation:*
+- `lib/admin-projects-mutations.ts` (modify) — `createProject` + `updateProject` accept the 6 new fields.
+- `lib/admin-projects-mutations-types.ts` (modify) — extend `ProjectMutationState` `fieldErrors` to cover new fields.
+- Zod schema for project mutations (currently inline; locate and extend) — validates URL format (HTTPS only for external; relative path allowed for `post_url`), percent bounds, `thumb_kind` against a code-side enum.
+
+*Admin form:*
+- `components/admin/ProjectForm.tsx` (modify) — add 6 inputs: 3 URL fields, 1 number input (percent), 1 Select dropdown (thumb_kind), 1 ImageUpload for `image_after_id`. **If file exceeds CQ-02 200-line cap, split into sub-components** (`ProjectFormUrls`, `ProjectFormVisuals`).
+- `lib/thumb-kinds.ts` (create) — exports `THUMB_KIND_OPTIONS` array used by both admin dropdown and render-side fallback logic. Source of truth so adding a motif is a 1-line array push + `ProjectThumb.tsx` motif addition.
+
+*Public render — components:*
+- `components/public/ProgressRing.tsx` (create) — SVG with two strokes: faint background ring + accent-colored arc via `stroke-dasharray`. Auto-renders done glow when percent = 100. ~80 lines.
+- `components/public/ProjectRow.tsx` (modify) — render `ProgressRing` (replacing bundle's `StatusPill`), render 3 conditional buttons (github / live / post), keep `ProjectThumb` thumbnail.
+- `components/public/ProjectMedia.tsx` (modify) — switch logic: use `image_id` for still kind, use `image_id` + `image_after_id` for before-after slider via existing `BeforeAfterMedia.tsx`. Remove DemoLoop integration from the data path.
+
+*Public render — pages:*
+- `components/public/pages/Home.tsx` (modify) — replace hardcoded `featured` array with DB-driven props from `getPublishedProjects()`; pass `thumb_kind` to `ProjectRow`.
+- `components/public/pages/Projects.tsx` (modify) — same; remove DemoLoop usage; use real screenshots.
+- `components/public/mobile/MobileProjectCard.tsx` (modify) — mirror desktop ProjectRow changes.
+- `components/public/mobile/MobileProjectRow.tsx` (modify) — mirror desktop changes.
+- `components/public/mobile/pages/Home.tsx` (modify) — mirror desktop Home.
+- `components/public/mobile/pages/Projects.tsx` (modify) — mirror desktop Projects.
+
+*Public data loader:*
+- `lib/safe-load.ts` and/or `lib/public-projects.ts` (locate + modify) — extend the project loader to SELECT the 6 new columns. Respect CONSTRAINT-14 (must go through `safe-load`).
+
+*Docs:*
+- `docs/design-decisions.md` (modify) — add "Override 1: project card redesign" entry: rationale, what changed, what stayed (palette, typography, voice).
+- `docs/founder-brief.md` (modify) — add architectural entry for the decision (DS-02 compliance).
+- `docs/architecture.md` (modify) — update §2 (data model) with new columns.
+- `docs/constraints.md` (modify) — note CONSTRAINT-05 has Override 1 (link).
+- `docs/content-model-expansion.md` (modify) — mark as SUPERSEDED by T42 with a pointer to this task.
+
+**Functions to implement:**
+- `ProgressRing({ percent, size }): JSX.Element` (~80 lines, CQ-01) — SVG ring with two strokes; done-state glow when `percent === 100`; `null` percent renders nothing.
+- `getPublishedProjects(): Promise<Project[]>` (extended) — SELECT including new columns; respects CONSTRAINT-14.
+- Zod schema extensions — URL validation (must start `https://` or `/` for relative `post_url`), percent bounds (`int().min(0).max(100).nullable()`), thumb_kind against code-side enum.
+
+**Acceptance criteria:**
+
+*Schema:*
+- [ ] Migration 009 applies cleanly to dev + production Supabase projects. Idempotent (uses `add column if not exists` or guard).
+- [ ] All 6 columns nullable; only `progress_percent` has a CHECK constraint (`between 0 and 100`).
+- [ ] `image_after_id` FK references `images(id) on delete set null` (matches existing `image_id` pattern).
+- [ ] RLS policies on `projects` already cover read access to all columns — no new policies needed (verified against migration 002).
+
+*Admin form:*
+- [ ] All 6 new fields render in `ProjectForm.tsx` for both create and edit modes.
+- [ ] Zod validation catches: invalid URL format on the 3 URL fields, percent out of range, unknown thumb_kind value.
+- [ ] `ImageUpload` for `image_after_id` uses the same `parentType: 'projects'` + `parentId` binding as primary image.
+- [ ] `ProjectForm.tsx` stays ≤200 lines (CQ-02) — split into sub-components if needed.
+- [ ] Save round-trip works for all new fields (verified via Playwright admin smoke test).
+
+*Public render — desktop:*
+- [ ] Home page renders DB-driven projects (not hardcoded `featured` array) — verify by adding a test project via admin and seeing it on home.
+- [ ] Projects page renders real screenshot (from `image_id`) instead of `DemoLoop` animation.
+- [ ] `ProgressRing` renders correctly at 0, 25, 50, 75, 100. Done glow visible only at 100.
+- [ ] 3 buttons (github / live / post) render only when their URL column is non-null. Hidden otherwise.
+- [ ] Bundle's `StatusPill` no longer renders on project cards.
+
+*Public render — mobile:*
+- [ ] All desktop changes mirrored on mobile components.
+- [ ] Mobile-specific layout regression-checked via Playwright.
+
+*Before/after slider:*
+- [ ] When `image_after_id` is non-null, `BeforeAfterMedia` renders the slider with both images.
+- [ ] When `image_after_id` is null, falls back to static image via existing `StillMedia` path.
+
+*Docs:*
+- [ ] `docs/design-decisions.md` Override 1 entry written with rationale.
+- [ ] `docs/founder-brief.md` architectural entry added (DS-02).
+- [ ] `docs/architecture.md` §2 updated.
+- [ ] `docs/content-model-expansion.md` marked SUPERSEDED with link to T42.
+
+*Quality gates:*
+- [ ] `npm run build` clean (CQ-05). No console errors in production runtime.
+- [ ] `npm test` 100% passing. New tests added per "Tests required" below.
+- [ ] Voice check on any new operator-facing labels (CONSTRAINT-13).
+
+**Tests required:**
+- `ProgressRing renders correctly at 0/25/50/75/100 percents` (TS-01 happy).
+- `ProgressRing renders done glow only at percent=100` (TS-01).
+- `ProgressRing renders nothing when percent is null` (TS-01 error).
+- `Zod schema rejects invalid URL formats` (TS-01 error).
+- `Zod schema rejects percent out of range` (TS-01 error).
+- `Zod schema accepts null for all 6 new fields` (TS-01 happy).
+- `ProjectForm submits all 6 new fields on create` (TS-01 happy).
+- `ProjectForm prefills all 6 fields on edit` (TS-01 happy).
+- `ProjectMedia renders BeforeAfterMedia when image_after_id is present` (TS-01).
+- `ProjectMedia falls back to StillMedia when image_after_id is null` (TS-01).
+- Playwright admin smoke: create project with all 6 fields filled, verify on public home + projects pages.
+
+**Depends on:** T39 (production deploy exists; this work happens against the live DB after a migration apply).
+
+**Blocks:** T40 content-addition criteria — projects added before T42 ships will render with the schema gaps (StatusPill instead of ring, no buttons, bundle DemoLoop instead of real image). T40's other criteria (24h log review, voice-check, launch-checklist post-launch section, DS-03 launch entry) are NOT blocked by T42.
+
+**Specialist:** `@dev` (execution), `@cto` (review schema choice before migration), `@code-review` (post-execution gate), `@security` (verify zod URL validation closes XSS-via-link vectors, since `live_url` becomes a user-controlled `href` attribute).
+
+**Estimated effort:** 2–3 focused sessions.
+- Session A: migration + types + Server Actions + zod + admin form + form tests
+- Session B: ProgressRing + ProjectRow desktop + Home desktop + Projects desktop + their tests
+- Session C: mobile mirrors + docs + Playwright smoke + final review
+
+If a session ends mid-task, the schema migration (Session A) must complete before any render work; rendering against missing columns is a known fail mode.
+
+---
+
 ## Phase 4 Exit Criteria
 
-- All 9 tasks complete.
-- Site is live at `swarnimbagre.com`, monitored, with content.
+- T32–T40 + T42 complete (T41 is a trigger-gated deferred follow-up and does not block Phase 4 exit, same pattern as Phase 3's T29/T31 OpenClaw-operator-gated deferrals).
+- Site is live at `swarnimbagre.com`, monitored, with content rendering against the expanded project schema.
 - All security and code review findings closed.
 - Mark Phase 4 row Done in [`plan-index.md`](plan-index.md). The `@plan` cycle is complete; future work happens via individual `@plan` follow-up tasks against the same docs.

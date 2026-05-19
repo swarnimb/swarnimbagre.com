@@ -230,6 +230,12 @@ The Tailwind config's `content` glob includes only `./app/(admin)/**/*` and `./c
 
 **Color token namespacing.** The admin uses an eight-token namespaced palette: 4 brand tokens (`--admin-bg`, `--admin-surface`, `--admin-fg`, `--admin-accent`) and 4 semantic tokens (`--admin-destructive`, `--admin-destructive-fg`, `--admin-border`, `--admin-muted-fg`). The semantic tokens map to shadcn slots (destructive, border, input, muted-foreground); the 3 sourced-from-public tokens match public-palette hexes verbatim (`--danger`, `--hairline`, `--fg-muted`) for brand coherence. The `--admin-*` prefix prevents cascade collisions if the public site's `:root` token definitions ever leak into the admin subtree (or vice versa). Tailwind config maps all 19 shadcn slots to these tokens, so utility class names (`bg-bg`, `text-fg`, `border-border`) stay clean in admin code — see CONSTRAINT-16 for the full slot table. Locked T15 — see Founder Brief #4 (Admin CSS token namespacing).
 
+**Declaration site — `:root`, not `.admin-root` (amended 2026-05-19).** All eight `--admin-*` custom properties are declared at `:root` in `app/styles/admin.css`. The dark visual chrome — `background-color`, `color`, `font-family`, `min-height` — stays on the `.admin-root` selector, so the admin theme remains visually scoped to admin routes. Token NAMES and VALUES are unchanged from CONSTRAINT-16; only the DECLARATION SITE moved.
+
+Why: Radix UI primitives (`Select`, `DropdownMenu`, `Popover`, `Tooltip`) render overlay content via `Portal` at `document.body` — outside the `.admin-root` subtree. CSS custom properties are scope-bound to the selector they are declared on, so popover utilities like `bg-popover` resolved to undefined when the overlay escaped `.admin-root`, producing transparent menus. Declaring the variables at `:root` makes them resolvable everywhere in the document. The variables are inert until referenced — the public site does not use any `--admin-*`-mapped utilities (Tailwind is admin-only per §4.2 above), so this is invisible on the public bundle.
+
+Reverting the declaration back to `.admin-root` will re-break every Radix portal overlay in admin. Do not move the tokens back without first solving portal-resolvability another way (e.g., a portal target inside `.admin-root`, or token re-declaration on each Radix `Content` component).
+
 **Founder Brief:** "Tailwind scoping" in [`founder-brief.md`](founder-brief.md).
 
 ### 4.4 UI-boundary error handling — `lib/safe-load.ts`
@@ -252,6 +258,8 @@ const projects = await safeLoad<Project[]>(
 The wrapper exists to convert data-layer throws into degraded UI states at the page boundary. Detail-page metadata + body both use it; the body adds `if (!row) notFound()` after the call so a null fallback dispatches Next.js's 404 path. List pages render an empty state on `[]`.
 
 **EH-01 carve-out (explicit):** This is the only catch-and-degrade pattern permitted in the codebase outside narrow data-layer error mapping. Using `safeLoad` inside `lib/` modules or mid-render helpers is an EH-01 violation. Boundary-only.
+
+**Admin segment error boundary — `app/(admin)/error.tsx` (added 2026-05-19).** The admin route group has a Next.js error boundary that catches any uncaught render-time throw from an admin Server Component or Client Component and renders a LOUD failure surface — `error.message` and `error.digest` are shown verbatim, with a `reset()`-wired retry button. There is no swallowed-error path: the boundary does not mask the failure behind a generic "Something went wrong" copy, per the LOUD-failure rule. The operator sees what broke immediately; the same error is also written to Vercel Runtime Logs by Next.js for post-hoc inspection.
 
 **Founder Brief:** "UI-boundary error handling" in [`founder-brief.md`](founder-brief.md).
 

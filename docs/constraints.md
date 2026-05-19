@@ -204,7 +204,9 @@ Admin borrows 8 color tokens, all namespaced under `--admin-*` — NOT as bare `
 7. `--admin-border` #3A3328 → shadcn `border`, `input` (sources hex from public `--hairline`)
 8. `--admin-muted-fg` #7A7060 → shadcn `muted-foreground` (sources hex from public `--fg-muted`)
 
-See `architecture.md` §4.2 and `founder-brief.md` "Admin CSS token namespacing". Established T15 (2026-05-11). Amended 2026-05-12 (session 12) — added 4 semantic shadcn tokens after `@designer` + `@cto` consultation. Rationale captured in `design-decisions.md`.
+**Declaration site — `:root`, not `.admin-root` (amended 2026-05-19, Session 27):** All eight `--admin-*` variables are declared at `:root` in `app/styles/admin.css`. Names and values are unchanged; only the DECLARATION SITE moved. Visual chrome (`background-color`, `color`, `font-family`, `min-height`) stays on the `.admin-root` selector so the dark admin theme remains visually scoped. Reason: Radix UI primitives (`Select`, `DropdownMenu`, `Popover`, `Tooltip`) render overlay content via `Portal` at `document.body` — outside the `.admin-root` subtree. CSS custom properties are scope-bound to the selector they are declared on; `bg-popover` resolved to undefined when the overlay escaped `.admin-root`, producing transparent menus. Declaring the variables at `:root` makes them resolvable everywhere. The public site does not reference any `--admin-*`-mapped utilities (Tailwind is admin-only per CONSTRAINT-03), so this change is invisible on the public bundle. **Do not revert the declaration to `.admin-root` without first solving portal-resolvability another way** — doing so will re-break every Radix overlay in admin.
+
+See `architecture.md` §4.2 and `founder-brief.md` "Admin CSS token namespacing" + "Admin theming tokens declared at `:root`". Established T15 (2026-05-11). Amended 2026-05-12 (session 12) — added 4 semantic shadcn tokens after `@designer` + `@cto` consultation. Amended 2026-05-19 (session 27) — declaration site moved to `:root` to resolve Radix portal escape. Rationale captured in `design-decisions.md` and `founder-brief.md`.
 
 ---
 
