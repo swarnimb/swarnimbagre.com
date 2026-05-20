@@ -9,21 +9,27 @@ interface ProjectLink {
   kind: string;
 }
 
-interface ProjectDemo {
-  kind?: string;
-  variant?: string;
-}
-
 interface MobileProjectCardProps {
   title: ReactNode;
   status?: string;
   blurb: ReactNode;
   links?: ProjectLink[];
-  demo?: ProjectDemo;
+  /** Signed Storage URL for the primary screenshot (T42 — mobile wires in Session C). */
+  imageUrl?: string | null;
+  /** Signed Storage URL for the after-screenshot, enables before/after slider. */
+  imageAfterUrl?: string | null;
   onClick?: () => void;
 }
 
-export function MobileProjectCard({ title, status, blurb, links = [], demo, onClick }: MobileProjectCardProps) {
+export function MobileProjectCard({
+  title,
+  status,
+  blurb,
+  links = [],
+  imageUrl,
+  imageAfterUrl,
+  onClick,
+}: MobileProjectCardProps) {
   return (
     <article
       onClick={onClick}
@@ -44,7 +50,7 @@ export function MobileProjectCard({ title, status, blurb, links = [], demo, onCl
         borderBottom: "1px solid var(--hairline)",
         overflow: "hidden",
       }}>
-        <ProjectMedia kind={demo?.kind} variant={demo?.variant} />
+        <ProjectMedia imageUrl={imageUrl} imageAfterUrl={imageAfterUrl} title={typeof title === 'string' ? title : ''} />
       </div>
       <div style={{ padding: "18px 18px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

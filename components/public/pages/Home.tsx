@@ -11,6 +11,7 @@ import { Page } from '@/components/public/Page';
 import { Nav } from '@/components/public/Nav';
 import { SocialIcon } from '@/components/public/SocialIcon';
 import { ProjectRow } from '@/components/public/ProjectRow';
+import type { PublicProject } from '@/lib/public-projects';
 import {
   TweaksPanel,
   TweakSection,
@@ -36,31 +37,18 @@ const HOME_TWEAK_DEFAULTS = {
   "showSocials": true
 };
 
-export function Home() {
+interface HomeProps {
+  /** DB-resolved projects to render in the scroller. Empty array hides the section. */
+  projects?: PublicProject[];
+}
+
+export function Home({ projects = [] }: HomeProps = {}) {
   const router = useRouter();
   const onNav = useCallback((target: string) => {
     router.push(resolveNavPath(target));
   }, [router]);
 
   const [t, setTweak] = useTweaks(HOME_TWEAK_DEFAULTS);
-
-  const featured = [
-    { title: "putt-or-not",  status: "active", thumbKind: "disc",
-      blurb: "Disc golf stats tracker for me and four friends. Tells us, mathematically, who is the worst.",
-      links: [{ kind: "github", href: "#" }, { kind: "live", href: "#" }, { kind: "post", href: "#" }] },
-    { title: "afford.lunch", status: "dormant", thumbKind: "coin",
-      blurb: "A personal finance app that answers exactly one question — can I afford lunch — and refuses to do anything else.",
-      links: [{ kind: "github", href: "#" }, { kind: "live", href: "#" }] },
-    { title: "agentless",    status: "abandoned fondly", thumbKind: "nodes",
-      blurb: "A small framework for AI agent setups. Mostly an excuse to learn what I keep half-understanding from blog posts.",
-      links: [{ kind: "github", href: "#" }, { kind: "post", href: "#" }] },
-    { title: "drumlog",      status: "active", thumbKind: "bars",
-      blurb: "A timer that records how long I practice drums and how loudly my neighbours have to tolerate it. Chart goes up; talent does not.",
-      links: [{ kind: "github", href: "#" }] },
-    { title: "tennis-elbow", status: "dormant", thumbKind: "racquet",
-      blurb: "Spreadsheet pretending to be an app. Tracks every match I lose and what I blame it on.",
-      links: [{ kind: "live", href: "#" }, { kind: "post", href: "#" }] },
-  ];
 
   const socials = [
     { kind: "email", href: SOCIAL_LINKS.email },
@@ -150,7 +138,7 @@ export function Home() {
         )}
       </section>
 
-      <ProjectsScroller projects={featured} onOpen={() => onNav("projects")} />
+      <ProjectsScroller projects={projects} onOpen={() => onNav("projects")} />
 
       <div style={{ flex: 1 }} />
 
@@ -212,16 +200,8 @@ export function Home() {
   );
 }
 
-interface ProjectsScrollerProject {
-  title: string;
-  status: string;
-  thumbKind: string;
-  blurb: string;
-  links: { kind: string; href: string }[];
-}
-
 /* ProjectsScroller — vertically scrollable, ~3 rows visible, soft fade.  */
-function ProjectsScroller({ projects, onOpen }: { projects: ProjectsScrollerProject[]; onOpen: () => void }) {
+function ProjectsScroller({ projects, onOpen }: { projects: PublicProject[]; onOpen: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [atEnd, setAtEnd] = useState(false);
 
@@ -239,6 +219,8 @@ function ProjectsScroller({ projects, onOpen }: { projects: ProjectsScrollerProj
 
   // ~3 rows visible; each row ~140px including its hairline.
   const visibleHeight = "clamp(380px, 44vh, 480px)";
+
+  if (projects.length === 0) return null;
 
   return (
     <div style={{ position: "relative", marginTop: 14, borderTop: "1px solid var(--hairline)", paddingTop: 4, paddingBottom: 10 }}>
@@ -265,15 +247,15 @@ function ProjectsScroller({ projects, onOpen }: { projects: ProjectsScrollerProj
             "linear-gradient(to bottom, black 0, black calc(100% - 72px), transparent 100%)",
         }}
       >
-        {projects.map((p, i) => (
+        {projects.map((p) => (
           <ProjectRow
-            key={p.title}
-            index={i + 1}
-            year=""
+            key={p.id}
             title={p.title}
-            status={p.status}
-            blurb={p.blurb}
-            links={p.links}
+            blurb={p.description}
+            progressPercent={p.progressPercent}
+            githubUrl={p.githubUrl}
+            liveUrl={p.liveUrl}
+            postUrl={p.postUrl}
             thumbKind={p.thumbKind}
             onClick={onOpen}
           />

@@ -1,8 +1,8 @@
 'use client'
 
 // Projects — premium 2-column card grid.
-// Each card: media (always-playing demo / before-after / still) +
-// title + status pill + 1-line blurb + links. No date.
+// T42 Session B: DB-driven, with the 6 content-model fields surfaced as
+// real screenshots / progress ring / 3 conditional URL icons.
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -11,75 +11,13 @@ import { Page } from '@/components/public/Page';
 import { Nav } from '@/components/public/Nav';
 import { Footer } from '@/components/public/Footer';
 import { ProjectCard } from '@/components/public/ProjectCard';
-
-const DEFAULT_PROJECTS = [
-  {
-    title: "putt-or-not",
-    status: "active",
-    blurb: "Disc golf stats tracker for me and four friends. Tells us, mathematically, who is the worst.",
-    demo:  { kind: "demo", variant: "rings" },
-    links: [{ kind: "github", href: "#" }, { kind: "live", href: "#" }, { kind: "post", href: "#" }],
-  },
-  {
-    title: "afford.lunch",
-    status: "dormant",
-    blurb: "A finance app that answers exactly one question — can I afford lunch — and refuses to do anything else.",
-    demo:  { kind: "still" },
-    links: [{ kind: "github", href: "#" }, { kind: "live", href: "#" }],
-  },
-  {
-    title: "agentless",
-    status: "abandoned fondly",
-    blurb: "A small framework for AI agent setups. Mostly an excuse to learn what I keep half-understanding from blog posts.",
-    demo:  { kind: "demo", variant: "agent" },
-    links: [{ kind: "github", href: "#" }, { kind: "post", href: "#" }],
-  },
-  {
-    title: "drumlog",
-    status: "active",
-    blurb: "Times my drum practice and roughly how loudly my neighbours have to tolerate it. Chart goes up; talent does not.",
-    demo:  { kind: "demo", variant: "bars" },
-    links: [{ kind: "github", href: "#" }],
-  },
-  {
-    title: "tennis-elbow",
-    status: "dormant",
-    blurb: "Spreadsheet pretending to be an app. Tracks every match I lose and what I blame it on.",
-    demo:  { kind: "before-after" },
-    links: [{ kind: "live", href: "#" }, { kind: "post", href: "#" }],
-  },
-  {
-    title: "tape.studio",
-    status: "active",
-    blurb: "Browser-only loop pedal for people who own no equipment, including me.",
-    demo:  { kind: "demo", variant: "wave" },
-    links: [{ kind: "github", href: "#" }, { kind: "live", href: "#" }],
-  },
-];
-
-interface ProjectLink {
-  kind: string;
-  href?: string;
-}
-interface ProjectDemo {
-  kind?: string;
-  variant?: string;
-}
-export interface ProjectItem {
-  title: string;
-  status?: string;
-  blurb: string;
-  demo?: ProjectDemo;
-  links?: ProjectLink[];
-  /** When present, the card navigates to `/projects/{slug}` on click. */
-  slug?: string;
-}
+import type { PublicProject } from '@/lib/public-projects';
 
 interface ProjectsProps {
-  items?: ProjectItem[];
+  items?: PublicProject[];
 }
 
-export function Projects({ items = DEFAULT_PROJECTS }: ProjectsProps = {}) {
+export function Projects({ items = [] }: ProjectsProps = {}) {
   const router = useRouter();
   const onNav = useCallback((target: string) => {
     router.push(resolveNavPath(target));
@@ -119,13 +57,16 @@ export function Projects({ items = DEFAULT_PROJECTS }: ProjectsProps = {}) {
       }}>
         {items.map((p) => (
           <ProjectCard
-            key={p.slug ?? p.title}
+            key={p.id}
             title={p.title}
-            status={p.status}
-            blurb={p.blurb}
-            demo={p.demo}
-            links={p.links}
-            onClick={p.slug ? () => router.push(`/projects/${p.slug}`) : undefined}
+            blurb={p.description}
+            progressPercent={p.progressPercent}
+            githubUrl={p.githubUrl}
+            liveUrl={p.liveUrl}
+            postUrl={p.postUrl}
+            imageUrl={p.imageUrl}
+            imageAfterUrl={p.imageAfterUrl}
+            onClick={() => router.push(`/projects/${p.slug}`)}
           />
         ))}
       </div>

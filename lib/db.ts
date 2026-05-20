@@ -3,9 +3,17 @@ import { createServerClient } from './supabase';
 import { ServiceError } from './errors';
 import type { Project, Post, Stat, ImageRecord } from './types';
 
-/** Column projection for project list and detail queries. */
+/**
+ * Column projection for project list and detail queries.
+ *
+ * Extended in T42 Session B to include the 6 nullable content-model columns
+ * added by migration 009 (`github_url`, `live_url`, `post_url`,
+ * `progress_percent`, `thumb_kind`, `image_after_id`). Public render
+ * (`ProjectRow`, `ProjectMedia`) reads these directly off the row.
+ */
 const PROJECT_COLUMNS =
-  'id, title, slug, description, status, image_id, created_at, updated_at';
+  'id, title, slug, description, status, image_id, created_at, updated_at, ' +
+  'github_url, live_url, post_url, progress_percent, thumb_kind, image_after_id';
 
 /** Column projection for post list and detail queries. */
 const POST_COLUMNS =
@@ -71,7 +79,10 @@ export async function getPublishedProjects(client?: SupabaseClient): Promise<Pro
     logDbError(operation, error);
     throw new ServiceError(`${operation} failed`, { cause: error, operation });
   }
-  return (data ?? []) as Project[];
+  // Cast via `unknown` because the SDK's inferred type for a wider SELECT
+  // string (T42 added 6 columns) no longer narrows to a row shape that
+  // overlaps with `Project`. The runtime contract is the SQL projection.
+  return (data ?? []) as unknown as Project[];
 }
 
 /**

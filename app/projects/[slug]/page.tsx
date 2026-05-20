@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { getProjectBySlug } from '@/lib/db';
+import { getProjectBySlug, getImageById } from '@/lib/db';
+import { getImageUrl } from '@/lib/images';
 import { safeLoad } from '@/lib/safe-load';
 import type { Project } from '@/lib/types';
 import { Page } from '@/components/public/Page';
@@ -43,12 +44,37 @@ export default async function ProjectDetailPage({ params }: DetailParams) {
   const { slug } = await params;
   const project = await safeLoad<Project | null>(() => getProjectBySlug(slug), null, 'page:projects/[slug]');
   if (!project) notFound();
+  const [imageUrl, imageAfterUrl] = await Promise.all([
+    safeLoad<string | null>(() => resolveProjectImage(project.image_id), null, 'page:projects/[slug]:image'),
+    safeLoad<string | null>(() => resolveProjectImage(project.image_after_id), null, 'page:projects/[slug]:image-after'),
+  ]);
   const h = await headers();
   const variant = h.get('x-device-variant');
-  return variant === 'mobile' ? <MobileDetail project={project} /> : <DesktopDetail project={project} />;
+  if (variant === 'mobile') {
+    return <MobileDetail project={project} />;
+  }
+  return <DesktopDetail project={project} imageUrl={imageUrl} imageAfterUrl={imageAfterUrl} />;
 }
 
-function DesktopDetail({ project }: { project: Project }) {
+/**
+ * Resolve a project image id to a signed Storage URL. Returns null when the
+ * id is null/missing; throws on storage failures so the page-level safeLoad
+ * can log and fall back. Mirrors `lib/public-projects.ts` resolution.
+ */
+async function resolveProjectImage(imageId: string | null): Promise<string | null> {
+  if (!imageId) return null;
+  const record = await getImageById(imageId);
+  if (!record) return null;
+  return getImageUrl(record.bucket_path);
+}
+
+interface DesktopDetailProps {
+  project: Project;
+  imageUrl: string | null;
+  imageAfterUrl: string | null;
+}
+
+function DesktopDetail({ project, imageUrl, imageAfterUrl }: DesktopDetailProps) {
   return (
     <Page>
       <Nav current="projects" hrefs={NAV_PATHS} />
@@ -61,7 +87,16 @@ function DesktopDetail({ project }: { project: Project }) {
           ← projects
         </a>
       </header>
-      <ProjectCard title={project.title} status={project.status} blurb={project.description} />
+      <ProjectCard
+        title={project.title}
+        blurb={project.description}
+        progressPercent={project.progress_percent}
+        githubUrl={project.github_url}
+        liveUrl={project.live_url}
+        postUrl={project.post_url}
+        imageUrl={imageUrl}
+        imageAfterUrl={imageAfterUrl}
+      />
       <div style={{ flex: 1 }} />
       <Footer />
     </Page>

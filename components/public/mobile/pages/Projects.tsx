@@ -87,7 +87,6 @@ export function Projects({ items = DEFAULT_PROJECTS }: ProjectsProps = {}) {
             title={p.title}
             status={p.status}
             blurb={p.blurb}
-            demo={p.demo}
             links={p.links}
             onClick={p.slug ? () => router.push(`/projects/${p.slug}`) : undefined}
           />
