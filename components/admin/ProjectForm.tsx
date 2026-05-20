@@ -17,10 +17,15 @@ import {
 import { createProject, updateProject } from '@/lib/admin-projects-mutations';
 import {
   PROJECT_MUTATION_INITIAL_STATE,
+  type ProjectMutationFieldName,
   type ProjectMutationState,
 } from '@/lib/admin-projects-mutations-types';
-import type { ImageRecord, Project, ProjectStatus } from '@/lib/types';
-import ImageUpload from '@/components/admin/ImageUpload';
+import type { Project, ProjectStatus } from '@/lib/types';
+import ProjectFormLinks from '@/components/admin/ProjectFormLinks';
+import ProjectFormDisplay from '@/components/admin/ProjectFormDisplay';
+import ProjectImageField, {
+  type ImagePreview,
+} from '@/components/admin/ProjectImageField';
 
 /** Toast copy on success. CONSTRAINT-13: dry, no SaaS phrasing, no emoji. */
 const SAVE_SUCCESS_MESSAGE = 'Saved.';
@@ -28,14 +33,17 @@ const SAVE_SUCCESS_MESSAGE = 'Saved.';
 /** Hardcoded after-save destination — list view for both create and edit. */
 const PROJECTS_LIST_PATH = '/admin/projects';
 
+/** Title text input cap — mirrors `projects.title` CHECK in migration 001. */
+const TITLE_INPUT_MAX_LENGTH = 200;
+
 /** Props for {@link ProjectForm}. `project` absent => create mode. */
 export interface ProjectFormProps {
   /** Existing project row; absent for create. */
   project?: Project;
-  /** Resolved image preview payload for the project's `image_id`. Null when
-   * the project has no image, or the image row was orphaned. Page-side
-   * loader handles the signed-URL resolution (CONSTRAINT-15). */
-  currentImage?: { id: string; signedUrl: string; altText: string } | null;
+  /** Resolved preview for `project.image_id`. Null when unset/orphaned. */
+  currentImage?: ImagePreview | null;
+  /** Resolved preview for `project.image_after_id`. Null when unset/orphaned. */
+  currentImageAfter?: ImagePreview | null;
   /** Optional injected actions — tests override these to avoid Server Action wiring. */
   createAction?: typeof createProject;
   updateAction?: typeof updateProject;
@@ -44,24 +52,24 @@ export interface ProjectFormProps {
 /** Read a field error from the action state; '' renders no inline message. */
 function fieldError(
   state: ProjectMutationState,
-  field: 'title' | 'description' | 'status',
+  field: ProjectMutationFieldName,
 ): string {
   return state.fieldErrors?.[field] ?? '';
 }
 
 /**
  * Admin create / edit form for a project row. One component, two modes —
- * inferred from the `project` prop. Edit mode renders with the row prefilled
- * and submits `updateProject` with a hidden `id`; the slug input becomes
- * read-only on `status === 'published'` (CONSTRAINT-12; migration 008 is the
- * DB-side guard). On success: sonner toast + push to `/admin/projects`. On
- * error: zod field messages inline; generic form-level message above the form.
- * Six-channel uniformity is enforced by the action wrapper (see
- * `docs/auth-flow.md` §2a).
+ * inferred from the `project` prop. T42 splits new fields into three sub-
+ * components: `ProjectFormLinks` (3 URLs), `ProjectFormDisplay` (progress +
+ * thumb_kind), and two `ProjectImageField` instances (primary + after).
+ * Slug is read-only on `status === 'published'` (CONSTRAINT-12; migration
+ * 008 is the DB-side guard). Success: toast + push to list. Error: zod
+ * field messages inline; generic form-level error above the form.
  */
 export default function ProjectForm({
   project,
   currentImage = null,
+  currentImageAfter = null,
   createAction = createProject,
   updateAction = updateProject,
 }: ProjectFormProps): React.ReactElement {
@@ -73,15 +81,7 @@ export default function ProjectForm({
     FormData
   >(action, PROJECT_MUTATION_INITIAL_STATE);
 
-  // Status: controlled Select (renders into a portal) mirrored back into the
-  // form submission via a hidden input below.
   const [status, setStatus] = useState<ProjectStatus>(project?.status ?? 'draft');
-
-  // Image binding. `imageId` mirrors `image_id` after a fresh upload; the
-  // hidden `image_id` input carries it back to the server (empty string =>
-  // null per backend coercion contract).
-  const [imageId, setImageId] = useState<string | null>(currentImage?.id ?? null);
-  const [uploadedImage, setUploadedImage] = useState<ImageRecord | null>(null);
 
   useEffect(() => {
     if (state.status === 'ok') {
@@ -105,7 +105,6 @@ export default function ProjectForm({
       <form action={formAction} className="space-y-6" noValidate>
         {isEdit ? <input type="hidden" name="id" value={project.id} /> : null}
         <input type="hidden" name="status" value={status} />
-        <input type="hidden" name="image_id" value={imageId ?? ''} />
 
         <div className="space-y-2">
           <Label htmlFor="project-title">Title</Label>
@@ -115,7 +114,7 @@ export default function ProjectForm({
             defaultValue={project?.title ?? ''}
             aria-invalid={Boolean(fieldError(state, 'title'))}
             aria-describedby="project-title-error"
-            maxLength={200}
+            maxLength={TITLE_INPUT_MAX_LENGTH}
             required
           />
           {fieldError(state, 'title') ? (
@@ -143,22 +142,8 @@ export default function ProjectForm({
           ) : null}
         </div>
 
-        {isEdit ? (
-          <div className="space-y-3">
-            <Label>Image</Label>
-            {imageId !== null && currentImage !== null && uploadedImage === null ? (
-              <img src={currentImage.signedUrl} alt={currentImage.altText} className="max-w-xs border border-border" />
-            ) : null}
-            {uploadedImage !== null ? (
-              <p className="text-sm text-muted-foreground">New image saved. Preview refreshes after save.</p>
-            ) : null}
-            <ImageUpload
-              parentType="projects"
-              parentId={project.id}
-              onUpload={(image) => { setImageId(image.id); setUploadedImage(image); }}
-            />
-          </div>
-        ) : null}
+        <ProjectFormLinks project={project} state={state} />
+        <ProjectFormDisplay project={project} state={state} />
 
         <div className="space-y-2">
           <Label htmlFor="project-status">Status</Label>
@@ -175,6 +160,24 @@ export default function ProjectForm({
             </SelectContent>
           </Select>
         </div>
+
+        {isEdit ? (
+          <ProjectImageField
+            parentId={project.id}
+            fieldName="image_id"
+            label="Image"
+            initialPreview={currentImage}
+          />
+        ) : null}
+
+        {isEdit ? (
+          <ProjectImageField
+            parentId={project.id}
+            fieldName="image_after_id"
+            label="After image (before/after slider)"
+            initialPreview={currentImageAfter}
+          />
+        ) : null}
 
         {isEdit && isSlugLocked ? (
           <div className="space-y-2">

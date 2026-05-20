@@ -6,13 +6,26 @@
  * directly without renaming. Keep in sync with migrations.
  */
 
+import type { ThumbKind } from './thumb-kinds';
+
 /** Lifecycle state of a project row. Mirrors the `project_status` enum. */
 export type ProjectStatus = 'draft' | 'published';
 
 /** Lifecycle state of a post row. Mirrors the `post_status` enum. */
 export type PostStatus = 'draft' | 'published';
 
-/** A portfolio project. One row in `public.projects`. */
+/**
+ * A portfolio project. One row in `public.projects`.
+ *
+ * Content-model fields below `updated_at` were added in migration 009
+ * (T42, CONSTRAINT-05 Override 1). All six are nullable.
+ *
+ * `thumb_kind` is typed as `ThumbKind | null` to match the rest of the
+ * codebase's narrowed-at-boundary convention. The DB column itself is
+ * untyped `text` (see `lib/thumb-kinds.ts` for the rationale); if a
+ * row holds a value outside `ThumbKind`, the public render layer falls
+ * back to the `dots` motif and the type lies harmlessly.
+ */
 export interface Project {
   id: string;
   title: string;
@@ -22,6 +35,12 @@ export interface Project {
   image_id: string | null;
   created_at: string;
   updated_at: string;
+  github_url: string | null;
+  live_url: string | null;
+  post_url: string | null;
+  progress_percent: number | null;
+  thumb_kind: ThumbKind | null;
+  image_after_id: string | null;
 }
 
 /** A written post. One row in `public.posts`. */

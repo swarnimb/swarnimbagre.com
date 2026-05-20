@@ -30,11 +30,28 @@
  * an attacker probing the endpoint cannot distinguish "validation failed"
  * from "Supabase fail" from "trigger raised" by the response envelope.
  */
+/**
+ * Union of field names that can carry a per-field zod validation error.
+ * Extended in T42 to cover the six new content-model fields added in
+ * migration 009 (`github_url`, `live_url`, `post_url`, `progress_percent`,
+ * `thumb_kind`, `image_after_id`).
+ */
+export type ProjectMutationFieldName =
+  | 'title'
+  | 'description'
+  | 'status'
+  | 'github_url'
+  | 'live_url'
+  | 'post_url'
+  | 'progress_percent'
+  | 'thumb_kind'
+  | 'image_after_id';
+
 export interface ProjectMutationState {
   /** `'idle'` is the initial state used by `useActionState`. */
   status: 'idle' | 'ok' | 'error';
   /** Field-level zod errors, keyed by schema field name. */
-  fieldErrors?: Partial<Record<'title' | 'description' | 'status', string>>;
+  fieldErrors?: Partial<Record<ProjectMutationFieldName, string>>;
   /** Form-level error (Supabase failure, trigger raise, etc.). Generic copy. */
   formError?: string;
 }

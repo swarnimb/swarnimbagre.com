@@ -1,11 +1,26 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import { createServerClient } from './supabase';
 import { ServiceError } from './errors';
 import type { Project, ProjectStatus } from './types';
+import {
+  projectCreateSchema,
+  projectUpdateSchema,
+  type ProjectCreateInput,
+  type ProjectUpdateInput,
+} from './admin-projects-mutations-schemas';
 import { orphanIfChanged } from './admin-images-orphan';
 import { deriveSlugOrThrow } from './admin-slug';
 import { logSupabaseError } from './admin-mutation-log';
+
+// Re-export schemas + inferred types so existing imports from this module
+// stay valid after the T42 schema extraction. New code should import from
+// `./admin-projects-mutations-schemas` directly.
+export {
+  projectCreateSchema,
+  projectUpdateSchema,
+  type ProjectCreateInput,
+  type ProjectUpdateInput,
+};
 
 /**
  * Module note (F-14 analogue, applied to PROJECT mutations).
@@ -31,12 +46,6 @@ import { logSupabaseError } from './admin-mutation-log';
  * envelope) and `-mutations.ts` (`'use server'` wrappers).
  */
 
-/**
- * Maximum title length. Mirrors the `text` column's CHECK in migration 001
- * (`projects.title length <= 200`).
- */
-const TITLE_MAX_LENGTH = 200;
-
 /** Operation tag for create-side logs and ServiceError instances. */
 const CREATE_PROJECT_OPERATION = 'createProject';
 /** Operation tag for update-side logs and ServiceError instances. */
@@ -48,59 +57,26 @@ const DELETE_PROJECT_OPERATION = 'deleteProject';
 const PUBLISHED: ProjectStatus = 'published';
 
 /**
- * Zod schema for the create-project boundary.
+ * Pre-fetch fields needed by the update orchestrator:
+ *   - `status`         → slug-lock gate (CONSTRAINT-12)
+ *   - `image_id`       → orphan-on-swap source (T26)
+ *   - `image_after_id` → orphan-on-swap source for the before/after FK (T42)
  *
- * `title` and `description` are required and non-empty (CONSTRAINT-13 stays
- * out of the schema — voice rules are content-side, not validation-side).
- * `status` is the project_status enum from migration 001; defaults to
- * `'draft'` so a publish-on-create flow is opt-in.
- */
-export const projectCreateSchema = z.object({
-  title: z.string().trim().min(1, 'title is required').max(TITLE_MAX_LENGTH),
-  description: z.string().trim().min(1, 'description is required'),
-  status: z.enum(['draft', 'published']).default('draft'),
-}).strict();
-
-/** Inferred input shape for {@link createProjectInternal}. */
-export type ProjectCreateInput = z.infer<typeof projectCreateSchema>;
-
-/**
- * Zod schema for the update-project boundary. Same shape as create plus an
- * optional `image_id` (T26 image-upload wiring) — both text fields are
- * required because the form re-submits the full row, not a patch. The
- * wrapper computes whether `slug` should be re-derived from the new title
- * (when the existing row is a `draft`) or omitted (when `published`).
- *
- * `image_id` is a UUID-or-null: the FormData read in
- * `admin-projects-mutations.ts` coerces an empty string to `null` BEFORE
- * the schema runs, so the parser only ever sees the post-coercion shape.
- * A non-null value must be a valid UUID — anything else is rejected at the
- * boundary (SEC-02).
- */
-export const projectUpdateSchema = z.object({
-  title: z.string().trim().min(1, 'title is required').max(TITLE_MAX_LENGTH),
-  description: z.string().trim().min(1, 'description is required'),
-  status: z.enum(['draft', 'published']),
-  image_id: z.string().uuid('image_id must be a uuid').nullable(),
-}).strict();
-
-/** Inferred input shape for {@link updateProjectInternal}. */
-export type ProjectUpdateInput = z.infer<typeof projectUpdateSchema>;
-
-/**
- * Pre-fetch `status` (slug-lock gate, CONSTRAINT-12) and `image_id`
- * (orphan-on-swap source, T26) for {@link updateProjectInternal}. Extracted
- * to keep the orchestrator under CQ-01's 50-line cap.
+ * Extracted to keep the orchestrator under CQ-01's 50-line cap.
  *
  * @throws ServiceError on any Supabase error.
  */
 async function fetchExistingProject(
   client: SupabaseClient,
   id: string,
-): Promise<{ status: ProjectStatus; image_id: string | null }> {
+): Promise<{
+  status: ProjectStatus;
+  image_id: string | null;
+  image_after_id: string | null;
+}> {
   const { data, error } = await client
     .from('projects')
-    .select('status, image_id')
+    .select('status, image_id, image_after_id')
     .eq('id', id)
     .single();
   if (error) {
@@ -110,7 +86,11 @@ async function fetchExistingProject(
       cause: error,
     });
   }
-  return data as { status: ProjectStatus; image_id: string | null };
+  return data as {
+    status: ProjectStatus;
+    image_id: string | null;
+    image_after_id: string | null;
+  };
 }
 
 /**
@@ -147,6 +127,11 @@ export async function createProjectInternal(
     description: parsed.description,
     status: parsed.status,
     slug,
+    github_url: parsed.github_url,
+    live_url: parsed.live_url,
+    post_url: parsed.post_url,
+    progress_percent: parsed.progress_percent,
+    thumb_kind: parsed.thumb_kind,
   };
   const { data, error } = await supabase
     .from('projects')
@@ -184,6 +169,57 @@ export async function createProjectInternal(
  * @throws ServiceError when `id` is empty, the row is not found, or Supabase
  *                     rejects (including the slug-lock trigger raising).
  */
+/**
+ * Build the update-payload object passed to Supabase. The slug is included
+ * only when the existing row is `draft` (CONSTRAINT-12); migration 006's
+ * BEFORE UPDATE trigger is the DB-side belt that catches the omit-bypass.
+ * Extracted from {@link updateProjectInternal} to keep the orchestrator
+ * under CQ-01's 50-line cap.
+ */
+function buildProjectUpdatePayload(
+  parsed: ProjectUpdateInput,
+  isPublished: boolean,
+): Record<string, unknown> {
+  const payload: Record<string, unknown> = {
+    title: parsed.title,
+    description: parsed.description,
+    status: parsed.status,
+    image_id: parsed.image_id,
+    github_url: parsed.github_url,
+    live_url: parsed.live_url,
+    post_url: parsed.post_url,
+    progress_percent: parsed.progress_percent,
+    thumb_kind: parsed.thumb_kind,
+    image_after_id: parsed.image_after_id,
+  };
+  if (!isPublished) {
+    payload.slug = deriveSlugOrThrow(parsed.title, UPDATE_PROJECT_OPERATION);
+  }
+  return payload;
+}
+
+/**
+ * Detach the previous image rows for both FKs when the parent project
+ * swaps them. T26 introduced this for `image_id`; T42 extends it to the
+ * before/after FK `image_after_id`. Same orphan rule both times — the
+ * helper just runs the pair sequentially so the orchestrator stays flat.
+ */
+async function orphanProjectImagesIfChanged(
+  client: SupabaseClient,
+  projectId: string,
+  existing: { image_id: string | null; image_after_id: string | null },
+  parsed: ProjectUpdateInput,
+): Promise<void> {
+  await orphanIfChanged(
+    client, UPDATE_PROJECT_OPERATION, projectId,
+    existing.image_id, parsed.image_id,
+  );
+  await orphanIfChanged(
+    client, UPDATE_PROJECT_OPERATION, projectId,
+    existing.image_after_id, parsed.image_after_id,
+  );
+}
+
 export async function updateProjectInternal(
   id: string,
   input: unknown,
@@ -199,16 +235,7 @@ export async function updateProjectInternal(
   const supabase = client ?? (await createServerClient());
   const existingRow = await fetchExistingProject(supabase, id);
   const isPublished = existingRow.status === PUBLISHED;
-
-  const payload: Record<string, unknown> = {
-    title: parsed.title,
-    description: parsed.description,
-    status: parsed.status,
-    image_id: parsed.image_id,
-  };
-  if (!isPublished) {
-    payload.slug = deriveSlugOrThrow(parsed.title, UPDATE_PROJECT_OPERATION);
-  }
+  const payload = buildProjectUpdatePayload(parsed, isPublished);
 
   const { data, error } = await supabase
     .from('projects')
@@ -223,11 +250,7 @@ export async function updateProjectInternal(
       cause: error,
     });
   }
-  // T26: detach previous image on swap. See `orphanIfChanged` for rationale.
-  await orphanIfChanged(
-    supabase, UPDATE_PROJECT_OPERATION, id,
-    existingRow.image_id, parsed.image_id,
-  );
+  await orphanProjectImagesIfChanged(supabase, id, existingRow, parsed);
   return data as Project;
 }
 

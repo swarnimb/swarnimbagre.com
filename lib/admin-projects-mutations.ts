@@ -6,7 +6,10 @@ import {
   deleteProjectInternal,
   updateProjectInternal,
 } from './admin-projects-mutations-internal';
-import type { ProjectMutationState } from './admin-projects-mutations-types';
+import type {
+  ProjectMutationFieldName,
+  ProjectMutationState,
+} from './admin-projects-mutations-types';
 import { GENERIC_FORM_ERROR } from './auth-constants';
 import { padToFloor } from './timing';
 
@@ -33,10 +36,37 @@ import { padToFloor } from './timing';
  */
 
 /**
- * Convert a `ZodError` into the per-field state shape. Only the fields we
- * own (`title`, `description`, `status`) are surfaced; any other key in the
- * error tree is ignored — Channel 1 (UI text) requires we leak no shape
- * information beyond the form's declared fields.
+ * Allowlist of zod-error keys we surface to the form. Anything outside this
+ * set is dropped to avoid leaking shape information through Channel 1.
+ *
+ * Updated in T42 to cover the six new content-model fields. Kept as a Set
+ * (not a switch) so adding fields touches data, not control flow.
+ */
+const ALLOWED_FIELD_KEYS: ReadonlySet<ProjectMutationFieldName> = new Set([
+  'title',
+  'description',
+  'status',
+  'github_url',
+  'live_url',
+  'post_url',
+  'progress_percent',
+  'thumb_kind',
+  'image_after_id',
+]);
+
+/** Type guard: narrow an unknown zod-path key into the allowed-fields union. */
+function isAllowedFieldKey(value: unknown): value is ProjectMutationFieldName {
+  return (
+    typeof value === 'string' &&
+    ALLOWED_FIELD_KEYS.has(value as ProjectMutationFieldName)
+  );
+}
+
+/**
+ * Convert a `ZodError` into the per-field state shape. Only the fields in
+ * {@link ALLOWED_FIELD_KEYS} are surfaced; any other key in the error tree
+ * is ignored — Channel 1 (UI text) requires we leak no shape information
+ * beyond the form's declared fields.
  */
 function projectZodErrorToFieldErrors(
   err: ZodError,
@@ -44,7 +74,7 @@ function projectZodErrorToFieldErrors(
   const fieldErrors: ProjectMutationState['fieldErrors'] = {};
   for (const issue of err.issues) {
     const key = issue.path[0];
-    if (key === 'title' || key === 'description' || key === 'status') {
+    if (isAllowedFieldKey(key)) {
       // Keep the first message per field; later issues for the same field are
       // less informative for the user (zod emits them in order).
       if (!fieldErrors[key]) fieldErrors[key] = issue.message;
@@ -54,39 +84,76 @@ function projectZodErrorToFieldErrors(
 }
 
 /**
+ * Read a FormData field as a trimmed non-empty string, or `null` if empty
+ * or missing. Used for every nullable text field — URLs, image FK ids,
+ * `thumb_kind`. Mirrors the empty-string-to-null convention that the zod
+ * schemas (`.nullable()`) expect at the boundary.
+ */
+function readNullableTrimmed(formData: FormData, key: string): string | null {
+  const raw = formData.get(key);
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return trimmed.length === 0 ? null : trimmed;
+}
+
+/**
+ * Read `progress_percent` from FormData. Empty/missing → `null`. A parseable
+ * numeric string → `number`. A non-numeric string passes through as the raw
+ * trimmed string so the zod number schema rejects with a deterministic
+ * message rather than the field being silently nulled.
+ */
+function readPercentField(formData: FormData): unknown {
+  const raw = formData.get('progress_percent');
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+  const parsed = Number(trimmed);
+  return Number.isNaN(parsed) ? trimmed : parsed;
+}
+
+/**
  * Read FormData into the raw create payload. The cast is intentional:
  * unknown raw values flow through to the zod parser at the boundary, which
- * is the authoritative validator. Create does NOT carry `image_id`: image
- * upload requires the parent's UUID, which only exists after the project
- * row has been inserted. Images are attached on the subsequent edit.
+ * is the authoritative validator. Create does NOT carry `image_id` or
+ * `image_after_id`: image upload requires the parent's UUID, which only
+ * exists after the project row has been inserted. Images are attached on
+ * the subsequent edit. The five non-image content-model fields (URLs,
+ * progress, thumb_kind) are included so a publish-on-create flow can land
+ * a complete row in one round-trip.
  */
 function readProjectCreateFormData(formData: FormData): unknown {
   return {
     title: formData.get('title'),
     description: formData.get('description'),
     status: formData.get('status'),
+    github_url: readNullableTrimmed(formData, 'github_url'),
+    live_url: readNullableTrimmed(formData, 'live_url'),
+    post_url: readNullableTrimmed(formData, 'post_url'),
+    progress_percent: readPercentField(formData),
+    thumb_kind: readNullableTrimmed(formData, 'thumb_kind'),
   };
 }
 
 /**
- * Read FormData into the raw update payload, including the T26 `image_id`
- * field. The form sends an empty string when no image is attached and the
- * UUID string when one is. The zod schema accepts
- * `z.string().uuid().nullable()`, so the empty-string case is normalized to
- * `null` HERE rather than via `.transform()` — the authoritative validator
- * stays a strict shape parser, not a coercion layer.
+ * Read FormData into the raw update payload, including both image FK fields
+ * (`image_id` from T26, `image_after_id` from T42). The form sends an empty
+ * string when no image is attached and the UUID string when one is. The zod
+ * schema accepts `z.string().uuid().nullable()`, so the empty-string case
+ * is normalized to `null` HERE rather than via `.transform()` — the
+ * authoritative validator stays a strict shape parser, not a coercion layer.
  */
 function readProjectUpdateFormData(formData: FormData): unknown {
-  const rawImageId = formData.get('image_id');
-  const imageId =
-    typeof rawImageId === 'string' && rawImageId.trim().length > 0
-      ? rawImageId.trim()
-      : null;
   return {
     title: formData.get('title'),
     description: formData.get('description'),
     status: formData.get('status'),
-    image_id: imageId,
+    image_id: readNullableTrimmed(formData, 'image_id'),
+    github_url: readNullableTrimmed(formData, 'github_url'),
+    live_url: readNullableTrimmed(formData, 'live_url'),
+    post_url: readNullableTrimmed(formData, 'post_url'),
+    progress_percent: readPercentField(formData),
+    thumb_kind: readNullableTrimmed(formData, 'thumb_kind'),
+    image_after_id: readNullableTrimmed(formData, 'image_after_id'),
   };
 }
 

@@ -31,6 +31,12 @@ const PUBLISHED_ROW: Project = {
   image_id: null,
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-01-02T00:00:00.000Z',
+  github_url: null,
+  live_url: null,
+  post_url: null,
+  progress_percent: null,
+  thumb_kind: null,
+  image_after_id: null,
 };
 
 /** Sample draft row used as the pre-fetch result on draft-edit paths. */
@@ -43,7 +49,46 @@ const DRAFT_ROW: Project = {
   image_id: null,
   created_at: '2026-04-01T00:00:00.000Z',
   updated_at: '2026-04-01T00:00:00.000Z',
+  github_url: null,
+  live_url: null,
+  post_url: null,
+  progress_percent: null,
+  thumb_kind: null,
+  image_after_id: null,
 };
+
+/**
+ * Null defaults for the five T42 content-model fields. Spread into create-
+ * and update-side test inputs so each case only declares the fields it
+ * actually exercises — the rest carry through as `null`. Kept here (not in
+ * the schemas module) because it is test-scaffolding, not production shape.
+ */
+const NULL_T42_FIELDS = {
+  github_url: null,
+  live_url: null,
+  post_url: null,
+  progress_percent: null,
+  thumb_kind: null,
+} as const;
+
+/**
+ * Null defaults for the update-side image FKs and T42 fields. Spread into
+ * `updateProjectInternal` test inputs so the schema's strict parse accepts
+ * the payload without each case having to enumerate every nullable field.
+ */
+const NULL_UPDATE_FIELDS = {
+  image_id: null,
+  ...NULL_T42_FIELDS,
+  image_after_id: null,
+} as const;
+
+/**
+ * Null defaults for the `image_after_id` column on the pre-fetch SELECT
+ * fixture. Mirrors the shape `fetchExistingProject` returns. Kept separate
+ * from `NULL_UPDATE_FIELDS` because the fetch row shape is `{ status,
+ * image_id, image_after_id }` — narrower than the payload schema.
+ */
+const FETCH_NULLS = { image_id: null, image_after_id: null } as const;
 
 interface StubCall {
   method: string;
@@ -186,11 +231,22 @@ describe('createProjectInternal', () => {
       image_id: null,
       created_at: '2026-05-13T00:00:00.000Z',
       updated_at: '2026-05-13T00:00:00.000Z',
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: null,
+      image_after_id: null,
     };
     const { client, calls } = makeCreateStub({ data: insertedRow, error: null });
 
     const result = await createProjectInternal(
-      { title: 'New Thing', description: 'first cut', status: 'draft' },
+      {
+        title: 'New Thing',
+        description: 'first cut',
+        status: 'draft',
+        ...NULL_T42_FIELDS,
+      },
       client,
     );
 
@@ -202,6 +258,7 @@ describe('createProjectInternal', () => {
       description: 'first cut',
       status: 'draft',
       slug: 'new-thing',
+      ...NULL_T42_FIELDS,
     });
   });
 
@@ -213,17 +270,75 @@ describe('createProjectInternal', () => {
 
     await expect(
       createProjectInternal(
-        { title: 'Dup', description: 'collision', status: 'draft' },
+        {
+          title: 'Dup',
+          description: 'collision',
+          status: 'draft',
+          ...NULL_T42_FIELDS,
+        },
         client,
       ),
     ).rejects.toBeInstanceOf(ServiceError);
+  });
+
+  // T42 — five new content-model fields ride alongside the existing
+  // title/description/status/slug payload on the create-side INSERT. Image
+  // FKs stay out of create (CONSTRAINT-12 / T42 schema docstring) — they
+  // attach post-insert via the edit flow.
+  it('passes new content-model fields into the insert payload', async () => {
+    const insertedRow: Project = {
+      id: 'p-full',
+      title: 'Full Thing',
+      slug: 'full-thing',
+      description: 'all fields populated',
+      status: 'draft',
+      image_id: null,
+      created_at: '2026-05-13T00:00:00.000Z',
+      updated_at: '2026-05-13T00:00:00.000Z',
+      github_url: 'https://example.com',
+      live_url: 'https://example.com/live',
+      post_url: '/writing/foo',
+      progress_percent: 75,
+      thumb_kind: 'disc',
+      image_after_id: null,
+    };
+    const { client, calls } = makeCreateStub({
+      data: insertedRow,
+      error: null,
+    });
+
+    await createProjectInternal(
+      {
+        title: 'Full Thing',
+        description: 'all fields populated',
+        status: 'draft',
+        github_url: 'https://example.com',
+        live_url: 'https://example.com/live',
+        post_url: '/writing/foo',
+        progress_percent: 75,
+        thumb_kind: 'disc',
+      },
+      client,
+    );
+
+    const insertCall = calls.find((c) => c.method === 'insert');
+    expect(insertCall).toBeDefined();
+    const payload = insertCall?.args[0] as Record<string, unknown>;
+    expect(payload.github_url).toBe('https://example.com');
+    expect(payload.live_url).toBe('https://example.com/live');
+    expect(payload.post_url).toBe('/writing/foo');
+    expect(payload.progress_percent).toBe(75);
+    expect(payload.thumb_kind).toBe('disc');
   });
 });
 
 describe('updateProjectInternal', () => {
   it('omits slug from the update payload when the existing row is published (CONSTRAINT-12)', async () => {
     const { client, calls } = makeUpdateStub({
-      fetchResult: { data: { status: 'published', image_id: null }, error: null },
+      fetchResult: {
+        data: { status: 'published', ...FETCH_NULLS },
+        error: null,
+      },
       updateResult: { data: { ...PUBLISHED_ROW, title: 'Renamed' }, error: null },
     });
 
@@ -233,7 +348,7 @@ describe('updateProjectInternal', () => {
         title: 'Renamed',
         description: 'still shipped',
         status: 'published',
-        image_id: null,
+        ...NULL_UPDATE_FIELDS,
       },
       client,
     );
@@ -252,7 +367,10 @@ describe('updateProjectInternal', () => {
 
   it('includes a derived slug in the update payload when the existing row is draft', async () => {
     const { client, calls } = makeUpdateStub({
-      fetchResult: { data: { status: 'draft', image_id: null }, error: null },
+      fetchResult: {
+        data: { status: 'draft', ...FETCH_NULLS },
+        error: null,
+      },
       updateResult: { data: { ...DRAFT_ROW, title: 'New Title' }, error: null },
     });
 
@@ -262,7 +380,7 @@ describe('updateProjectInternal', () => {
         title: 'New Title',
         description: DRAFT_ROW.description,
         status: 'draft',
-        image_id: null,
+        ...NULL_UPDATE_FIELDS,
       },
       client,
     );
@@ -282,7 +400,10 @@ describe('updateProjectInternal', () => {
       message: 'slug is locked on published rows',
     };
     const { client } = makeUpdateStub({
-      fetchResult: { data: { status: 'published', image_id: null }, error: null },
+      fetchResult: {
+        data: { status: 'published', ...FETCH_NULLS },
+        error: null,
+      },
       updateResult: { data: null, error: triggerError },
     });
 
@@ -293,7 +414,7 @@ describe('updateProjectInternal', () => {
           title: 'Renamed',
           description: 'still shipped',
           status: 'published',
-          image_id: null,
+          ...NULL_UPDATE_FIELDS,
         },
         client,
       ),
@@ -309,7 +430,12 @@ describe('updateProjectInternal', () => {
     await expect(
       updateProjectInternal(
         'unknown-id',
-        { title: 'X', description: 'X', status: 'draft', image_id: null },
+        {
+          title: 'X',
+          description: 'X',
+          status: 'draft',
+          ...NULL_UPDATE_FIELDS,
+        },
         client,
       ),
     ).rejects.toBeInstanceOf(ServiceError);
@@ -324,7 +450,12 @@ describe('updateProjectInternal', () => {
     await expect(
       updateProjectInternal(
         '',
-        { title: 'X', description: 'X', status: 'draft', image_id: null },
+        {
+          title: 'X',
+          description: 'X',
+          status: 'draft',
+          ...NULL_UPDATE_FIELDS,
+        },
         client,
       ),
     ).rejects.toBeInstanceOf(ServiceError);
@@ -338,7 +469,10 @@ describe('updateProjectInternal', () => {
   it('attaches an image_id on update and does NOT orphan when previous was null (T26)', async () => {
     const NEW_IMAGE_ID = '00000000-0000-4000-8000-000000000aaa';
     const { client, calls } = makeUpdateStub({
-      fetchResult: { data: { status: 'draft', image_id: null }, error: null },
+      fetchResult: {
+        data: { status: 'draft', ...FETCH_NULLS },
+        error: null,
+      },
       updateResult: {
         data: { ...DRAFT_ROW, image_id: NEW_IMAGE_ID },
         error: null,
@@ -351,6 +485,7 @@ describe('updateProjectInternal', () => {
         title: DRAFT_ROW.title,
         description: DRAFT_ROW.description,
         status: 'draft',
+        ...NULL_UPDATE_FIELDS,
         image_id: NEW_IMAGE_ID,
       },
       client,
@@ -372,7 +507,7 @@ describe('updateProjectInternal', () => {
     const NEW_IMAGE_ID = '00000000-0000-4000-8000-000000000222';
     const { client, calls } = makeUpdateStub({
       fetchResult: {
-        data: { status: 'draft', image_id: OLD_IMAGE_ID },
+        data: { status: 'draft', image_id: OLD_IMAGE_ID, image_after_id: null },
         error: null,
       },
       updateResult: {
@@ -387,6 +522,7 @@ describe('updateProjectInternal', () => {
         title: DRAFT_ROW.title,
         description: DRAFT_ROW.description,
         status: 'draft',
+        ...NULL_UPDATE_FIELDS,
         image_id: NEW_IMAGE_ID,
       },
       client,
@@ -416,6 +552,147 @@ describe('updateProjectInternal', () => {
     // project row id, so eq('id', OLD_IMAGE_ID) must be among the eq calls.
     const eqCalls = calls.filter((c) => c.method === 'eq');
     expect(eqCalls.some((c) => c.args[1] === OLD_IMAGE_ID)).toBe(true);
+  });
+
+  // T42 — full content-model field round-trip on the update payload.
+  it('passes new content-model fields into the update payload', async () => {
+    const IMAGE_AFTER_ID = '00000000-0000-4000-8000-000000000bbb';
+    const { client, calls } = makeUpdateStub({
+      fetchResult: {
+        data: { status: 'draft', image_id: null, image_after_id: null },
+        error: null,
+      },
+      updateResult: { data: { ...DRAFT_ROW }, error: null },
+    });
+
+    await updateProjectInternal(
+      DRAFT_ROW.id,
+      {
+        title: DRAFT_ROW.title,
+        description: DRAFT_ROW.description,
+        status: 'draft',
+        image_id: null,
+        github_url: 'https://example.com',
+        live_url: 'https://example.com/live',
+        post_url: '/writing/foo',
+        progress_percent: 75,
+        thumb_kind: 'disc',
+        image_after_id: IMAGE_AFTER_ID,
+      },
+      client,
+    );
+
+    const updateCall = calls.find((c) => c.method === 'update');
+    expect(updateCall).toBeDefined();
+    const payload = updateCall?.args[0] as Record<string, unknown>;
+    expect(payload.github_url).toBe('https://example.com');
+    expect(payload.live_url).toBe('https://example.com/live');
+    expect(payload.post_url).toBe('/writing/foo');
+    expect(payload.progress_percent).toBe(75);
+    expect(payload.thumb_kind).toBe('disc');
+    expect(payload.image_after_id).toBe(IMAGE_AFTER_ID);
+  });
+
+  // T42 — `image_after_id` orphan-on-swap mirrors the T26 `image_id` rule.
+  // Observed indirectly: when the FK changes, a third `.from(...)` call lands
+  // on `images` and the orphan UPDATE NULLs the FK pointer columns. The
+  // existing image_id is held constant at null so only one orphan call fires.
+  it('detaches the previous image_after_id when it changes', async () => {
+    const OLD_AFTER_ID = '00000000-0000-4000-8000-0000000aaaaa';
+    const NEW_AFTER_ID = '00000000-0000-4000-8000-0000000bbbbb';
+    const { client, calls } = makeUpdateStub({
+      fetchResult: {
+        data: { status: 'draft', image_id: null, image_after_id: OLD_AFTER_ID },
+        error: null,
+      },
+      updateResult: {
+        data: { ...DRAFT_ROW, image_after_id: NEW_AFTER_ID },
+        error: null,
+      },
+    });
+
+    await updateProjectInternal(
+      DRAFT_ROW.id,
+      {
+        title: DRAFT_ROW.title,
+        description: DRAFT_ROW.description,
+        status: 'draft',
+        image_id: null,
+        github_url: null,
+        live_url: null,
+        post_url: null,
+        progress_percent: null,
+        thumb_kind: null,
+        image_after_id: NEW_AFTER_ID,
+      },
+      client,
+    );
+
+    // image_id orphan short-circuits on null previous; image_after_id orphan
+    // fires — three `from()` calls: SELECT projects, UPDATE projects, UPDATE images.
+    const fromCalls = calls.filter((c) => c.method === 'from');
+    expect(fromCalls.map((c) => c.args[0])).toEqual([
+      'projects',
+      'projects',
+      'images',
+    ]);
+
+    // Parent UPDATE carries the new image_after_id; orphan UPDATE NULLs both
+    // pointer columns on the OLD image row.
+    const updateCalls = calls.filter((c) => c.method === 'update');
+    expect(updateCalls).toHaveLength(2);
+    expect(
+      (updateCalls[0]?.args[0] as Record<string, unknown>).image_after_id,
+    ).toBe(NEW_AFTER_ID);
+    expect(updateCalls[1]?.args[0]).toEqual({
+      parent_id: null,
+      parent_type: null,
+    });
+
+    // Orphan UPDATE targets the OLD image_after_id row by primary key.
+    const eqCalls = calls.filter((c) => c.method === 'eq');
+    expect(eqCalls.some((c) => c.args[1] === OLD_AFTER_ID)).toBe(true);
+  });
+
+  it('does not detach image_after_id when it is unchanged', async () => {
+    const SAME_AFTER_ID = '00000000-0000-4000-8000-0000000ccccc';
+    const { client, calls } = makeUpdateStub({
+      fetchResult: {
+        data: {
+          status: 'draft',
+          image_id: null,
+          image_after_id: SAME_AFTER_ID,
+        },
+        error: null,
+      },
+      updateResult: {
+        data: { ...DRAFT_ROW, image_after_id: SAME_AFTER_ID },
+        error: null,
+      },
+    });
+
+    await updateProjectInternal(
+      DRAFT_ROW.id,
+      {
+        title: DRAFT_ROW.title,
+        description: DRAFT_ROW.description,
+        status: 'draft',
+        image_id: null,
+        github_url: null,
+        live_url: null,
+        post_url: null,
+        progress_percent: null,
+        thumb_kind: null,
+        image_after_id: SAME_AFTER_ID,
+      },
+      client,
+    );
+
+    // No orphan path: only two `from()` calls (SELECT + UPDATE on `projects`),
+    // never `from('images')`. `orphanIfChanged` short-circuits when previous
+    // equals next.
+    const fromCalls = calls.filter((c) => c.method === 'from');
+    expect(fromCalls.map((c) => c.args[0])).toEqual(['projects', 'projects']);
   });
 });
 

@@ -1,7 +1,7 @@
 # Plan — Phase 4: Polish + Launch
 
 **Date:** 2026-05-06
-**Status:** Active — T32–T39 done (T38 doc audit complete; 9/10 criteria met, only the DS-05 fresh-clone manual run outstanding — tracked separately. T39 closed 2026-05-19, Session 27: deploy live on apex canonical `swarnimbagre.com`, admin verified end-to-end including CRUD round-trip); T42 + T40 next (T42 blocks T40 content-addition criteria); T41 added 2026-05-19 as trigger-gated deferred follow-up (not a Phase 4 exit blocker)
+**Status:** Active — T32–T39 done (T38 doc audit complete; 9/10 criteria met, only the DS-05 fresh-clone manual run outstanding — tracked separately. T39 closed 2026-05-19, Session 27: deploy live on apex canonical `swarnimbagre.com`, admin verified end-to-end including CRUD round-trip); **T42 Session A done 2026-05-19, Session 29** (schema + admin write surface — migration 009 applied to prod, zod + Server Actions + ProjectForm wired, 24 new tests, all 223 vitest green); **T42 Session B next** (ProgressRing + desktop public render); T40 still partial-blocked on T42 content-addition; T41 trigger-gated
 **Tasks:** T32–T42 (11 tasks; T41 is trigger-gated and does not block Phase 4 exit — same pattern as Phase 3's T29/T31 operator-gated deferrals; T42 added 2026-05-19 as a pre-T40 schema + render expansion to make the public project card meaningfully render real DB content)
 **Predecessor:** [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md)
 **Successor:** none — final phase
@@ -343,7 +343,7 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 
 ## T42 — Project content-model expansion + public-card redesign
 
-**Status:** Planned 2026-05-19. Brainstorm complete (Session 28). Approved by builder. Supersedes the parked `docs/content-model-expansion.md` (which proposed a heavier Option C schema with new tables + JSONB — T42 ships a lighter "6 nullable columns, zero new tables" variant after Session 28 brainstorm closed scope).
+**Status:** Session A complete 2026-05-19 (Session 29) — schema + admin write surface. Sessions B (public render desktop) and C (mobile + docs + Playwright) remain. Supersedes the parked `docs/content-model-expansion.md` (which proposed a heavier Option C schema with new tables + JSONB — T42 ships a lighter "6 nullable columns, zero new tables" variant after Session 28 brainstorm closed scope; @cto pre-migration consult on 2026-05-19 confirmed Shape A over Shape C).
 
 **Decisions locked in brainstorm (Session 28):**
 - Progress: integer percent (0–100), ring visual with auto "full circle + subtle glow" done state at 100. No lifecycle vocabulary.
@@ -398,18 +398,18 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 
 **Acceptance criteria:**
 
-*Schema:*
-- [ ] Migration 009 applies cleanly to dev + production Supabase projects. Idempotent (uses `add column if not exists` or guard).
-- [ ] All 6 columns nullable; only `progress_percent` has a CHECK constraint (`between 0 and 100`).
-- [ ] `image_after_id` FK references `images(id) on delete set null` (matches existing `image_id` pattern).
-- [ ] RLS policies on `projects` already cover read access to all columns — no new policies needed (verified against migration 002).
+*Schema:* — **Session A complete**
+- [x] Migration 009 applies cleanly to dev + production Supabase projects. Idempotent (uses `add column if not exists` or guard). — applied 2026-05-19 via `mcp__supabase__apply_migration` to project `oosretprveorrjzjcbxb`.
+- [x] All 6 columns nullable; only `progress_percent` has a CHECK constraint (`between 0 and 100`).
+- [x] `image_after_id` FK references `images(id) on delete set null` (matches existing `image_id` pattern).
+- [x] RLS policies on `projects` already cover read access to all columns — no new policies needed (verified against migration 002).
 
-*Admin form:*
-- [ ] All 6 new fields render in `ProjectForm.tsx` for both create and edit modes.
-- [ ] Zod validation catches: invalid URL format on the 3 URL fields, percent out of range, unknown thumb_kind value.
-- [ ] `ImageUpload` for `image_after_id` uses the same `parentType: 'projects'` + `parentId` binding as primary image.
-- [ ] `ProjectForm.tsx` stays ≤200 lines (CQ-02) — split into sub-components if needed.
-- [ ] Save round-trip works for all new fields (verified via Playwright admin smoke test).
+*Admin form:* — **Session A complete** except Playwright smoke (Session C)
+- [x] All 6 new fields render in `ProjectForm.tsx` (image fields edit-only, matching `image_id` precedent).
+- [x] Zod validation catches: invalid URL format on the 3 URL fields, percent out of range, unknown thumb_kind value. (20 schema tests in `tests/admin-projects-mutations-schemas.test.ts`.)
+- [x] `ImageUpload` for `image_after_id` uses the same `parentType: 'projects'` + `parentId` binding as primary image — via new shared `ProjectImageField.tsx`.
+- [x] `ProjectForm.tsx` stays ≤200 lines (CQ-02) — split into `ProjectFormLinks.tsx` + `ProjectFormDisplay.tsx` + `ProjectImageField.tsx`. Final: 200 lines exactly.
+- [ ] Save round-trip works for all new fields (verified via Playwright admin smoke test). — **Session C.**
 
 *Public render — desktop:*
 - [ ] Home page renders DB-driven projects (not hardcoded `featured` array) — verify by adding a test project via admin and seeing it on home.
@@ -432,10 +432,10 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 - [ ] `docs/architecture.md` §2 updated.
 - [ ] `docs/content-model-expansion.md` marked SUPERSEDED with link to T42.
 
-*Quality gates:*
-- [ ] `npm run build` clean (CQ-05). No console errors in production runtime.
-- [ ] `npm test` 100% passing. New tests added per "Tests required" below.
-- [ ] Voice check on any new operator-facing labels (CONSTRAINT-13).
+*Quality gates:* — **Session A green; will re-verify after Sessions B + C land render code**
+- [x] `npm run build` clean (CQ-05). No console errors in production runtime. — Session A gate.
+- [x] `npm test` 100% passing — Session A gate. 223/223 vitest. (Also caught + fixed a T39 admin-home test regression that pre-dated Session A.)
+- [x] Voice check on any new operator-facing labels (CONSTRAINT-13). — Session A labels: "GitHub URL / Live URL / Post URL / Progress / Thumbnail / After image (before/after slider) / Saved." — all dry, no SaaS phrases, no emoji.
 
 **Tests required:**
 - `ProgressRing renders correctly at 0/25/50/75/100 percents` (TS-01 happy).

@@ -41,6 +41,12 @@ const SAMPLE_PROJECT: Project = {
   image_id: null,
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-01-02T00:00:00.000Z',
+  github_url: null,
+  live_url: null,
+  post_url: null,
+  progress_percent: null,
+  thumb_kind: null,
+  image_after_id: null,
 };
 
 /** Sample post row that satisfies the Post type. */

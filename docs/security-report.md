@@ -1,17 +1,89 @@
 # Security Report: swarnimbagre.com
 
-**Last audit:** 2026-05-15 (audit 16 — T36 full pre-launch review; re-audit 16b same day — F-29 + F-30 fixes verified RESOLVED)
-**Scope:** Full codebase T1–T34, plus the T30 `stats-ingest` Edge Function and the T34 `ADMIN_ALLOWED_EMAIL` startup-validation diff (both explicitly in T36 scope per Session-22 handoff). Audited surfaces: DB migrations + RLS (`supabase/migrations/001–007`), Edge Function (`supabase/functions/stats-ingest/`), auth path (`middleware.ts`, `lib/auth.ts`, `lib/auth-internal.ts`, `lib/session.ts`, `app/(admin)/admin/auth/callback/route.ts`), Server Actions + zod boundaries (`lib/admin-*-mutations*.ts`), Markdown render (`lib/markdown.ts`, `components/public/MarkdownContent.tsx`), uploads + Storage policy, secrets / `.gitignore` / git history, HTTPS config, `lib/env.ts` + `tests/env.test.ts`.
+**Last audit:** 2026-05-19 (audit 17 — T42 Session A scope; re-audit 17b same day — F-36 fix verified RESOLVED)
+**Scope:** T42 Session A delta — zod schemas + Server Action boundary + FormData readers + migration 009 + new admin form sub-components. Audited surfaces: `lib/admin-projects-mutations-schemas.ts` (created), `lib/admin-projects-mutations.ts` (FormData readers + field-key allowlist), `lib/admin-projects-mutations-internal.ts` (orchestrator + new helpers `buildProjectUpdatePayload`, `orphanProjectImagesIfChanged`), `lib/thumb-kinds.ts` (closed enum), `lib/types.ts` (extended `Project`), `supabase/migrations/009_projects_content_model.sql` (DDL), and the four new admin components (`ProjectForm`, `ProjectFormLinks`, `ProjectFormDisplay`, `ProjectImageField`). Out of scope: T42 Sessions B + C public render code (not yet written) — re-audit when those land.
 **Status:** CLEAR
-**Summary:** 0 Critical / 0 High / 2 Medium / ~18 Low (audit 16 opened 2 Medium + 5 Low; re-audit 16b resolved both new Medium — F-29, F-30)
+**Summary:** 0 Critical / 0 High / 2 Medium / ~18 Low (audit 17 opened F-36; re-audit 17b verified F-36 RESOLVED; carry-forward Mediums F-3, F-4 unchanged)
 **Unresolved Critical/High findings:** None
-**Re-audit 16b (2026-05-15):** F-29 and F-30 verified RESOLVED — see "Re-audit 16b" section below. Remaining Mediums are carry-forward F-3, F-4 only.
+**Re-audit 17b (2026-05-19):** F-36 verified RESOLVED. `postUrlSchema` refine now requires the `/`-prefixed branch to NOT start with `//` (excludes protocol-relative URLs). New test case `rejects post_url that starts with // (protocol-relative)` pins the contract. `tsc` clean, 224/224 vitest passing. No regression on the existing post_url happy-path tests (`/writing/foo` + `https://example.com/foo` both still accepted).
 
 ---
 
 ## Verdict
 
-CLEAR. Zero Critical, zero High. All seven T36 acceptance criteria pass. The two Medium and five Low items opened this audit are documented, tracked, and non-blocking per the severity rubric (Medium does not block shipping if documented and tracked). Two are recommended as cheap pre-launch hardening (F-29, F-30); the rest are defense-in-depth.
+CLEAR. Zero Critical, zero High. Audit 17 (T42 Session A) opens one Medium — F-36, a 1-line defense-in-depth tightening on the `post_url` zod refine. Non-blocking by the severity rubric (Medium does not block shipping if documented and tracked), but recommended to fix before Session B writes the public render code that depends on the schema.
+
+---
+
+## Audit 17 (2026-05-19) — T42 Session A schema review
+
+### Findings on the new code
+
+**`httpsUrlSchema` (`github_url`, `live_url`)** — **PASS.**
+Chain is `z.string().trim().url().startsWith('https://', ...).max(2048)`. The `.url()` step uses `new URL()` semantics (zod v3), which accepts schemes like `javascript:` and `data:` as syntactically valid URLs — but the subsequent `.startsWith('https://')` rejects them. Protocol-relative `//evil.com` fails `.url()` outright (no base URL). Length cap closes URL-bombing. No XSS vector reachable through this gate.
+
+**`postUrlSchema` (`post_url`)** — **MEDIUM gap (F-36).**
+See finding below. Refine accepts `/`-prefixed values too broadly.
+
+**`thumbKindSchema` (`thumb_kind`)** — **PASS.**
+Closed enum derived from `THUMB_KIND_VALUES`. Unknown values rejected at the boundary; the render-side fallback to `dots` is a second layer. Zero injection surface.
+
+**`progress_percent`** — **PASS.**
+`z.number().int().min(0).max(100).nullable()`. `Number.isInteger` semantics reject NaN and Infinity. `.int()` + bounds close numeric edge cases.
+
+**`image_after_id` and `image_id`** — **PASS.**
+`z.string().uuid().nullable()`. Same shape as the pre-T42 `image_id` gate. Empty-string-to-null coercion happens in the FormData reader (`readNullableTrimmed`) before the schema runs, so the parser only ever sees `null` or a UUID string.
+
+**Schema strictness** — **PASS.**
+Both `projectCreateSchema` and `projectUpdateSchema` are `.strict()` — extra fields are rejected. Mass-assignment vector closed (an attacker can't smuggle e.g. `slug` into create via FormData).
+
+**FormData readers (`readNullableTrimmed`, `readPercentField`)** — **PASS.**
+Both refuse non-string inputs (`typeof raw !== 'string' → return null`), so File/Blob inputs do not flow into the schemas. `readPercentField`'s NaN pass-through (returns the raw string when `Number(value)` is NaN) yields a deterministic zod rejection — the bypass-via-bad-input vector is closed.
+
+**Field-key allowlist (`ALLOWED_FIELD_KEYS`)** — **PASS.**
+The 9-key Set + `isAllowedFieldKey` guard prevents zod-issue paths outside the declared fields from leaking into `fieldErrors`. Channel 1 (UI text) discipline preserved.
+
+**Migration 009** — **PASS.**
+Column-additive, idempotent (`add column if not exists`). FK `image_after_id` mirrors the existing `image_id` FK shape exactly (`on delete set null`). CHECK on `progress_percent` matches DB-level bounds with the zod-level bounds. RLS unchanged — existing `projects_public_select` is column-agnostic; the 6 new columns are read by `anon` when `status = 'published'`, which is the intended contract.
+
+**Admin form components** — **PASS.**
+`ProjectFormLinks`, `ProjectFormDisplay`, `ProjectImageField` are all `'use client'` and depend only on `ProjectMutationState` + `Project` types. No new server-side execution; all data crosses the boundary through the existing Server Action surface, which is unchanged in shape (Channel 4).
+
+### Cross-cutting checks
+
+**Mass assignment.** `.strict()` schemas reject unknown keys → ✓.
+**SQL injection.** Supabase query builder uses parameterized `.insert(payload)` / `.update(payload)` / `.eq(...)` throughout → ✓.
+**XSS via stored URL.** Schemas + render-side React `href` escaping (Session B-pending) are the two-layer control. Schemas reviewed here; render layer to be reviewed in audit 18 when Sessions B/C land.
+**Logging hygiene.** `logSupabaseError` (existing) is the only log site touched. No raw-error spread regressions; the F-29 reducer pattern (audit 16b) is not touched. → ✓.
+
+---
+
+### [MEDIUM] F-36 — `post_url` accepts protocol-relative URLs (`//evil.com`)
+
+**Rule:** SEC-02 (boundary validation).
+
+**Founder Brief**
+**Decided:** The zod gate for `post_url` accepts strings beginning with `//`, which the browser interprets as protocol-relative URLs pointing to a different host.
+**Means for your product:** If an attacker ever gained admin access (compromised magic link, MitM, etc.), they could write `//attacker.com` into a project's `post_url`, and visitors clicking the "Read post" link would be silently redirected to `attacker.com` instead of an internal page. The address bar would briefly show the attacker's domain.
+**Check before approving:** After fix, paste `//evil.com` into the Post URL field on `/admin/projects/[id]` — the form should reject it with "must start with https:// or a single /". `https://example.com` and `/writing/foo` continue to be accepted.
+**What this closes off:** Nothing — the fix is strictly additive.
+
+**What is wrong:** `lib/admin-projects-mutations-schemas.ts:postUrlSchema` (line 61) refines on `value.startsWith('https://') || value.startsWith('/')`. The second branch matches both `/some-slug` (intended internal path) and `//attacker.com` (unintended protocol-relative URL).
+
+**What could go wrong:** Stored phishing redirect. Visitor clicks the project's "Read post" button → browser sees `<a href="//attacker.com">` and treats the leading `//` as a host-relative URL → navigates to `https://attacker.com` (or `http://attacker.com` if the page is served over HTTP, which on `swarnimbagre.com` it isn't). Realistic exploitation requires admin compromise first, so impact is bounded — Medium, not High. But the schema *claims* to validate URL shape, and accepting `//host` violates that contract.
+
+**How to fix it:** Tighten the refine to require that a `/`-prefixed value does not start with `//`:
+```ts
+.refine(
+  (value): boolean =>
+    value.startsWith('https://') ||
+    (value.startsWith('/') && !value.startsWith('//')),
+  { message: 'must start with https:// or a single /' },
+);
+```
+~3-line change in `lib/admin-projects-mutations-schemas.ts`. Add a happy-path test for `/writing/foo` (already present) and an error-path test for `//evil.com`. `@dev`.
+
+---
 
 **Correction recorded (process honesty):** An initial audit pass flagged client-side Markdown sanitization as two HIGH findings. That was incorrect — it was graded against an over-specified "sanitize server-side" framing introduced in the audit delegation, **not** against the binding constraint. `docs/constraints.md:76–84` (CONSTRAINT-06) explicitly mandates the render path be *"`marked` (parse) → DOMPurify (sanitize) → DOM injection, executed client-side."* `lib/markdown.ts` + `components/public/MarkdownContent.tsx` implement exactly that. The findings are **withdrawn**; the implementation is conformant. Detail under T36-3 below.
 
@@ -121,13 +193,15 @@ The Session-22 handoff flagged a prior prompt-injection attempt via the sub-agen
 |---|---|---|
 | Critical | 0 | — |
 | High | 0 | — |
-| Medium | 2 | F-3 (carry), F-4 (carry) — [F-29, F-30 RESOLVED in re-audit 16b] |
-| Low | ~18 | F-31, F-32, F-33, F-34, F-35 (new); F-6–F-11, F-20–F-25, F-27, F-28 (carry) |
+| Medium | 2 | F-3 (carry), F-4 (carry) — [F-36 RESOLVED in re-audit 17b] |
+| Low | ~18 | F-31, F-32, F-33, F-34, F-35 (audit 16); F-6–F-11, F-20–F-25, F-27, F-28 (carry) |
 
+**Opened audit 17:** F-36 (Medium — `post_url` protocol-relative URL bypass).
+**Closed re-audit 17b:** F-36 (Medium — fix verified).
 **Withdrawn audit 16:** the two transient HIGH "server-side Markdown sanitization" findings — code conforms to CONSTRAINT-06's explicit client-side mandate (audit-delegation framing error, corrected).
 **Opened audit 16:** F-29, F-30 (Medium); F-31–F-35 (Low).
 **Closed re-audit 16b:** F-29, F-30 (both Medium — fixes verified).
 
-**Verdict:** CLEAR — no Critical or High findings. T36 launch gate is not blocked. The two new Mediums (F-29 auth log hygiene, F-30 Storage-limit codification) were fixed and verified in re-audit 16b; only carry-forward Mediums F-3/F-4 remain for a future hardening pass. One tracked deploy action: apply migration 008 to the production Supabase project during T39 (idempotent; live env already compliant).
+**Verdict:** CLEAR — no Critical or High findings. T42 Session A schema review complete; F-36 fixed and re-audit 17b verified RESOLVED. F-3 and F-4 carry-forward Mediums remain non-blocking for the Session B/C window. Next security review point: when Sessions B + C land the public render code (audit 18) — verify `<a href>` rendering, `<img src>` attribute handling, and any DemoLoop component removal.
 
 ## Status: CLEAR

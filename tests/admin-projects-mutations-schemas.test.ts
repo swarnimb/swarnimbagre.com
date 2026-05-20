@@ -1,0 +1,373 @@
+import { describe, it, expect } from 'vitest';
+import { ZodError } from 'zod';
+import {
+  projectCreateSchema,
+  projectUpdateSchema,
+  URL_MAX_LENGTH,
+} from '@/lib/admin-projects-mutations-schemas';
+import { THUMB_KIND_VALUES } from '@/lib/thumb-kinds';
+
+/**
+ * T42 acceptance — pure schema tests for `projectCreateSchema` /
+ * `projectUpdateSchema`.
+ *
+ * These tests exercise the validation boundary in isolation: no Supabase
+ * stub, no DI client, no slug derivation. The orchestrator-level behavior
+ * (insert payload shape, orphan-on-swap, slug-lock) is covered in the
+ * sibling file `admin-projects-mutations.test.ts`. Splitting per CQ-03 so
+ * each suite focuses on a single concern.
+ *
+ * `httpsUrlSchema`, `postUrlSchema`, `thumbKindSchema`, and the
+ * `progress_percent` fragment are shared between create and update — when
+ * a fragment is exercised on the create side, the update side reuses it
+ * transitively, so create-side coverage is the canonical case set and
+ * update-side tests cover only what is distinct (the two image FKs).
+ */
+
+/** Sample valid UUID v4 reused across update-side cases. */
+const VALID_UUID_A = '00000000-0000-4000-8000-0000000000aa';
+/** Second valid UUID, used to assert the image_after_id swap path. */
+const VALID_UUID_B = '00000000-0000-4000-8000-0000000000bb';
+
+describe('projectCreateSchema', () => {
+  it('accepts a minimal valid payload with all new fields null', () => {
+    const input = {
+      title: 'New Thing',
+      description: 'first cut',
+      status: 'draft' as const,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: null,
+    };
+    expect(() => projectCreateSchema.parse(input)).not.toThrow();
+  });
+
+  it('accepts a full valid payload with all new fields set', () => {
+    const input = {
+      title: 'Full Thing',
+      description: 'all fields populated',
+      status: 'published' as const,
+      github_url: 'https://example.com',
+      live_url: 'https://example.com/live',
+      post_url: '/writing/foo',
+      progress_percent: 50,
+      thumb_kind: 'disc' as const,
+    };
+    expect(() => projectCreateSchema.parse(input)).not.toThrow();
+  });
+
+  it('rejects github_url that is not https', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: 'http://example.com',
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: null,
+    };
+    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
+  });
+
+  it('rejects live_url that is not https', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: null,
+      live_url: 'http://example.com',
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: null,
+    };
+    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
+  });
+
+  it('rejects post_url that does not start with https or /', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: null,
+      live_url: null,
+      post_url: 'ftp://example.com',
+      progress_percent: null,
+      thumb_kind: null,
+    };
+    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
+  });
+
+  it('accepts post_url with a /-relative path', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: null,
+      live_url: null,
+      post_url: '/writing/foo',
+      progress_percent: null,
+      thumb_kind: null,
+    };
+    expect(() => projectCreateSchema.parse(input)).not.toThrow();
+  });
+
+  it('accepts post_url with an https URL', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: null,
+      live_url: null,
+      post_url: 'https://example.com/foo',
+      progress_percent: null,
+      thumb_kind: null,
+    };
+    expect(() => projectCreateSchema.parse(input)).not.toThrow();
+  });
+
+  // F-36 (audit 17): protocol-relative URLs (`//host`) are NOT relative
+  // paths — browsers route them to the named host. The refine excludes
+  // the `//` prefix from the relative-path branch.
+  it('rejects post_url that starts with // (protocol-relative)', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: null,
+      live_url: null,
+      post_url: '//evil.com',
+      progress_percent: null,
+      thumb_kind: null,
+    };
+    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
+  });
+
+  it('rejects progress_percent below 0', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: -1,
+      thumb_kind: null,
+    };
+    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
+  });
+
+  it('rejects progress_percent above 100', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: 101,
+      thumb_kind: null,
+    };
+    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
+  });
+
+  it('rejects progress_percent that is not an integer', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: 50.5,
+      thumb_kind: null,
+    };
+    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
+  });
+
+  it('accepts progress_percent at 0, 50, 100, and null', () => {
+    const base = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      thumb_kind: null,
+    };
+    for (const pct of [0, 50, 100, null]) {
+      expect(() =>
+        projectCreateSchema.parse({ ...base, progress_percent: pct }),
+      ).not.toThrow();
+    }
+  });
+
+  it('rejects an unknown thumb_kind', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: 'unknownmotif',
+    };
+    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
+  });
+
+  it('accepts every known thumb_kind value', () => {
+    const base = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+    };
+    for (const kind of THUMB_KIND_VALUES) {
+      expect(() =>
+        projectCreateSchema.parse({ ...base, thumb_kind: kind }),
+      ).not.toThrow();
+    }
+  });
+
+  it('rejects URLs longer than 2048 characters', () => {
+    // Construct an https URL whose total length exceeds URL_MAX_LENGTH.
+    const prefix = 'https://example.com/';
+    const overflow = 'a'.repeat(URL_MAX_LENGTH - prefix.length + 1);
+    const tooLong = `${prefix}${overflow}`;
+    expect(tooLong.length).toBe(URL_MAX_LENGTH + 1);
+
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      github_url: tooLong,
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: null,
+    };
+    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
+  });
+});
+
+describe('projectUpdateSchema', () => {
+  it('accepts a payload with image_id and image_after_id as null', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      image_id: null,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: null,
+      image_after_id: null,
+    };
+    expect(() => projectUpdateSchema.parse(input)).not.toThrow();
+  });
+
+  it('accepts a payload with image_id and image_after_id as valid UUIDs', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      image_id: VALID_UUID_A,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: null,
+      image_after_id: VALID_UUID_B,
+    };
+    expect(() => projectUpdateSchema.parse(input)).not.toThrow();
+  });
+
+  it('rejects image_after_id that is not a UUID', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      image_id: null,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: null,
+      image_after_id: 'not-a-uuid',
+    };
+    try {
+      projectUpdateSchema.parse(input);
+      throw new Error('expected ZodError to be thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ZodError);
+      const issues = (err as ZodError).issues;
+      expect(
+        issues.some(
+          (i) =>
+            i.path.join('.') === 'image_after_id' &&
+            i.message === 'image_after_id must be a uuid',
+        ),
+      ).toBe(true);
+    }
+  });
+
+  // Schema fragments are shared with the create side; the cases below cover
+  // one representative of each fragment on the update side to confirm the
+  // update schema wires them in correctly. Full case coverage lives in the
+  // create-side suite above.
+
+  it('rejects github_url that is not https (update side)', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      image_id: null,
+      github_url: 'http://example.com',
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: null,
+      image_after_id: null,
+    };
+    expect(() => projectUpdateSchema.parse(input)).toThrow(ZodError);
+  });
+
+  it('rejects progress_percent above 100 (update side)', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      image_id: null,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: 101,
+      thumb_kind: null,
+      image_after_id: null,
+    };
+    expect(() => projectUpdateSchema.parse(input)).toThrow(ZodError);
+  });
+
+  it('rejects an unknown thumb_kind (update side)', () => {
+    const input = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      image_id: null,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: 'unknownmotif',
+      image_after_id: null,
+    };
+    expect(() => projectUpdateSchema.parse(input)).toThrow(ZodError);
+  });
+});
