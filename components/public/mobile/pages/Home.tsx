@@ -23,7 +23,7 @@ import {
 const HOME_M_TWEAK_DEFAULTS = {
   "tagline":  "meet the perpetual amateur",
   "headline": "By day I help build gaming things at Alienware. By night I tinker with AI things to scratch my own itches.",
-  "subhead":  "… it was supposed to be a hobby, things are getting out of hand.",
+  "subhead":  "Everything here is a personal itch. None of it is a business — no revenue model, no growth strategy.",
   "headlineSize": 26,
   "subheadSize":  18
 };
