@@ -39,6 +39,7 @@ This file is the plain-language record of every architectural decision. The audi
 | 25 | Image-bucket size/MIME limits codified in migration 008 (F-30) | [§2.4](architecture.md#24-images) + [§5.2](architecture.md#52-supabase) |
 | 26 | `/api/admin/*` route handlers self-gate via `getServerSession()` (F-17) | [§6.6.4](architecture.md#664-apiadmin-route-handler-gate-f-17-audit-pass-5) |
 | 27 | Admin theming tokens declared at `:root` to survive Radix portal escape | [§4.2](architecture.md#42-tailwind-scoping-decision-3--resolves-assumption-04) |
+| 28 | Project content-model expansion — 6 nullable columns + Override 1 (T42) | [§2.1](architecture.md#21-projects) + `design-decisions.md` Override 1 |
 
 ---
 
@@ -587,6 +588,26 @@ wall-clock proves the wrapper ran end-to-end).
 **What this closes off:** Future Radix primitives — `DropdownMenu`, `Popover`, `Tooltip`, `HoverCard`, anything that portals — will Just Work in admin because they resolve the variables from `:root`. Without this change, every new Radix overlay would have hit the same bug. Do NOT revert the tokens back to a `.admin-root`-scoped declaration without first solving portal-resolvability another way (e.g., a portal target inside `.admin-root`, or re-declaring the tokens on every Radix `Content` component). A scope-only revert will re-break every overlay in admin.
 
 **Implemented in:** `@dev` fix during Session 27, 2026-05-19. `app/styles/admin.css` — eight `--admin-*` declarations moved from `.admin-root { ... }` to `:root { ... }`; visual chrome rules (`background-color`, `color`, `font-family`, `min-height`) left on `.admin-root`. No callers changed — every consumer reads via `var(--admin-*)` or via Tailwind slot mapping, both of which resolve identically from `:root`. Also added in the same session: `app/(admin)/error.tsx`, a LOUD-failure error boundary for the admin route segment — uncaught render throws now surface `error.message` and `error.digest` verbatim with a `reset()` retry, no swallowed-error path. See architecture.md §4.4.
+
+---
+
+## 2026-05-19 — Project content-model expansion — 6 nullable columns + Override 1 (T42)
+
+**Architecture reference:** §2.1 (projects table) + `design-decisions.md` Override 1 + `constraints.md` CONSTRAINT-05 (override pointer)
+
+**Decided:** The `projects` table grows six new nullable columns in migration 009: `github_url`, `live_url`, `post_url` (three fixed link slots), `progress_percent` (integer 0–100 with CHECK constraint), `thumb_kind` (text, no DB-side enum — the code-side vocabulary lives in `lib/thumb-kinds.ts`), and `image_after_id` (FK → `images.id` ON DELETE SET NULL — the before/after slider's "after" image). No new tables, no JSONB. The before/after slider is supplied by the existing `BeforeAfterMedia.tsx` component; the new column is what tells the public renderer to switch from a single `<img>` to the slider. The bundle's `StatusPill` and `DemoLoop` were dropped from the data path on the project-card surface and replaced with a new `ProgressRing` SVG and three conditional buttons (`{ } code`, `↗ site`, `¶ notes`) wired to the link columns. CONSTRAINT-05 override approved for the project-card surface only — recorded as Override 1 in `design-decisions.md`.
+
+**Means for your product:** You can now ship a project card that shows real progress, real links, and real screenshots — instead of bundle-mock vocabulary (lifecycle pills, animated demos that never matched the screenshots). The progress ring fills as you raise the percent in admin; the three buttons appear and disappear depending on which URLs you've filled in; the before/after slider unlocks when you assign an "after" image to a project (one project is planned to use it). Outside the card surface — Home hero, Projects header, Writing pages, Other pages, mobile navigation — the public site still ships exactly as the bundle designed it.
+
+**Why this (Shape A) over Shape C from `content-model-expansion.md`:** Shape A is lighter — six nullable columns versus new tables plus JSONB. Zero new RLS surface — the existing `projects_public_select` and `projects_admin_all` policies already cover every column on the table, so no new policies were authored (verified against migration 002). Zero new orphan scenarios beyond what Storage already handles — `image_after_id` reuses the existing `images` row + Storage object lifecycle, including the 7-day orphan-sweep path. Reversible — every new column is nullable, so a future "drop the link surface and go back to bundle-verbatim" is a `DROP COLUMN` per slot with no data loss.
+
+**Why override CONSTRAINT-05 instead of forcing the schema into the bundle's old shape:** The bundle's StatusPill encodes lifecycle vocabulary (`active`, `dormant`, `abandoned fondly`) that doesn't fit the new content model. The bundle's `DemoLoop` animations don't fit the "real screenshot" intent. Keeping the bundle verbatim on project-cards would have forced a schema downgrade — fewer real fields, more mock vocabulary — and would have delivered a less honest project surface than what the bundle itself would design with the new model in hand. Override 1 is scoped to the project-card surface only; everything else outside that list (see `design-decisions.md` Override 1 "Surface boundary") remains bundle-verbatim.
+
+**Check before approving:** Are you OK with the project-card surface looking deliberately different from a strict reading of the source bundle? (Yes — you approved this in the Session 28 brainstorm.) Are you OK that further bundle deviation requires explicit overrides (Override 2, etc.) and is not automatic? (Yes — that's the boundary discipline. Any pattern not under a named override entry in `design-decisions.md` is still bundle-verbatim.)
+
+**What this closes off:** Progress as anything other than an integer percent — lifecycle stages, multi-stage rings, named milestones — now becomes a migration. A 4th link slot is a migration (or a Shape B / Shape C revisit). A video-demo type is a new component plus a new Storage path (the current path is screenshots only for v1; clips were deferred post-launch).
+
+**Implemented in:** T42 Session A (schema + admin form) and Session B (public render desktop), 2026-05-19. Migration `009_projects_expand.sql` applied to prod. New code: `components/public/ProgressRing.tsx`, `lib/public-projects.ts`, four test files (+35 tests, suite at 259/259). Modified: `ProjectRow`, `ProjectCard`, `ProjectMedia`, `BeforeAfterMedia`, public Home and Projects pages, app routes. `StillMedia` bundle-dummy bypassed for the real-image path because the dummy has no image-input slot — direct `<img>` matches `renderRealImage` styling from `BeforeAfterMedia` to keep visual continuity (falls under Override 1).
 
 ---
 

@@ -1,5 +1,7 @@
 # Content Model Expansion (planning artifact)
 
+**STATUS: SUPERSEDED by T42 (2026-05-19).** This document proposed Shape C (new tables + JSONB) for the project content-model expansion. T42 shipped Shape A (6 nullable columns, zero new tables) after `@cto` pre-migration consult on 2026-05-19. See `docs/plan-phase-4-launch.md` T42 + this doc's Schema-deltas section for Shape A vs Shape C rationale. Kept as historical reference.
+
 **Date surfaced:** 2026-05-11 (during T11)
 **Status:** Awaiting `@cpo` + `@designer` pickup as a plan amendment
 **Owner:** unassigned — recommended: `@cpo` for scope, `@designer` for visual contract, `@cto` for migration shape

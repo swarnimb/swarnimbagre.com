@@ -1,7 +1,7 @@
 # Plan — Phase 4: Polish + Launch
 
 **Date:** 2026-05-06
-**Status:** Active — T32–T39 done (T38 doc audit complete; 9/10 criteria met, only the DS-05 fresh-clone manual run outstanding — tracked separately. T39 closed 2026-05-19, Session 27: deploy live on apex canonical `swarnimbagre.com`, admin verified end-to-end including CRUD round-trip); **T42 Session A done 2026-05-19, Session 29** (schema + admin write surface — migration 009 applied to prod, zod + Server Actions + ProjectForm wired, 24 new tests); **T42 Session B done 2026-05-19, Session 30** (public render desktop — ProgressRing + ProjectRow/Card/Media + Home + Projects, 259/259 vitest, @code-review APPROVED WITH MINOR); **T42 Session C next** (mobile + docs + Playwright + @security audit 18); T40 partial-blocked on T42 Session C content-addition; T41 trigger-gated
+**Status:** Active — T32–T39 done (T38 doc audit complete; 9/10 criteria met, only the DS-05 fresh-clone manual run outstanding — tracked separately. T39 closed 2026-05-19, Session 27: deploy live on apex canonical `swarnimbagre.com`, admin verified end-to-end including CRUD round-trip); **T42 Session A done 2026-05-19, Session 29** (schema + admin write surface — migration 009 applied to prod, zod + Server Actions + ProjectForm wired, 24 new tests); **T42 Session B done 2026-05-19, Session 30** (public render desktop — ProgressRing + ProjectRow/Card/Media + Home + Projects, 259/259 vitest, @code-review APPROVED WITH MINOR); **T42 Session C done 2026-05-19, Session 31** (mobile mirrors + Override 1 docs + Playwright admin smoke + @security audit 18 CLEAR, 304/304 vitest, @code-review APPROVED WITH MINOR; 3 mid-session production bug fixes via Targeted Fix Mode); T40 content-addition criteria UNLOCKED but other T40 criteria still open (24h log review, voice-check, launch-checklist post-launch section, DS-03 launch entry); T41 trigger-gated
 **Tasks:** T32–T42 (11 tasks; T41 is trigger-gated and does not block Phase 4 exit — same pattern as Phase 3's T29/T31 operator-gated deferrals; T42 added 2026-05-19 as a pre-T40 schema + render expansion to make the public project card meaningfully render real DB content)
 **Predecessor:** [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md)
 **Successor:** none — final phase
@@ -343,7 +343,7 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 
 ## T42 — Project content-model expansion + public-card redesign
 
-**Status:** Sessions A + B complete 2026-05-19 (Sessions 29 + 30) — schema + admin write surface + public render desktop. Session C (mobile + docs + Playwright + @security audit 18) remains. Supersedes the parked `docs/content-model-expansion.md` (which proposed a heavier Option C schema with new tables + JSONB — T42 ships a lighter "6 nullable columns, zero new tables" variant after Session 28 brainstorm closed scope; @cto pre-migration consult on 2026-05-19 confirmed Shape A over Shape C).
+**Status:** Sessions A + B + C complete 2026-05-19 (Sessions 29 + 30 + 31). Migration 009 to prod (S29), public render desktop (S30), public render mobile + Override 1 docs + Playwright admin smoke + `@security` audit 18 CLEAR (S31). `@code-review` APPROVED WITH MINOR (2 MAJOR CQ-02 carry-forwards, 3 new MINOR all under Override 1 scope or scaffold). 3 mid-session production bug fixes shipped via Targeted Fix Mode (ProjectImageField duplicate-id, Footer SSR hydration, TypoIcon dead-links). 304/304 vitest. Build clean. Supersedes the parked `docs/content-model-expansion.md` (which proposed a heavier Option C schema with new tables + JSONB — T42 ships a lighter "6 nullable columns, zero new tables" variant after Session 28 brainstorm closed scope; @cto pre-migration consult on 2026-05-19 confirmed Shape A over Shape C).
 
 **Decisions locked in brainstorm (Session 28):**
 - Progress: integer percent (0–100), ring visual with auto "full circle + subtle glow" done state at 100. No lifecycle vocabulary.
@@ -409,7 +409,7 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 - [x] Zod validation catches: invalid URL format on the 3 URL fields, percent out of range, unknown thumb_kind value. (20 schema tests in `tests/admin-projects-mutations-schemas.test.ts`.)
 - [x] `ImageUpload` for `image_after_id` uses the same `parentType: 'projects'` + `parentId` binding as primary image — via new shared `ProjectImageField.tsx`.
 - [x] `ProjectForm.tsx` stays ≤200 lines (CQ-02) — split into `ProjectFormLinks.tsx` + `ProjectFormDisplay.tsx` + `ProjectImageField.tsx`. Final: 200 lines exactly.
-- [ ] Save round-trip works for all new fields (verified via Playwright admin smoke test). — **Session C.**
+- [x] Save round-trip works for all new fields (verified via Playwright admin smoke test). — **Session C.** Verified 2026-05-19 via T42 desktop home + /projects + /projects/[slug] + mobile /projects + mobile /projects/[slug] Playwright steps in `tests/e2e/admin-smoke.spec.ts`.
 
 *Public render — desktop:* — **Session B complete (Session 30, 2026-05-19)**
 - [x] Home page renders DB-driven projects (not hardcoded `featured` array) — verify by adding a test project via admin and seeing it on home. (Wiring done; admin-add Playwright verification = Session C.)
@@ -419,18 +419,18 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 - [x] Bundle's `StatusPill` no longer renders on project cards.
 
 *Public render — mobile:*
-- [ ] All desktop changes mirrored on mobile components.
-- [ ] Mobile-specific layout regression-checked via Playwright.
+- [x] All desktop changes mirrored on mobile components. Mobile project-card surface (`MobileProjectCard`, `MobileProjectRow`) shipped with ProgressRing + 3 TypoIcon buttons + ProjectThumb. Mobile pages `Home` (project-card region absent per bundle design) + `Projects` (DB-driven). Decision logged in session-log.
+- [x] Mobile-specific layout regression-checked via Playwright. iPhone-UA context test verifies MobileProjectCard render on `/projects` + `/projects/[slug]`.
 
 *Before/after slider:* — **Session B complete (Session 30, 2026-05-19)**
 - [x] When `image_after_id` is non-null, `BeforeAfterMedia` renders the slider with both images. (`beforeUrl` + `afterUrl` props added; bundle CSS fallback scenes retained for design-source consistency, pushed file to 226 lines — CQ-02 MINOR carry-forward.)
 - [x] When `image_after_id` is null, falls back to static image. (Implementation deviation: bundle's `StillMedia` had no image input slot, so the still path uses a direct `<img>` matching `renderRealImage` styling in BeforeAfterMedia. Per @code-review: falls under Override 1, no new deviation. `StillMedia` file retained, not in data path on desktop.)
 
 *Docs:*
-- [ ] `docs/design-decisions.md` Override 1 entry written with rationale.
-- [ ] `docs/founder-brief.md` architectural entry added (DS-02).
-- [ ] `docs/architecture.md` §2 updated.
-- [ ] `docs/content-model-expansion.md` marked SUPERSEDED with link to T42.
+- [x] `docs/design-decisions.md` Override 1 entry written with rationale.
+- [x] `docs/founder-brief.md` architectural entry added (DS-02). Recorded as entry #28 (next sequential slot).
+- [x] `docs/architecture.md` §2 updated. §2.1 schema rows for 6 new columns + new §5.4 Reproducibility-debt section.
+- [x] `docs/content-model-expansion.md` marked SUPERSEDED with link to T42.
 
 *Quality gates:* — **Session A green; will re-verify after Sessions B + C land render code**
 - [x] `npm run build` clean (CQ-05). No console errors in production runtime. — Session A gate.

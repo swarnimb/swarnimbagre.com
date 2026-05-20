@@ -1,6 +1,8 @@
 'use client'
 
-// HomeMobile — adapted hero + featured project list, no horizontal scroll.
+// HomeMobile — hero + section nav buttons. The bundle's mobile home has no
+// projects list section; mirroring CONSTRAINT-05 verbatim means we do not
+// add one here. Project-list rendering on mobile lives on `pages/Projects`.
 
 import { useCallback } from 'react';
 import { useRouter } from 'next/navigation';

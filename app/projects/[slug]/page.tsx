@@ -51,7 +51,7 @@ export default async function ProjectDetailPage({ params }: DetailParams) {
   const h = await headers();
   const variant = h.get('x-device-variant');
   if (variant === 'mobile') {
-    return <MobileDetail project={project} />;
+    return <MobileDetail project={project} imageUrl={imageUrl} imageAfterUrl={imageAfterUrl} />;
   }
   return <DesktopDetail project={project} imageUrl={imageUrl} imageAfterUrl={imageAfterUrl} />;
 }
@@ -103,12 +103,27 @@ function DesktopDetail({ project, imageUrl, imageAfterUrl }: DesktopDetailProps)
   );
 }
 
-function MobileDetail({ project }: { project: Project }) {
+interface MobileDetailProps {
+  project: Project;
+  imageUrl: string | null;
+  imageAfterUrl: string | null;
+}
+
+function MobileDetail({ project, imageUrl, imageAfterUrl }: MobileDetailProps) {
   return (
     <MobilePage>
       <MobileNav current="projects" hrefs={NAV_PATHS} />
       <MobilePageTitle title={project.title} />
-      <MobileProjectCard title={project.title} status={project.status} blurb={project.description} />
+      <MobileProjectCard
+        title={project.title}
+        blurb={project.description}
+        progressPercent={project.progress_percent}
+        githubUrl={project.github_url}
+        liveUrl={project.live_url}
+        postUrl={project.post_url}
+        imageUrl={imageUrl}
+        imageAfterUrl={imageAfterUrl}
+      />
       <div style={{ flex: 1 }} />
       <MobileFooter line="Made between disc golf rounds." />
     </MobilePage>

@@ -8,6 +8,16 @@ interface TypoIconProps {
   title?: string;
 }
 
+/**
+ * Typographic link icon — a glyph + lowercase label rendered as an anchor.
+ * Decorative when `href` is the default `"#"` (navigation suppressed);
+ * functional when a real URL is passed (navigation proceeds).
+ *
+ * The original bundle was a static demo where `onClick={(e) => e.preventDefault()}`
+ * fired unconditionally — harmless against `"#"` placeholders. Production
+ * consumers pass real URLs, so the click is now gated on the decorative
+ * sentinel only.
+ */
 export function TypoIcon({ kind, href = "#", title }: TypoIconProps) {
   // kind: "github" | "live" | "post"
   // We use letterforms / glyphs as icons — no logos, no emoji, no Lucide.
@@ -22,7 +32,7 @@ export function TypoIcon({ kind, href = "#", title }: TypoIconProps) {
     <a
       href={href}
       title={title || it.label}
-      onClick={(e) => e.preventDefault()}
+      onClick={(e) => { if (href === "#") e.preventDefault(); }}
       style={{
         font: "var(--meta-sm)",
         color: "var(--fg-muted)",

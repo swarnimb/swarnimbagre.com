@@ -50,12 +50,22 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 | `description` | `text` | NOT NULL |
 | `status` | `project_status` enum | NOT NULL, default `'draft'`. Values: `'draft'`, `'published'` |
 | `image_id` | `uuid` | NULL, FK → `images.id` ON DELETE SET NULL |
+| `github_url` | `text` | NULL — public-card `{ } code` button source (migration 009) |
+| `live_url` | `text` | NULL — public-card `↗ site` button source (migration 009) |
+| `post_url` | `text` | NULL — public-card `¶ notes` button source (migration 009) |
+| `progress_percent` | `integer` | NULL, CHECK `(progress_percent between 0 and 100)` — drives the ProgressRing; null → ring not rendered (migration 009) |
+| `thumb_kind` | `text` | NULL — selects an SVG motif from `lib/thumb-kinds.ts`. No DB-side enum / CHECK; the vocabulary lives in code so new motifs can be added without a migration (migration 009) |
+| `image_after_id` | `uuid` | NULL, FK → `images.id` ON DELETE SET NULL — "after" image for the BeforeAfterMedia slider; when null, the card renders a single `<img>` from `image_id` (migration 009) |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` |
 | `updated_at` | `timestamptz` | NOT NULL, default `now()`, trigger on update |
 
 **Indexes:** `(status, created_at DESC)` for the public listing query. UNIQUE on `slug`.
 
 **Slug-lock trigger:** a BEFORE UPDATE trigger raises an exception if `slug` changes while `status='published'` (DB-level enforcement of the slug-lock-after-publish rule).
+
+**RLS on the new columns (migration 009).** No new policies required. The existing `projects_public_select` (anon, FOR SELECT, USING `status = 'published'`) and `projects_admin_all` (authenticated, FOR ALL) policies from migration 002 grant access at the row level, not column level — every new column is automatically covered. Verified against `pg_policies` post-apply.
+
+**Override 1 (project-card surface, 2026-05-19).** Six columns above are consumed by a redesigned project-card surface that intentionally deviates from the source bundle on the project-card surface only — see `design-decisions.md` "Override 1: Project card redesign" for the surface boundary and `founder-brief.md` decision #28 for the architectural rationale. CONSTRAINT-05's verbatim-bundle rule still applies everywhere outside the named Override 1 surface list.
 
 ### 2.2 `posts`
 
@@ -382,6 +392,16 @@ Single free-tier project. Migrations applied via Supabase CLI from `supabase/mig
 | `NEXT_PUBLIC_TWEAKS` | Vercel (preview only, never production) | yes (boolean) | Gates the tweaks panel |
 
 `.env.example` lists every Next.js-runtime variable name with no values (SEC-01). The one exception is `STATS_INGEST_SECRET`: it is Edge-Function-only (read via `Deno.env.get`, never by the Next.js app), so it appears in `.env.example` only as a documented comment block — not as an assignable key — pointing at the Supabase secret-store lifecycle in `docs/openclaw-config.md`. Service role key is loaded only in server contexts; never imported in client components. `NEXT_PUBLIC_TWEAKS` is unset in production.
+
+### 5.4 Reproducibility debt — operational unversioned config
+
+The following operational configuration is NOT in version control and is tracked manually. A fresh project rebuild from `git clone` alone will not reproduce these settings; they must be re-applied by hand against the Supabase dashboard.
+
+- **Supabase Auth — Site URL.** Set to the canonical apex per CONSTRAINT-21. Lives in the Supabase dashboard `Auth → URL Configuration`. Not tracked in any migration.
+- **Supabase Auth — Redirect URL allowlist.** Magic-link callback origin(s). Lives in the Supabase dashboard `Auth → URL Configuration`. Not tracked in any migration.
+- **Supabase Auth — Custom Magic Link email template.** The HTML/text body for the magic-link email. Lives in the Supabase dashboard `Auth → Email Templates → Magic Link`. Not tracked in any migration.
+
+**Why this is debt, not design.** Supabase exposes these via the dashboard UI but has only partial CLI / declarative-config coverage as of 2026-05. The intended remediation is to adopt Supabase CLI-managed `config.toml` auth config, or `supabase functions deploy`-aligned config, once that surface stabilizes. Until then, the dashboard is the source of truth for these three settings and any rebuild needs to re-apply them by hand. Operationally low-risk because the project is single-environment (CONSTRAINT-02) — there is no staging/prod drift to manage, only a one-time re-apply on disaster recovery.
 
 ---
 

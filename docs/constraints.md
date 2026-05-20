@@ -67,6 +67,9 @@
 
 **Additive prop extensions to bundle-ported components are permitted** when (a) the component renders byte-identically with the new prop omitted — i.e., the default value equals the existing hardcoded content, so the bundle still renders verbatim at design time — and (b) interactive behavior (link `href`, form actions, navigation targets) is wired to real destinations. The verbatim rule governs rendered visual output: pixels, motion, typography. It does not govern prop interfaces or runtime behavior. A new *visual* pattern (different layout, new component, off-bundle styling) still requires (a) match in bundle or (b) `@designer` consult per above.
 
+**Overrides:**
+- **Override 1 (T42, 2026-05-19):** approved for the project-card surface only. See `docs/design-decisions.md` "Override 1: Project card redesign" entry for the surface boundary (named file list) and the rationale.
+
 **Who decided and when:** Kickoff + `@designer`, 2026-05-05. Reaffirmed at `@plan`, 2026-05-06.
 
 **What this closes off:** Faster iteration on public-site visuals using off-the-shelf libraries. Reversing means accepting visual drift from the bundle and re-deriving design decisions in conversation, which is what the bundle was created to avoid.

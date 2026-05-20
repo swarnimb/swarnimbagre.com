@@ -59,6 +59,7 @@ export default function ProjectImageField({
       <ImageUpload
         parentType="projects"
         parentId={parentId}
+        instanceLabel={label}
         onUpload={(image) => {
           setImageId(image.id);
           setUploaded(image);

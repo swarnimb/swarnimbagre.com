@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useRef, useState, useTransition } from 'react';
+import { useActionState, useEffect, useId, useRef, useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,11 @@ import {
 } from '@/lib/admin-images-mutations-types';
 import { precheckImageFile } from '@/lib/admin-image-file-precheck';
 import type { ImageRecord } from '@/lib/types';
+
+/** Default file-picker label when `instanceLabel` is not supplied. */
+const DEFAULT_FILE_LABEL = 'Choose image';
+/** Default alt-text label when `instanceLabel` is not supplied. */
+const DEFAULT_ALT_LABEL = 'Alt text';
 
 /**
  * Props for {@link ImageUpload}.
@@ -35,6 +40,12 @@ export interface ImageUploadProps {
   /** Optional injected action — tests override this to avoid Server Action
    * wiring. Defaults to the production `uploadImage`. */
   uploadAction?: typeof uploadImage;
+  /** Optional human-readable scope label. When set, prefixes the visible
+   * file + alt input labels so multiple instances on one page expose
+   * distinct accessible names (T42: `ProjectForm` renders two
+   * `ProjectImageField` instances — one per FK). Omit for single-instance
+   * surfaces (`PostForm`) to keep the defaults `Choose image` / `Alt text`. */
+  instanceLabel?: string;
 }
 
 /**
@@ -58,12 +69,31 @@ export default function ImageUpload({
   onUpload,
   onError,
   uploadAction = uploadImage,
+  instanceLabel,
 }: ImageUploadProps): React.ReactElement {
   const [state, dispatch, isPending] = useActionState<
     ImageMutationState,
     FormData
   >(uploadAction, IMAGE_MUTATION_INITIAL_STATE);
   const [, startTransition] = useTransition();
+
+  // Per-instance stable id base — guarantees unique DOM ids when the parent
+  // composes more than one `ImageUpload` (T42: two `ProjectImageField`
+  // instances in `ProjectForm`). Hydration-safe via React 19 `useId()`.
+  const instanceUid = useId();
+  const fileInputId = `image-file-${instanceUid}`;
+  const fileErrorId = `image-file-error-${instanceUid}`;
+  const altInputId = `image-alt-${instanceUid}`;
+  const altErrorId = `image-alt-error-${instanceUid}`;
+  // Visible accessible names. When `instanceLabel` is set, prefix so
+  // `getByLabel` queries (both Testing Library and Playwright) resolve to a
+  // single element per instance.
+  const fileLabelText = instanceLabel
+    ? `${instanceLabel} ${DEFAULT_FILE_LABEL.toLowerCase()}`
+    : DEFAULT_FILE_LABEL;
+  const altLabelText = instanceLabel
+    ? `${instanceLabel} ${DEFAULT_ALT_LABEL.toLowerCase()}`
+    : DEFAULT_ALT_LABEL;
 
   // File state — controlled via `useState`. The `<input type="file">` itself
   // is uncontrolled (React deliberately disallows controlling its `value`
@@ -141,21 +171,21 @@ export default function ImageUpload({
       ) : null}
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="image-file">Choose image</Label>
+          <Label htmlFor={fileInputId}>{fileLabelText}</Label>
           <Input
             key={fileInputKey}
-            id="image-file"
+            id={fileInputId}
             type="file"
             name="file"
             accept={ALLOWED_MIME_TYPES.join(',')}
             onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
             aria-invalid={Boolean(fileError)}
-            aria-describedby="image-file-error"
+            aria-describedby={fileErrorId}
             required
           />
           {fileError ? (
             <p
-              id="image-file-error"
+              id={fileErrorId}
               role="alert"
               className="text-sm text-destructive"
             >
@@ -164,21 +194,21 @@ export default function ImageUpload({
           ) : null}
         </div>
         <div className="space-y-2">
-          <Label htmlFor="image-alt">Alt text</Label>
+          <Label htmlFor={altInputId}>{altLabelText}</Label>
           <Input
-            id="image-alt"
+            id={altInputId}
             type="text"
             name="altText"
             value={altText}
             onChange={(e) => setAltText(e.target.value)}
             maxLength={ALT_TEXT_MAX_LENGTH}
             aria-invalid={Boolean(altTextError)}
-            aria-describedby="image-alt-error"
+            aria-describedby={altErrorId}
             required
           />
           {altTextError ? (
             <p
-              id="image-alt-error"
+              id={altErrorId}
               role="alert"
               className="text-sm text-destructive"
             >

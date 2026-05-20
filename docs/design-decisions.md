@@ -82,6 +82,46 @@ Verbatim from the bundle's anti-patterns. Non-negotiable:
 
 ---
 
+## Overrides to the verbatim-bundle rule
+
+Documented exceptions to CONSTRAINT-05. Every override is scoped to a named surface and recorded here. A pattern that is not under an override entry below is still bundle-verbatim.
+
+### Override 1: Project card redesign (T42, 2026-05-19)
+
+**Rationale.** The bundle's StatusPill encodes lifecycle vocabulary (`active`, `dormant`, `abandoned fondly`) that doesn't match the new content model — progress percent, three link slots, and a before/after slider on one project. The bundle's `DemoLoop` animations (`rings | bars | wave | agent`) don't match the new "real screenshot" intent. Continuing to honor the bundle verbatim on the project-card surface would force schema compromises that deliver less than what the bundle itself would design with the new model in hand.
+
+**What changed (project-card surface only):**
+
+- StatusPill → ProgressRing. SVG dual-stroke ring driven by `progress_percent` (integer, 0–100). At 100 the ring renders as a full circle with a subtle done-glow. Null `progress_percent` → ring not rendered (null in, null out).
+- Bundle's fixed status text → 3 conditional buttons via the existing `TypoIcon` component: `{ } code`, `↗ site`, `¶ notes`. Each button renders only when its corresponding URL column (`github_url`, `live_url`, `post_url`) is non-null.
+- Bundle's `DemoLoop` animation → real screenshot from `image_id`. When `image_after_id` is set on a project, the before/after slider (existing `BeforeAfterMedia.tsx`) replaces the static image. Bundle's `DemoLoop` code stays in the tree in case revived later, but is dropped from the data path.
+- `StillMedia` (bundle dummy) bypassed for direct `<img>` rendering on the real-image path. The bundle dummy has no image-input slot; the real-image path matches `renderRealImage` styling from `BeforeAfterMedia` to keep visual continuity between still and before/after surfaces.
+
+**What stayed (no change):**
+
+- Palette — verbatim hex codes from `colors_and_type.css`.
+- Typography — Fraunces and JetBrains Mono families and weights unchanged.
+- Spacing tokens — unchanged.
+- Animation timing — 220ms `cubic-bezier(.2, .7, .2, 1)` everywhere it applied.
+- Voice — CONSTRAINT-13 still binding. Button labels `{ } code`, `↗ site`, `¶ notes` are taken verbatim from the bundle's TypoIcon vocabulary (decision recorded Session 30): the new button surface is wired but the strings are bundle-sourced, so CONSTRAINT-05 is honored at the copy layer without needing an Override 2.
+- Everything outside the project-card surface — Home hero, Projects header, Writing pages, Other pages, mobile navigation — remains bundle-verbatim under CONSTRAINT-05.
+
+**Surface boundary.** Override 1 applies to these files only:
+
+- `components/public/ProjectRow`
+- `components/public/ProjectCard`
+- `components/public/ProjectMedia`
+- `components/public/ProgressRing`
+- `components/public/BeforeAfterMedia` (real-image path)
+- `components/public/mobile/MobileProjectCard`
+- `components/public/mobile/MobileProjectRow`
+- `components/public/mobile/pages/Home` (project-card region)
+- `components/public/mobile/pages/Projects` (project-card region)
+
+Everything outside this list remains bundle-verbatim. A further deviation requires a named Override entry of its own.
+
+---
+
 ## Admin Panel
 
 **Scope:** The admin panel at `/admin` follows DIFFERENT rules from the public site. The bundle's anti-patterns and component conventions do NOT apply here.

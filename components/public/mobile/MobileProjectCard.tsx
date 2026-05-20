@@ -1,116 +1,128 @@
 'use client';
 
 import { ReactNode } from 'react';
-import { StatusPill } from '../StatusPill';
+import { ProgressRing } from '../ProgressRing';
+import { TypoIcon } from '../TypoIcon';
 import { ProjectMedia } from '../ProjectMedia';
 
-interface ProjectLink {
-  href?: string;
-  kind: string;
-}
+/**
+ * Full-width single-column project card used on the mobile `/projects`
+ * stack and the mobile detail page. T42 Session C mirrors the desktop
+ * `ProjectCard` work from Session B: replaced the bundle's `StatusPill`
+ * header slot with `ProgressRing` (driven by `progressPercent`) and
+ * replaced the open `links` array with the three fixed nullable URL
+ * fields (`githubUrl`, `liveUrl`, `postUrl`). The media slot is driven
+ * by `imageUrl` / `imageAfterUrl` via `ProjectMedia`.
+ *
+ * CONSTRAINT-05 Override 1 — same scope as the desktop card.
+ */
 
 interface MobileProjectCardProps {
+  /** Display title — required. */
   title: ReactNode;
-  status?: string;
+  /** Single-line blurb under the title. */
   blurb: ReactNode;
-  links?: ProjectLink[];
-  /** Signed Storage URL for the primary screenshot (T42 — mobile wires in Session C). */
+  /** Optional progress 0–100. Null/undefined hides the ring. */
+  progressPercent?: number | null;
+  /** External GitHub URL. Null/undefined hides the github icon. */
+  githubUrl?: string | null;
+  /** External live-site URL. Null/undefined hides the live icon. */
+  liveUrl?: string | null;
+  /** Write-up URL. Null/undefined hides the post icon. */
+  postUrl?: string | null;
+  /** Signed Storage URL for the primary screenshot. Pre-resolved by the page. */
   imageUrl?: string | null;
-  /** Signed Storage URL for the after-screenshot, enables before/after slider. */
+  /** Signed Storage URL for the after-screenshot (enables before/after slider). */
   imageAfterUrl?: string | null;
+  /** Click handler — typically navigates to the project detail page. */
   onClick?: () => void;
 }
 
 export function MobileProjectCard({
   title,
-  status,
   blurb,
-  links = [],
+  progressPercent,
+  githubUrl,
+  liveUrl,
+  postUrl,
   imageUrl,
   imageAfterUrl,
   onClick,
 }: MobileProjectCardProps) {
+  const hasAnyLink = Boolean(githubUrl || liveUrl || postUrl);
   return (
     <article
       onClick={onClick}
       style={{
-        background: "var(--surface)",
-        border: "1px solid var(--hairline)",
+        background: 'var(--surface)',
+        border: '1px solid var(--hairline)',
         borderRadius: 8,
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        cursor: onClick ? "pointer" : "default",
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        cursor: onClick ? 'pointer' : 'default',
       }}
     >
-      <div style={{
-        aspectRatio: "16 / 9",
-        position: "relative",
-        background: "var(--bg)",
-        borderBottom: "1px solid var(--hairline)",
-        overflow: "hidden",
-      }}>
-        <ProjectMedia imageUrl={imageUrl} imageAfterUrl={imageAfterUrl} title={typeof title === 'string' ? title : ''} />
+      <div
+        style={{
+          aspectRatio: '16 / 9',
+          position: 'relative',
+          background: 'var(--bg)',
+          borderBottom: '1px solid var(--hairline)',
+          overflow: 'hidden',
+        }}
+      >
+        <ProjectMedia
+          imageUrl={imageUrl}
+          imageAfterUrl={imageAfterUrl}
+          title={typeof title === 'string' ? title : ''}
+        />
       </div>
-      <div style={{ padding: "18px 18px 20px", display: "flex", flexDirection: "column", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <h3 style={{
-            font: "500 22px/1.2 var(--font-serif)",
-            color: "var(--fg-strong)",
-            margin: 0,
-            letterSpacing: "-0.012em",
-            flex: "1 1 auto",
-            minWidth: 0,
-          }}>
+      <div style={{ padding: '18px 18px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <h3
+            style={{
+              font: '500 22px/1.2 var(--font-serif)',
+              color: 'var(--fg-strong)',
+              margin: 0,
+              letterSpacing: '-0.012em',
+              flex: '1 1 auto',
+              minWidth: 0,
+            }}
+          >
             {title}
           </h3>
-          {status && (
-            <span style={{ marginLeft: "auto", flex: "0 0 auto" }}>
-              <StatusPill status={status} />
+          {progressPercent !== null && progressPercent !== undefined && (
+            <span style={{ marginLeft: 'auto', flex: '0 0 auto', display: 'inline-flex', alignItems: 'center' }}>
+              <ProgressRing percent={progressPercent} />
             </span>
           )}
         </div>
-        <p style={{
-          font: "var(--body)",
-          color: "var(--fg-muted)",
-          margin: 0,
-          textWrap: "pretty",
-        }}>
+        <p
+          style={{
+            font: 'var(--body)',
+            color: 'var(--fg-muted)',
+            margin: 0,
+            textWrap: 'pretty',
+          }}
+        >
           {blurb}
         </p>
-        {links.length > 0 && (
-          <div style={{
-            display: "flex",
-            gap: 18,
-            marginTop: 6,
-            paddingTop: 14,
-            borderTop: "1px solid var(--hairline)",
-            flexWrap: "wrap",
-            alignItems: "center",
-          }}>
-            {links.map((l, i) => (
-              <a key={i} href={l.href || "#"}
-                 onClick={(e) => e.preventDefault()}
-                 style={{
-                   display: "inline-flex",
-                   alignItems: "center",
-                   gap: 8,
-                   minHeight: 44,
-                   font: "var(--meta-sm)",
-                   color: "var(--fg-muted)",
-                   textDecoration: "none",
-                   backgroundImage: "none",
-                   letterSpacing: "0.05em",
-                   textTransform: "lowercase",
-                 }}>
-                <span style={{ fontFamily: "var(--font-mono)" }}>
-                  {l.kind === "github" ? "{ }" : l.kind === "live" ? "↗" : "¶"}
-                </span>
-                <span>
-                  {l.kind === "github" ? "code" : l.kind === "live" ? "site" : "notes"}
-                </span>
-              </a>
-            ))}
+        {hasAnyLink && (
+          <div
+            style={{
+              display: 'flex',
+              gap: 18,
+              marginTop: 6,
+              paddingTop: 14,
+              borderTop: '1px solid var(--hairline)',
+              flexWrap: 'wrap',
+              alignItems: 'baseline',
+            }}
+          >
+            {githubUrl && <TypoIcon kind="github" href={githubUrl} />}
+            {liveUrl && <TypoIcon kind="live" href={liveUrl} />}
+            {postUrl && <TypoIcon kind="post" href={postUrl} />}
           </div>
         )}
       </div>

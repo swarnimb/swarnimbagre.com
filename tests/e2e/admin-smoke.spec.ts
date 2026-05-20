@@ -32,7 +32,7 @@
  *     the duration of the test; asserted empty at the end.
  */
 
-import { test, expect, type ConsoleMessage, type Page } from '@playwright/test';
+import { test, expect, type BrowserContext, type ConsoleMessage, type Page } from '@playwright/test';
 import { loginAsAdmin } from './fixtures/auth';
 
 // --- Constants (CQ-04) -----------------------------------------------------
@@ -51,6 +51,38 @@ const POST_MARKDOWN_BODY = `## T28 heading\n\nA list item exercises the renderer
 const STAT_CATEGORY = `t28-${RUN_ID}`;
 const STAT_LABEL = `T28 stat ${RUN_ID}`;
 const STAT_VALUE = '42';
+
+// --- T42 end-to-end path constants (CQ-04) --------------------------------
+
+/** T42 test project title — distinct prefix so it can't collide with T28 rows. */
+const T42_PROJECT_TITLE = `T42 e2e project ${RUN_ID}`;
+/** T42 description — surfaces in the public card blurb. */
+const T42_PROJECT_DESCRIPTION = `T42 end-to-end project description ${RUN_ID}.`;
+/** T42 github URL — https, max-length safe, non-collision. */
+const T42_GITHUB_URL = 'https://github.com/test/t42-smoke';
+/** T42 live URL — https, non-collision. */
+const T42_LIVE_URL = 'https://example.com/t42-smoke';
+/** T42 post URL — relative form is permitted by `postUrlSchema`. */
+const T42_POST_URL = '/writing/t42-smoke-post';
+/** T42 progress — 100 triggers the `ProgressRing` done-glow render path. */
+const T42_PROGRESS_PERCENT = '100';
+/** T42 thumb_kind — first entry of `THUMB_KIND_OPTIONS` (`disc`). */
+const T42_THUMB_KIND_LABEL = 'Disc';
+
+/** TypoIcon visible-text labels. Unicode characters preserved verbatim per
+ * CONSTRAINT-13 — `↗` and `¶` must not be transliterated to `->` or `section`. */
+const TYPO_ICON_GITHUB_TEXT = '{ } code';
+const TYPO_ICON_LIVE_TEXT = '↗ site';
+const TYPO_ICON_POST_TEXT = '¶ notes';
+
+/**
+ * Mobile UA token matched by `MOBILE_UA_TOKENS` in `middleware.ts`. Selecting
+ * the iPhone string keeps parity with `tests/e2e/ua-mobile.spec.ts`; both
+ * specs exercise the same middleware classification path.
+ */
+const T42_MOBILE_USER_AGENT =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) ' +
+  'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
 /** SEC-02 payloads. Both must round-trip as literal text — no execution. */
 const XSS_SCRIPT_PAYLOAD = `<script>window.__t28_xss=1;</script>`;
@@ -237,6 +269,75 @@ async function runStep(
   }
 }
 
+/**
+ * Pick a value from a shadcn Select by its accessible label. Mirrors
+ * `selectFormStatus` but parameterised on the trigger's accessible name so
+ * it works for both the `Status` and `Thumbnail` selects on `ProjectForm`.
+ *
+ * The trigger's accessible name comes from `<Label htmlFor="…">`; the
+ * project-thumb-kind select label is "Thumbnail" (see ProjectFormDisplay.tsx).
+ */
+async function selectFormOption(
+  page: Page,
+  triggerName: string,
+  optionName: string,
+): Promise<void> {
+  await page.getByRole('combobox', { name: triggerName }).click();
+  const listbox = page.getByRole('listbox');
+  await expect(listbox).toBeVisible();
+  await page.getByRole('option', { name: optionName }).click({ force: true });
+  await expect(listbox).toBeHidden();
+}
+
+/**
+ * Assert that the three T42 TypoIcon link buttons render with their exact
+ * bundle-preserved Unicode labels and carry the URLs we submitted on the
+ * admin form. The TypoIcon component renders each as an `<a>`; the visible
+ * text is glyph + space + label (e.g. `{ } code`). We scope the assertion
+ * to the project card region by passing the article `Locator` in.
+ *
+ * Each link's `onClick` only calls `preventDefault` when `href === "#"`
+ * (decorative bundle default). Production consumers pass a real URL, so
+ * primary clicks navigate normally; the `href` attribute carries the URL
+ * directly.
+ */
+async function assertT42LinkRow(
+  scope: Page | import('@playwright/test').Locator,
+  expectedUrls: {
+    githubUrl: string;
+    liveUrl: string;
+    postUrl: string;
+  },
+): Promise<void> {
+  const githubLink = scope.getByRole('link', { name: TYPO_ICON_GITHUB_TEXT });
+  const liveLink = scope.getByRole('link', { name: TYPO_ICON_LIVE_TEXT });
+  const postLink = scope.getByRole('link', { name: TYPO_ICON_POST_TEXT });
+  await expect(githubLink.first()).toBeVisible();
+  await expect(liveLink.first()).toBeVisible();
+  await expect(postLink.first()).toBeVisible();
+  await expect(githubLink.first()).toHaveAttribute('href', expectedUrls.githubUrl);
+  await expect(liveLink.first()).toHaveAttribute('href', expectedUrls.liveUrl);
+  await expect(postLink.first()).toHaveAttribute('href', expectedUrls.postUrl);
+}
+
+/**
+ * Assert the `ProgressRing` is present and in done-state (percent === 100).
+ *
+ * `ProgressRing` returns `null` when `percent` is null/undefined, so the
+ * presence of the `[role="img"]` span with `aria-label="progress 100%"` is
+ * a load-bearing signal that:
+ *   1. The DB value round-tripped to the public render (component received `100`).
+ *   2. The done-state branch fired (the aria-label is computed AFTER the
+ *      `Math.min(100, percent)` clamp; only `percent === 100` produces this
+ *      exact string).
+ */
+async function assertProgressRingDone(
+  scope: Page | import('@playwright/test').Locator,
+): Promise<void> {
+  const ring = scope.getByRole('img', { name: 'progress 100%' });
+  await expect(ring.first()).toBeVisible();
+}
+
 // --- The flow --------------------------------------------------------------
 
 test.describe('T28 — admin smoke (end-to-end)', () => {
@@ -331,12 +432,12 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await expect(slugInput).toHaveAttribute('readonly', '');
     });
 
-    // Image upload + replace (T26 surface). MAY BE BLOCKING — known nested
-    // <form> bug from T26 wiring (ImageUpload.tsx <form> nests inside
-    // ProjectForm/PostForm <form>). The Upload submit either submits the
-    // OUTER form (saving the project) or fails silently; the success copy
-    // never appears. Captured here as a step failure so the QA report
-    // surfaces it explicitly without masking the rest of the flow.
+    // Image upload + replace (T26 surface). T42 fix: ProjectForm renders TWO
+    // ProjectImageField instances — primary `Image` + after `After image
+    // (before/after slider)`. ImageUpload now derives per-instance ids via
+    // `useId()` and prefixes its visible labels with the parent section
+    // label, so `getByLabel` resolves to a single element per instance.
+    // Locators below target the primary (`Image`) instance explicitly.
     await runStep(failures, 'images: upload via project edit form (T26 wiring)', async () => {
       await page.goto('/admin/projects/new');
       await page.getByLabel('Title').fill(IMAGE_PROJECT_TITLE);
@@ -362,15 +463,40 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
           `ProjectForm's <form> — see T26 wiring)`,
       ).toBe(0);
 
+      // T42 regression pin: no duplicate ids in the rendered DOM. Catches
+      // the original bug shape (two ImageUpload instances both hardcoded
+      // `id="image-file"`).
+      const duplicateIds = await page.evaluate(() => {
+        const ids = Array.from(document.querySelectorAll('[id]')).map(
+          (el) => el.id,
+        );
+        const seen = new Set<string>();
+        const dupes = new Set<string>();
+        for (const id of ids) {
+          if (seen.has(id)) dupes.add(id);
+          else seen.add(id);
+        }
+        return Array.from(dupes);
+      });
+      expect(
+        duplicateIds,
+        `duplicate DOM ids detected on edit page: ${duplicateIds.join(', ')}`,
+      ).toEqual([]);
+
       const pngBuffer = Buffer.from(TINY_PNG_BASE64, 'base64');
-      await page.locator('input[type="file"]').setInputFiles({
+      // Scope to the primary `Image` ProjectImageField so the locator does
+      // not strict-mode-fail on the sibling `After image` instance.
+      await page.getByLabel('Image choose image').setInputFiles({
         name: 't28-first.png',
         mimeType: 'image/png',
         buffer: pngBuffer,
       });
       const altWithPayload = `T28 alt ${XSS_IMG_PAYLOAD}`;
-      await page.getByLabel(/^alt text$/i).fill(altWithPayload);
-      const uploadBtn = page.getByRole('button', { name: /^upload$/i });
+      await page.getByLabel('Image alt text').fill(altWithPayload);
+      // Two Upload buttons exist (one per instance) — pick the first, which
+      // is the primary `Image` instance (rendered before the after image in
+      // ProjectForm). `.first()` keeps the click unambiguous.
+      const uploadBtn = page.getByRole('button', { name: /^upload$/i }).first();
       await expect(uploadBtn).toBeEnabled();
       await uploadBtn.click();
       await expect(
@@ -448,6 +574,153 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       ).toHaveCount(0);
     });
 
+    // -------------------------------------------------------------------
+    // T42 end-to-end path — admin create with the 6 new content-model
+    // fields → publish → assert public render on desktop AND mobile.
+    //
+    // Image attachment (`image_id`, `image_after_id`) is SKIPPED — the only
+    // image-upload helper available is the existing inline form inside
+    // ProjectImageField, which the T26 step above already shows is broken
+    // (nested-form + strict-mode-violation on the duplicate file input
+    // introduced by the second ProjectImageField for `image_after_id`).
+    // Without a working helper the test exercises the still-no-image
+    // public render path. The image-bound branches (`ProjectMedia`
+    // `<img>` and `BeforeAfterMedia`) are covered by their unit tests.
+    //
+    // Mobile assertions use a separate BrowserContext with the iPhone UA
+    // matched by `MOBILE_UA_TOKENS` in middleware.ts. Viewport size alone
+    // would NOT switch the variant — detection is UA-based.
+    // -------------------------------------------------------------------
+
+    await runStep(failures, 'T42: create project with all 6 new fields filled', async () => {
+      await page.goto('/admin/projects/new');
+      await page.getByLabel('Title').fill(T42_PROJECT_TITLE);
+      await page.getByLabel('Description').fill(T42_PROJECT_DESCRIPTION);
+      await page.getByLabel('GitHub URL').fill(T42_GITHUB_URL);
+      await page.getByLabel('Live URL').fill(T42_LIVE_URL);
+      await page.getByLabel('Post URL').fill(T42_POST_URL);
+      await page.getByLabel('Progress').fill(T42_PROGRESS_PERCENT);
+      await selectFormOption(page, 'Thumbnail', T42_THUMB_KIND_LABEL);
+      await selectFormStatus(page, 'Published');
+      await page.getByRole('button', { name: /^save$/i }).click();
+      await page.waitForURL(/\/admin\/projects(\?[^/]*)?$/, { timeout: SHORT_WAIT_MS });
+      await expect(
+        page.getByRole('cell', { name: T42_PROJECT_TITLE }).first(),
+      ).toBeVisible();
+    });
+
+    const t42PublicAssertions = {
+      githubUrl: T42_GITHUB_URL,
+      liveUrl: T42_LIVE_URL,
+      postUrl: T42_POST_URL,
+    };
+    const t42TitleRe = new RegExp(T42_PROJECT_TITLE);
+
+    await runStep(failures, 'T42 desktop: home renders project row with ring + 3 links', async () => {
+      await page.goto('/');
+      const heading = page.getByRole('heading', { level: 3, name: t42TitleRe });
+      await expect(heading.first()).toBeVisible();
+      const article = page.locator('article', { has: heading });
+      await assertProgressRingDone(article.first());
+      await assertT42LinkRow(article.first(), t42PublicAssertions);
+
+      // Regression guard: TypoIcon previously called `preventDefault`
+      // unconditionally, making every link visibly clickable but inert.
+      // Synthesise a primary click on the `{ } code` link and assert the
+      // event was NOT default-prevented. Use `evaluate` so we don't trigger
+      // a real cross-origin navigation in the test runner.
+      const githubLink = article
+        .first()
+        .getByRole('link', { name: TYPO_ICON_GITHUB_TEXT })
+        .first();
+      const wasDefaultPrevented = await githubLink.evaluate((el) => {
+        const evt = new MouseEvent('click', { bubbles: true, cancelable: true });
+        el.dispatchEvent(evt);
+        return evt.defaultPrevented;
+      });
+      expect(
+        wasDefaultPrevented,
+        'TypoIcon primary click must NOT preventDefault for real URLs',
+      ).toBe(false);
+    });
+
+    await runStep(failures, 'T42 desktop: /projects renders card with ring + 3 links', async () => {
+      await page.goto('/projects');
+      const heading = page.getByRole('heading', { level: 3, name: t42TitleRe });
+      await expect(heading.first()).toBeVisible();
+      const article = page.locator('article', { has: heading });
+      await assertProgressRingDone(article.first());
+      await assertT42LinkRow(article.first(), t42PublicAssertions);
+    });
+
+    await runStep(failures, 'T42 desktop: /projects/[slug] renders detail with ring + 3 links', async () => {
+      // Slug derives from the title via the create flow; titles round-trip
+      // to slugs via lib/slug.ts (lowercased, spaced→`-`, special-stripped).
+      await page.goto('/admin/projects');
+      const slugCell = page
+        .getByRole('row', { name: t42TitleRe })
+        .locator('td')
+        .nth(1);
+      const t42Slug = ((await slugCell.textContent()) ?? '').trim();
+      expect(t42Slug, 'T42 project slug must be derivable').not.toBe('');
+      await page.goto(`/projects/${t42Slug}`);
+      const heading = page.getByRole('heading', { level: 3, name: t42TitleRe });
+      await expect(heading.first()).toBeVisible();
+      const article = page.locator('article', { has: heading });
+      await assertProgressRingDone(article.first());
+      await assertT42LinkRow(article.first(), t42PublicAssertions);
+    });
+
+    await runStep(failures, 'T42 mobile: /projects + /projects/[slug] via iPhone UA context', async () => {
+      const browser = context.browser();
+      if (!browser) {
+        throw new Error('T42 mobile: BrowserContext has no browser reference');
+      }
+      // Look up the slug from the admin list before swapping contexts —
+      // the mobile context is unauthenticated by design.
+      await page.goto('/admin/projects');
+      const slugCell = page
+        .getByRole('row', { name: t42TitleRe })
+        .locator('td')
+        .nth(1);
+      const t42Slug = ((await slugCell.textContent()) ?? '').trim();
+      expect(t42Slug, 'T42 project slug must be derivable for mobile').not.toBe('');
+
+      const mobileContext: BrowserContext = await browser.newContext({
+        userAgent: T42_MOBILE_USER_AGENT,
+      });
+      try {
+        const mobilePage = await mobileContext.newPage();
+        // Mobile /projects — MobileProjectCard surface.
+        await mobilePage.goto('/projects');
+        const mobileHeading = mobilePage.getByRole('heading', {
+          level: 3,
+          name: t42TitleRe,
+        });
+        await expect(mobileHeading.first()).toBeVisible();
+        const mobileArticle = mobilePage.locator('article', { has: mobileHeading });
+        await assertProgressRingDone(mobileArticle.first());
+        await assertT42LinkRow(mobileArticle.first(), t42PublicAssertions);
+
+        // Mobile /projects/[slug] — MobileProjectCard rendered by the
+        // detail page's MobileDetail branch.
+        await mobilePage.goto(`/projects/${t42Slug}`);
+        const detailHeading = mobilePage.getByRole('heading', {
+          level: 3,
+          name: t42TitleRe,
+        });
+        await expect(detailHeading.first()).toBeVisible();
+        const detailArticle = mobilePage.locator('article', { has: detailHeading });
+        await assertProgressRingDone(detailArticle.first());
+        await assertT42LinkRow(detailArticle.first(), t42PublicAssertions);
+        // Mobile Home is skipped by design: the bundle's MobileHome has no
+        // project-card region (deferred `@designer` consult, post-launch).
+      } finally {
+        // Loud cleanup (EH-01) — surface close failures rather than swallow.
+        await mobileContext.close();
+      }
+    });
+
     // Cleanup — best effort; swallows individual delete failures.
     await runStep(failures, 'cleanup: delete test post', async () => {
       await page.goto('/admin/posts');
@@ -458,6 +731,7 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await deleteRowsMatching(page, new RegExp(PROJECT_TITLE_EDITED));
       await deleteRowsMatching(page, new RegExp(PROJECT_TITLE));
       await deleteRowsMatching(page, new RegExp(IMAGE_PROJECT_TITLE));
+      await deleteRowsMatching(page, t42TitleRe);
     });
 
     // Logout + back-button non-restoration.

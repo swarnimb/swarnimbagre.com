@@ -87,3 +87,113 @@ describe('ImageUpload — non-form structure (BLOCKING-01 regression)', () => {
     expect(container.querySelector('form')).toBeNull();
   });
 });
+
+/**
+ * T42 fix-pin — multi-instance id + accessible-name uniqueness.
+ *
+ * Before this fix, `ImageUpload` hardcoded `id="image-file"` (and three
+ * sibling ids). T42 Session A made `ProjectForm` render two
+ * `ProjectImageField` instances — primary + before/after — which mounted
+ * TWO `ImageUpload`s on one page. Result: duplicate DOM ids (invalid HTML)
+ * AND a Playwright strict-mode selector violation on
+ * `locator('input[type="file"]')`. The fix derives ids per-instance via
+ * `useId()` and accepts an `instanceLabel` prop that prefixes the visible
+ * file / alt labels so `getByLabel` resolves uniquely too.
+ *
+ * Coverage (TS-01 — happy + error case for the label-derivation logic):
+ *   - happy: `instanceLabel` set on both → distinct ids + distinct labels.
+ *   - error case: would-have-been-the-bug case — two instances mounted in
+ *     one container must produce DIFFERENT file-input ids.
+ *   - back-compat: no `instanceLabel` → defaults `Choose image` / `Alt text`
+ *     preserved (the `PostForm` single-instance path must not regress).
+ */
+describe('ImageUpload — instance-scoped ids + labels (T42 fix)', () => {
+  it('keeps default labels when instanceLabel is not supplied (PostForm path)', () => {
+    const onUpload = vi.fn();
+    const uploadAction = vi.fn().mockResolvedValue({ status: 'idle' as const });
+
+    render(
+      <ImageUpload
+        parentType="posts"
+        parentId={TEST_PARENT_ID}
+        onUpload={onUpload}
+        uploadAction={uploadAction}
+      />,
+    );
+
+    // Defaults preserved so the existing PostForm flow + this file's earlier
+    // tests stay valid.
+    expect(screen.getByLabelText('Choose image')).toBeDefined();
+    expect(screen.getByLabelText('Alt text')).toBeDefined();
+  });
+
+  it('prefixes visible labels with instanceLabel when supplied', () => {
+    const onUpload = vi.fn();
+    const uploadAction = vi.fn().mockResolvedValue({ status: 'idle' as const });
+
+    render(
+      <ImageUpload
+        parentType="projects"
+        parentId={TEST_PARENT_ID}
+        onUpload={onUpload}
+        uploadAction={uploadAction}
+        instanceLabel="Image"
+      />,
+    );
+
+    // Scoped accessible names — the production labels passed by
+    // ProjectImageField are "Image" and "After image (before/after slider)".
+    expect(screen.getByLabelText('Image choose image')).toBeDefined();
+    expect(screen.getByLabelText('Image alt text')).toBeDefined();
+  });
+
+  it('renders two instances in one container with distinct file-input ids (regression)', () => {
+    // This is the test that would have caught the original bug: two
+    // ProjectImageField instances on one ProjectForm rendered two
+    // ImageUploads with the SAME `id="image-file"`. The fix makes the ids
+    // derive per-instance via React 19 `useId()`.
+    const onUpload = vi.fn();
+    const uploadAction = vi.fn().mockResolvedValue({ status: 'idle' as const });
+
+    const { container } = render(
+      <div>
+        <ImageUpload
+          parentType="projects"
+          parentId={TEST_PARENT_ID}
+          onUpload={onUpload}
+          uploadAction={uploadAction}
+          instanceLabel="Image"
+        />
+        <ImageUpload
+          parentType="projects"
+          parentId={TEST_PARENT_ID}
+          onUpload={onUpload}
+          uploadAction={uploadAction}
+          instanceLabel="After image"
+        />
+      </div>,
+    );
+
+    const fileInputs = container.querySelectorAll('input[type="file"]');
+    expect(fileInputs).toHaveLength(2);
+    const id0 = (fileInputs[0] as HTMLInputElement).id;
+    const id1 = (fileInputs[1] as HTMLInputElement).id;
+    expect(id0).not.toBe('');
+    expect(id1).not.toBe('');
+    expect(id0).not.toBe(id1);
+
+    // Same for the alt-text inputs (a sibling id source for the same bug).
+    const altInputs = container.querySelectorAll('input[name="altText"]');
+    expect(altInputs).toHaveLength(2);
+    const altId0 = (altInputs[0] as HTMLInputElement).id;
+    const altId1 = (altInputs[1] as HTMLInputElement).id;
+    expect(altId0).not.toBe('');
+    expect(altId1).not.toBe('');
+    expect(altId0).not.toBe(altId1);
+
+    // And the labels resolve to disjoint elements (Playwright strict-mode
+    // proxy: `getByLabelText` throws if multiple match).
+    expect(screen.getByLabelText('Image choose image')).toBeDefined();
+    expect(screen.getByLabelText('After image choose image')).toBeDefined();
+  });
+});

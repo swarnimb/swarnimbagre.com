@@ -1,6 +1,6 @@
 # Security Report: swarnimbagre.com
 
-**Last audit:** 2026-05-19 (audit 17 — T42 Session A scope; re-audit 17b same day — F-36 fix verified RESOLVED)
+**Last audit:** 2026-05-19 (audit 18 — T42 Session C public-render scope; CLEAR)
 **Scope:** T42 Session A delta — zod schemas + Server Action boundary + FormData readers + migration 009 + new admin form sub-components. Audited surfaces: `lib/admin-projects-mutations-schemas.ts` (created), `lib/admin-projects-mutations.ts` (FormData readers + field-key allowlist), `lib/admin-projects-mutations-internal.ts` (orchestrator + new helpers `buildProjectUpdatePayload`, `orphanProjectImagesIfChanged`), `lib/thumb-kinds.ts` (closed enum), `lib/types.ts` (extended `Project`), `supabase/migrations/009_projects_content_model.sql` (DDL), and the four new admin components (`ProjectForm`, `ProjectFormLinks`, `ProjectFormDisplay`, `ProjectImageField`). Out of scope: T42 Sessions B + C public render code (not yet written) — re-audit when those land.
 **Status:** CLEAR
 **Summary:** 0 Critical / 0 High / 2 Medium / ~18 Low (audit 17 opened F-36; re-audit 17b verified F-36 RESOLVED; carry-forward Mediums F-3, F-4 unchanged)
@@ -203,5 +203,41 @@ The Session-22 handoff flagged a prior prompt-injection attempt via the sub-agen
 **Closed re-audit 16b:** F-29, F-30 (both Medium — fixes verified).
 
 **Verdict:** CLEAR — no Critical or High findings. T42 Session A schema review complete; F-36 fixed and re-audit 17b verified RESOLVED. F-3 and F-4 carry-forward Mediums remain non-blocking for the Session B/C window. Next security review point: when Sessions B + C land the public render code (audit 18) — verify `<a href>` rendering, `<img src>` attribute handling, and any DemoLoop component removal.
+
+---
+
+## Audit 18 (2026-05-19) — T42 Session C public-render review
+
+**Audit:** 18
+**Date:** 2026-05-19
+**Status:** CLEAR
+**Scope:** T42 public render surface — `<a href>` escaping (React default + zod upstream validation), `<img src>` handling, XSS via the new URL fields (`github_url`, `live_url`, `post_url`) and image columns (`image_id`, `image_after_id`). Final gate before T42 closure.
+
+**Summary:**
+- 0 Critical, 0 High.
+- 1 new Low: **F-37** — defense-in-depth render-side scheme guard at `components/public/TypoIcon.tsx`. Single-layer zod gate is intact and the only writer is the admin Server Action; deferred as non-blocking carry-forward per main thread call.
+- F-36 (post_url protocol-relative `//evil.com` rejection): verified still RESOLVED on the new render path.
+- F-3 (`EMAIL_SCHEMA` no length cap): UNCHANGED this session, carry-forward Medium.
+- F-4 (callback OTP type wide): UNCHANGED this session, carry-forward Medium.
+
+**Key findings:**
+1. `<a href>` XSS: zod `httpsUrlSchema` rejects all non-HTTPS schemes (`javascript:`, `data:`, `vbscript:`, `file:`, `http:`, protocol-relative `//`). `postUrlSchema` rejects everything except `https://...` and relative `/...` (not `//...`). React's JSX attribute escaping is the secondary defense at render — no `dangerouslySetInnerHTML` anywhere on the project-card render path.
+2. `<img src>` XSS: not exploitable. Image URLs come from Supabase Storage `getPublicUrl` / signed-URL server-side construction; user-controlled strings never reach `<img src>`. Filename sanitization at upload neutralizes name-injection. `<img alt>` values pass through JSX interpolation (escaped); title-as-alt is zod-capped at 200 chars.
+3. `target="_blank"` + tabnabbing: not applicable. All project links open in same tab (no `target="_blank"` anywhere on the surface).
+4. Image-upload duplicate-id fix (Targeted Fix 1 this session): closes a CWE-1284 DOM clobbering surface via `React.useId()` per-instance scoping. No security regression.
+5. Footer hydration fix (Targeted Fix 2 this session): closes a console-error gate. No new security surface.
+6. TypoIcon dead-links fix (Targeted Fix 3 this session, post-audit): conditional `preventDefault` on `href === "#"` only. Restores intended primary-click navigation. No security implication.
+
+### [LOW] F-37 — Render-side scheme guard missing on TypoIcon (defense-in-depth)
+
+- **Location:** `components/public/TypoIcon.tsx` (and the 4 consumer files `ProjectRow.tsx`, `ProjectCard.tsx`, `MobileProjectCard.tsx`, `MobileProjectRow.tsx`).
+- **Rule:** SEC-02 (defense-in-depth — two-layer validation pattern).
+- **Severity:** Low (single-layer zod gate intact; bypass requires either schema regression, direct Supabase Dashboard SQL edit, or migration backfill).
+- **Fix:** 3-line scheme guard at top of TypoIcon: `if (!(href === '#' || href.startsWith('https://') || (href.startsWith('/') && !href.startsWith('//')))) return null;`
+- **Status:** DEFERRED. Filed as a tracked Low carry-forward. Not blocking T42 closure.
+
+**Recommendation:** T42 final gate passes. Proceed with closure.
+
+---
 
 ## Status: CLEAR
