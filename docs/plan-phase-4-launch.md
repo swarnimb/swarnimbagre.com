@@ -1,7 +1,7 @@
 # Plan — Phase 4: Polish + Launch
 
 **Date:** 2026-05-06
-**Status:** Active — T32–T39 done (T38 doc audit complete; 9/10 criteria met, only the DS-05 fresh-clone manual run outstanding — tracked separately. T39 closed 2026-05-19, Session 27: deploy live on apex canonical `swarnimbagre.com`, admin verified end-to-end including CRUD round-trip); **T42 Session A done 2026-05-19, Session 29** (schema + admin write surface — migration 009 applied to prod, zod + Server Actions + ProjectForm wired, 24 new tests, all 223 vitest green); **T42 Session B next** (ProgressRing + desktop public render); T40 still partial-blocked on T42 content-addition; T41 trigger-gated
+**Status:** Active — T32–T39 done (T38 doc audit complete; 9/10 criteria met, only the DS-05 fresh-clone manual run outstanding — tracked separately. T39 closed 2026-05-19, Session 27: deploy live on apex canonical `swarnimbagre.com`, admin verified end-to-end including CRUD round-trip); **T42 Session A done 2026-05-19, Session 29** (schema + admin write surface — migration 009 applied to prod, zod + Server Actions + ProjectForm wired, 24 new tests); **T42 Session B done 2026-05-19, Session 30** (public render desktop — ProgressRing + ProjectRow/Card/Media + Home + Projects, 259/259 vitest, @code-review APPROVED WITH MINOR); **T42 Session C next** (mobile + docs + Playwright + @security audit 18); T40 partial-blocked on T42 Session C content-addition; T41 trigger-gated
 **Tasks:** T32–T42 (11 tasks; T41 is trigger-gated and does not block Phase 4 exit — same pattern as Phase 3's T29/T31 operator-gated deferrals; T42 added 2026-05-19 as a pre-T40 schema + render expansion to make the public project card meaningfully render real DB content)
 **Predecessor:** [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md)
 **Successor:** none — final phase
@@ -343,7 +343,7 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 
 ## T42 — Project content-model expansion + public-card redesign
 
-**Status:** Session A complete 2026-05-19 (Session 29) — schema + admin write surface. Sessions B (public render desktop) and C (mobile + docs + Playwright) remain. Supersedes the parked `docs/content-model-expansion.md` (which proposed a heavier Option C schema with new tables + JSONB — T42 ships a lighter "6 nullable columns, zero new tables" variant after Session 28 brainstorm closed scope; @cto pre-migration consult on 2026-05-19 confirmed Shape A over Shape C).
+**Status:** Sessions A + B complete 2026-05-19 (Sessions 29 + 30) — schema + admin write surface + public render desktop. Session C (mobile + docs + Playwright + @security audit 18) remains. Supersedes the parked `docs/content-model-expansion.md` (which proposed a heavier Option C schema with new tables + JSONB — T42 ships a lighter "6 nullable columns, zero new tables" variant after Session 28 brainstorm closed scope; @cto pre-migration consult on 2026-05-19 confirmed Shape A over Shape C).
 
 **Decisions locked in brainstorm (Session 28):**
 - Progress: integer percent (0–100), ring visual with auto "full circle + subtle glow" done state at 100. No lifecycle vocabulary.
@@ -411,20 +411,20 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 - [x] `ProjectForm.tsx` stays ≤200 lines (CQ-02) — split into `ProjectFormLinks.tsx` + `ProjectFormDisplay.tsx` + `ProjectImageField.tsx`. Final: 200 lines exactly.
 - [ ] Save round-trip works for all new fields (verified via Playwright admin smoke test). — **Session C.**
 
-*Public render — desktop:*
-- [ ] Home page renders DB-driven projects (not hardcoded `featured` array) — verify by adding a test project via admin and seeing it on home.
-- [ ] Projects page renders real screenshot (from `image_id`) instead of `DemoLoop` animation.
-- [ ] `ProgressRing` renders correctly at 0, 25, 50, 75, 100. Done glow visible only at 100.
-- [ ] 3 buttons (github / live / post) render only when their URL column is non-null. Hidden otherwise.
-- [ ] Bundle's `StatusPill` no longer renders on project cards.
+*Public render — desktop:* — **Session B complete (Session 30, 2026-05-19)**
+- [x] Home page renders DB-driven projects (not hardcoded `featured` array) — verify by adding a test project via admin and seeing it on home. (Wiring done; admin-add Playwright verification = Session C.)
+- [x] Projects page renders real screenshot (from `image_id`) instead of `DemoLoop` animation.
+- [x] `ProgressRing` renders correctly at 0, 25, 50, 75, 100. Done glow visible only at 100. (12 tests in `tests/ProgressRing.test.tsx`.)
+- [x] 3 buttons (github / live / post) render only when their URL column is non-null. Hidden otherwise. (TypoIcon bundle labels `{ } code` / `↗ site` / `¶ notes` kept per Session 30 builder decision; CONSTRAINT-05 honored without Override 2.)
+- [x] Bundle's `StatusPill` no longer renders on project cards.
 
 *Public render — mobile:*
 - [ ] All desktop changes mirrored on mobile components.
 - [ ] Mobile-specific layout regression-checked via Playwright.
 
-*Before/after slider:*
-- [ ] When `image_after_id` is non-null, `BeforeAfterMedia` renders the slider with both images.
-- [ ] When `image_after_id` is null, falls back to static image via existing `StillMedia` path.
+*Before/after slider:* — **Session B complete (Session 30, 2026-05-19)**
+- [x] When `image_after_id` is non-null, `BeforeAfterMedia` renders the slider with both images. (`beforeUrl` + `afterUrl` props added; bundle CSS fallback scenes retained for design-source consistency, pushed file to 226 lines — CQ-02 MINOR carry-forward.)
+- [x] When `image_after_id` is null, falls back to static image. (Implementation deviation: bundle's `StillMedia` had no image input slot, so the still path uses a direct `<img>` matching `renderRealImage` styling in BeforeAfterMedia. Per @code-review: falls under Override 1, no new deviation. `StillMedia` file retained, not in data path on desktop.)
 
 *Docs:*
 - [ ] `docs/design-decisions.md` Override 1 entry written with rationale.
