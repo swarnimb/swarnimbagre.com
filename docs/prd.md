@@ -37,8 +37,29 @@ Server-side UA detection via Next.js middleware. Each page has a single canonica
 
 **G/W/T:**
 - Given a visitor lands on `/projects`, when the page renders, then all `projects` rows with `status='published'` are listed in reverse-chronological order.
-- Given a project has an associated image, when the project card renders, then the image loads from Supabase Storage with its required `alt_text`.
+- Given a project has `project_media` rows, when its card renders, then the card's image slot is a swipeable carousel of those rows. Carousel chrome and behavior are canonical in 2.3a (same component, same data — no separate "card primary image" concept).
+- Given a project has zero `project_media` rows, when its card renders, then no image area is shown.
 - Given a project is `status='draft'`, when any anonymous request hits the page, then that project is invisible in the response (RLS-enforced, not app-filtered).
+
+### 2.3a Page: Project detail (`/projects/[slug]`)
+
+The showcase surface for a single project. Renders the project's card content (title, description, progress ring, links) above a multi-image carousel. The carousel on this page is the same component (same chrome, same data) as the carousel embedded in the project card on `/projects` — only the container size differs.
+
+**Project media model:**
+- A project has 0–20 ordered `project_media` rows.
+- Each row is either a **single image** (`image_id` set, `image_after_id` NULL) or a **before/after pair** (both set).
+- Pair rows render as a `BeforeAfterMedia` drag-slider slide.
+- Each row optionally has a plain-text caption (≤140 chars soft, 280 hard).
+
+**G/W/T (canonical for the carousel surface — referenced by 2.3, 2.3a, 3.5):**
+- Given a project has multiple media rows, when the carousel renders, then dots below + left/right arrows + horizontal swipe + keyboard ←/→ are all functional. No auto-advance. No loop — boundaries stop at first/last slide.
+- Given a project has exactly one media row, when the carousel renders, then no nav chrome is shown (no dots, no arrows, no swipe affordance) — the single slide renders as a static image or slider.
+- Given a project has zero media rows, when the page renders, then no carousel section appears.
+- Given a media row has a caption, when its slide is active, then the caption renders below the image in muted meta type.
+- Given a screen reader is active, when a slide becomes active, then the live region announces "Slide N of M, [alt text]".
+- Given `prefers-reduced-motion: reduce`, when slides change, then no transition animation runs.
+- Given a pair row's slide is active, when the visitor drags the inner before/after divider, then the divider responds to drag and the surrounding carousel swipe does not advance (drag-handle takes priority within its hit area).
+- Given the slug points to a `status='draft'` project, when an anonymous request hits `/projects/[slug]`, then the response is 404 (RLS returns no row).
 
 ### 2.4 Page: Writing (`/writing`)
 
@@ -81,15 +102,15 @@ Single user, magic link auth. Lean CRUD only. No analytics, no scheduling, no da
 
 List, create, edit, delete. All four operations server-side via Server Actions or Route Handlers — no client-side writes.
 
-**Fields:** `title` (required, ≤200 chars), `description` (required, textarea), `status` (`draft` | `published`), optional image (see 3.5).
+**Fields:** `title` (required, ≤200 chars), `description` (required, textarea), `status` (`draft` | `published`), optional project media (see 3.5).
 **Slug:** auto-generated from `title` via slugify. Editable while `status='draft'`. Locked (DB-level) once `status='published'`.
-**Delete:** hard-delete with confirm modal. No soft-delete. No undo path.
+**Delete:** hard-delete with confirm modal. Cascades to `project_media` rows; orphaned `images` rows are cleaned up via 3.6. No soft-delete. No undo path.
 
 ### 3.3 Posts CRUD (`/admin/posts`)
 
-Same shape as Projects with one extra field.
+CRUD shape analogous to Projects, with two differences: posts carry a Markdown `content` body, and posts use the single-image upload (see 3.5a) — they do not receive the multi-image carousel.
 
-**Fields:** `title`, `content` (raw Markdown, stored verbatim in DB), `status`, optional image.
+**Fields:** `title`, `content` (raw Markdown, stored verbatim in DB), `status`, optional image (see 3.5a).
 **Render path:** stored Markdown is rendered client-side at read time via `marked` + DOMPurify whitelist. The DB never stores HTML.
 **Slug:** auto, lock-on-publish, same as Projects.
 
@@ -102,14 +123,33 @@ Read-only list with one exception: a manual insert form for backfills.
 - Given the admin needs to correct a row, when they delete the wrong row and re-insert via the manual form, then the stats list reflects the correction. (No audit trail in Phase 1.)
 - No edit. Stats are append-only at the data model.
 
-### 3.5 Image component (Projects + Posts)
+### 3.5 Project media component (`/admin/projects/[id]`)
 
-A shared component used inside both Projects and Posts forms.
+Replaces the single-image upload for projects. Each project has 0–20 ordered `project_media` rows. Each row is either a single image or a before/after pair. The rows surface as the carousel on the public site (list cards and detail page — see 2.3a for canonical behavior).
+
+**Row types:**
+- **Single image:** `image_id` set, `image_after_id` NULL → renders as a static image slide.
+- **Pair:** both `image_id` and `image_after_id` set → renders as a `BeforeAfterMedia` drag-slider slide.
 
 **G/W/T:**
-- Given an admin uploads an image, when the file is selected, then the size is validated against the 2 MB cap; oversize is rejected with an inline error.
-- Given an admin tries to save a project/post with an image attached and an empty `alt_text`, when they submit, then the form rejects with a required-field error.
-- Given an admin uploads successfully, when the upload completes, then the file lives at `images/{projects|posts}/{parent_id}/{uuid}_{filename}` and an `images` row is inserted with `bucket_path`, `alt_text`, `parent_id`, `parent_type`.
+- Given an admin clicks "+ image", when a file is selected, then the size is validated against the 5 MB cap; oversize is rejected with an inline error.
+- Given an admin clicks "+ pair", when both files are selected (before + after), then both are validated independently against the 5 MB cap.
+- Given an admin tries to save a row with an empty `alt_text` on any image, when they submit, then the form rejects with a required-field error (alt-text required on every image, single or paired).
+- Given an admin enters a caption longer than 140 characters, when the form re-renders, then a soft warning shows but save is not blocked. Hard validation at 280 chars (server-side).
+- Given an admin has 11+ rows on a project, when the form re-renders, then a "consider trimming" warning shows. Hard cap is 20 rows (DB CHECK constraint).
+- Given an admin drags a row to reorder, when they release, then the visual order updates but persistence happens on form Save (not auto-save).
+- Given an admin deletes a row, when they confirm in the modal, then the `project_media` row is deleted. Underlying `images` rows are orphaned and cleaned up by 3.6.
+- Given an admin uploads successfully, when the upload completes, then each file lives at `images/projects/{project_id}/{uuid}_{filename}` and an `images` row is inserted with `bucket_path`, `alt_text`, `parent_id`, `parent_type='project'`. A `project_media` row is inserted referencing the image row(s).
+- No aspect-ratio lock at upload. No byte-quota enforcement (cap is row count, not bytes).
+
+### 3.5a Post image component (`/admin/posts/[id]`)
+
+Single image per post. No change from the original Phase 1 behavior — posts do not receive the multi-image carousel.
+
+**G/W/T:**
+- Given an admin uploads an image, when the file is selected, then the size is validated against the 5 MB cap; oversize is rejected with an inline error.
+- Given an admin tries to save a post with an image attached and an empty `alt_text`, when they submit, then the form rejects with a required-field error.
+- Given an admin uploads successfully, when the upload completes, then the file lives at `images/posts/{post_id}/{uuid}_{filename}` and an `images` row is inserted with `bucket_path`, `alt_text`, `parent_id`, `parent_type='post'`.
 - No aspect-ratio lock. No quota enforcement.
 
 ### 3.6 Orphan cleanup
@@ -141,7 +181,8 @@ Full schema with column types, constraints, and indexes is in [`architecture.md`
 
 | Table | Purpose | Notes |
 |---|---|---|
-| `projects` | Public project entries | `status` enum, slug locked after publish |
+| `projects` | Public project entries | `status` enum, slug locked after publish. `image_id` + `image_after_id` columns deprecated as primary read path; new uploads route through `project_media`. Reads fall back to legacy columns when no `project_media` rows exist. |
+| `project_media` | Project carousel rows | Ordered media per project. Each row references one image (single-image row) or two images (before/after pair row). Optional plain-text caption. Hard cap 20 rows per project (DB CHECK). Added by T43. |
 | `posts` | Writing entries | `content` is raw Markdown; rendered client-side |
 | `stats` | Hobby data points | Append-only; OpenClaw writes via Edge Function |
 | `images` | Image metadata + Storage path | `alt_text` NOT NULL; FK to parent project or post |
@@ -183,7 +224,7 @@ Dry, self-deprecating, anti-LinkedIn. Applies to public site copy AND admin labe
 
 ## 7. Out of Scope
 
-Verbatim from `docs/kickoff-brief.md`:
+### 7.1 From kickoff brief (verbatim from `docs/kickoff-brief.md`)
 
 - Multi-user accounts, comments, reactions, social login.
 - Newsletter signup, gated content, payments.
@@ -191,6 +232,15 @@ Verbatim from `docs/kickoff-brief.md`:
 - Headless CMS (Sanity / Payload / etc.) — evaluated and rejected.
 - Auto-bundled `.bundled.html` files from the design bundle (using the source multi-file version for editability).
 - Feed page (was in early design iteration; dropped — bundle ships 4 pages).
+
+### 7.2 Added at T43 (project media)
+
+- Video clips and animated GIFs as distinct content types. (A GIF uploaded as an image renders as a static image; no animated-image handling, no `<video>` element.)
+- Lightbox / full-screen zoom on image click.
+- Auto-advance / auto-play on the carousel.
+- Image editing in admin (cropping, filtering, rotation, etc.).
+- Caption markdown / hyperlinks (captions are plain text only).
+- Multi-image cards in the home page's `ProjectRow` (the home scroller uses `thumbKind` SVG icons, not photos — unaffected by this feature).
 
 ---
 
@@ -201,7 +251,7 @@ The kickoff brief left a small set of questions open. All resolved during Phase 
 | Question | Resolution |
 |---|---|
 | Auth flow | Magic link, Supabase Auth defaults (1hr JWT, 30-day refresh). |
-| Image policy | Optional. `alt_text` required when an image is present. 2 MB cap. No aspect lock. |
+| Image policy | Re-resolved at T43: projects use multi-image carousel via `project_media` (soft cap 10 / hard cap 20 rows). Posts keep single image. `alt_text` required per image. 5 MB cap per file. No aspect lock. |
 | Slug behavior | Auto-from-title. Editable while draft. Locked at DB level on publish. |
 | Session expiry | Supabase Auth defaults. No custom timeout. |
 | Storage cleanup | Best-effort. Admin button on `/admin/images`. 7-day age threshold. No quota enforcement. |
