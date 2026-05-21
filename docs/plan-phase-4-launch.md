@@ -1,7 +1,7 @@
 # Plan — Phase 4: Polish + Launch
 
 **Date:** 2026-05-06
-**Status:** Active — T32–T39 done (T38 doc audit complete; 9/10 criteria met, only the DS-05 fresh-clone manual run outstanding — tracked separately. T39 closed 2026-05-19, Session 27: deploy live on apex canonical `swarnimbagre.com`, admin verified end-to-end including CRUD round-trip); **T42 Session A done 2026-05-19, Session 29** (schema + admin write surface — migration 009 applied to prod, zod + Server Actions + ProjectForm wired, 24 new tests); **T42 Session B done 2026-05-19, Session 30** (public render desktop — ProgressRing + ProjectRow/Card/Media + Home + Projects, 259/259 vitest, @code-review APPROVED WITH MINOR); **T42 Session C done 2026-05-19, Session 31** (mobile mirrors + Override 1 docs + Playwright admin smoke + @security audit 18 CLEAR, 304/304 vitest, @code-review APPROVED WITH MINOR; 3 mid-session production bug fixes via Targeted Fix Mode); T40 content-addition criteria UNLOCKED but other T40 criteria still open (24h log review, voice-check, launch-checklist post-launch section, DS-03 launch entry); T41 trigger-gated
+**Status:** Active — T32–T39 done (T38 doc audit complete; 9/10 criteria met, only the DS-05 fresh-clone manual run outstanding — tracked separately. T39 closed 2026-05-19, Session 27: deploy live on apex canonical `swarnimbagre.com`, admin verified end-to-end including CRUD round-trip); **T42 Session A done 2026-05-19, Session 29** (schema + admin write surface — migration 009 applied to prod, zod + Server Actions + ProjectForm wired, 24 new tests); **T42 Session B done 2026-05-19, Session 30** (public render desktop — ProgressRing + ProjectRow/Card/Media + Home + Projects, 259/259 vitest, @code-review APPROVED WITH MINOR); **T42 Session C done 2026-05-19, Session 31** (mobile mirrors + Override 1 docs + Playwright admin smoke + @security audit 18 CLEAR, 304/304 vitest, @code-review APPROVED WITH MINOR; 3 mid-session production bug fixes via Targeted Fix Mode); **T43.A done 2026-05-20** (@designer consult — Override 2 drafted in design-decisions.md, all 6 criteria checked); **T43.B done 2026-05-20** (embla-carousel-react ^8 installed clean; baseline ~11.7 KB gzip across 3 packages — embla-carousel, embla-carousel-react, embla-carousel-reactive-utils — measured against published ESM; budget raised 10→15 KB gzip per @cto S34 consult; architecture.md §1.2 + design-decisions.md Override 2 + plan v8 naming reconciled; npm run build clean, 13 routes); T40 content-addition criteria UNLOCKED but other T40 criteria still open (24h log review, voice-check, launch-checklist post-launch section, DS-03 launch entry); T41 trigger-gated
 **Tasks:** T32–T42 (11 tasks; T41 is trigger-gated and does not block Phase 4 exit — same pattern as Phase 3's T29/T31 operator-gated deferrals; T42 added 2026-05-19 as a pre-T40 schema + render expansion to make the public project card meaningfully render real DB content)
 **Predecessor:** [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md)
 **Successor:** none — final phase
@@ -526,7 +526,7 @@ If a session ends mid-task, the schema migration (Session A) must complete befor
 
 **Risks:**
 
-1. First JS library on the public site (Override 2). Embla becomes the precedent for "when is a public-site JS dep acceptable." Override 2 docs need a JS-lib-on-public-site policy boundary (tree-shakeable, no global styles, runtime size budget under ~10 KB gzipped — embla core+react is ~5 KB). Defer Override 2 docs to T43-close mirroring Override 1 → T42-close pattern.
+1. First JS library on the public site (Override 2). Embla becomes the precedent for "when is a public-site JS dep acceptable." Override 2 docs need a JS-lib-on-public-site policy boundary (tree-shakeable, no global styles, runtime size budget ≤15 KB gzipped per @cto S34 — embla core + `embla-carousel-react` wrapper + `embla-carousel-reactive-utils` transitive measured at ~11.7 KB gzip combined against published ESM; the core package was renamed from `embla-carousel-core` to `embla-carousel` in v8). Defer Override 2 docs to T43-close mirroring Override 1 → T42-close pattern.
 
 2. CQ-02 carry-forward refactor scope creep. `ImageUpload.tsx` (227) and `BeforeAfterMedia.tsx` (226) are flagged in S31 handoff. They are touched naturally by T43. Recommend: include the splits as discrete acceptance criteria inside T43.F / T43.G rather than letting them bloat. Risk if not split discretely: T43 commits become large and reviewable-only-in-aggregate.
 
@@ -587,12 +587,12 @@ If a session ends mid-task, the schema migration (Session A) must complete befor
 **Functions to implement:** None (dep-add task).
 
 **Acceptance criteria:**
-- [ ] `npm install embla-carousel-react@^8` runs clean. No peer-dependency warnings against React 19 / Next 15.
-- [ ] `npm run build` succeeds with the dep installed (sanity check: addition itself doesn't break the build).
-- [ ] Bundle size delta documented in the T43.B commit message: `embla-carousel-core` + `embla-carousel-react` baseline (~5 KB gzip expected). If >10 KB gzipped, stop and revisit Override 2 budget with `@cto`.
-- [ ] `architecture.md` §1.2 lists embla under "Public site" — explicit acknowledgment that the public site now carries one JS lib (was: "raw React + custom components, no library").
-- [ ] No `eslint`-related blocker (no ESLint config in repo — non-blocking).
-- [ ] Voice check: any new operator-facing label introduced is dry, no SaaS phrasing (CONSTRAINT-13). Dep-add itself has no labels.
+- [x] `npm install embla-carousel-react@^8` runs clean. No peer-dependency warnings against React 19 / Next 15.
+- [x] `npm run build` succeeds with the dep installed (sanity check: addition itself doesn't break the build).
+- [x] Bundle size delta documented in commit message: `embla-carousel` (core) + `embla-carousel-react` + `embla-carousel-reactive-utils` (transitive) baseline. Currently measured at ~11.7 KB gzip combined against published ESM. **Budget ceiling: 15 KB gzip** (raised from 10 KB per @cto consult S34 — naive 5 KB estimate did not match real embla footprint). If a future install or addon plugin pushes combined embla footprint over 15 KB gzip, stop and revisit Override 2 budget with `@cto`. Real production-bundle delta on the public-route chunk to be re-measured at T43.G close.
+- [x] `architecture.md` §1.2 lists embla under "Public site" — explicit acknowledgment that the public site now carries one JS lib (was: "raw React + custom components, no library").
+- [x] No `eslint`-related blocker (no ESLint config in repo — non-blocking).
+- [x] Voice check: any new operator-facing label introduced is dry, no SaaS phrasing (CONSTRAINT-13). Dep-add itself has no labels.
 
 **Tests required:** None (dep-add task).
 
@@ -813,6 +813,7 @@ interface ProjectMediaMutationState {
 - [ ] `ProjectMediaCarousel.tsx` ≤200 lines (CQ-02).
 - [ ] `BeforeAfterMedia.tsx` post-refactor ≤200 lines (closes S31 CQ-02 MAJOR carry-forward).
 - [ ] Bundle delta verified: T43.B + T43.G commits combined add ≤10 KB gzip to the public-route entry chunk.
+- [ ] Run `npm run build`, diff the route chunk size for `/projects/[slug]` (and `/projects` list page if also affected) against pre-T43 baseline. Confirm production-bundle delta ≤15 KB gzip on the route chunk that loads `ProjectMediaCarousel`. If >15 KB, escalate to `@cto` before T43.G close.
 
 **Tests required:**
 - `tests/ProjectMediaCarousel.test.tsx` describe →
@@ -869,7 +870,9 @@ interface ProjectMediaMutationState {
 
 **Files:**
 - `docs/design-decisions.md` — modify (finalize "Override 2: Public site JS library + carousel chrome" section; mirror Override 1 structure: Rationale, What changed, What stayed, Surface boundary)
-- `docs/constraints.md` — modify (add CONSTRAINT-22: "JS libraries on public site permitted only with documented Override and ≤10 KB gzip budget"; amend CONSTRAINT-05 with Override 2 cross-link)
+- `docs/constraints.md` — modify (add CONSTRAINT-22 with the @cto-approved wording below; amend CONSTRAINT-05 with Override 2 cross-link)
+
+> **CONSTRAINT-22 wording (per @cto S34):** "JS libraries on public site permitted only with a documented Override and ≤15 KB gzip total per Override surface (measured against the production route chunk, not published ESM)."
 - `docs/architecture.md` — modify (§1.2 already updated in T43.B with the dep line; now add §4.9 "Carousel surface — Override 2" subsection documenting the public-site JS-lib boundary policy + multi-instance DOM ID requirement; §2.5 new subsection for the `project_media` table mirroring §2.1's level of detail)
 - `docs/founder-brief.md` — modify (add Index row for "Project media carousel + first public-site JS library" decision; dated entry)
 - `docs/content-model-expansion.md` — modify (further superseded note — already marked SUPERSEDED by T42; add a T43-furthered-by line at the top)

@@ -19,7 +19,7 @@ This document cannot change without a corresponding update to [`founder-brief.md
 
 ### 1.2 Frontend libraries
 
-- **Public site:** raw React + custom components from `site/components.jsx` and `site/mobile-components.jsx`. Styling is exclusively CSS variables in `site/colors_and_type.css` plus inline styles. No Tailwind, no component library.
+- **Public site:** raw React + custom components from `site/components.jsx` and `site/mobile-components.jsx`. Styling is exclusively CSS variables in `site/colors_and_type.css` plus inline styles. No Tailwind, no component library. **One runtime JS dependency** (added T43 per Override 2): `embla-carousel-react` ^8, with transitive runtime deps `embla-carousel` (core; renamed from `embla-carousel-core` in v8) and `embla-carousel-reactive-utils` — used only by `ProjectMediaCarousel`. Measured baseline ~11.7 KB gzip combined across the three packages; budget ceiling 15 KB gzip per Override 2.
 - **Admin panel:** shadcn/ui + Tailwind CSS, scoped to `/admin/*` only.
 - **Markdown renderer:** `marked` + DOMPurify (see Section 6).
 - **Component testing:** `@testing-library/react` ^16.1.0 + `@testing-library/jest-dom` ^6.6.3 (required for React 19 / Next 15 compatibility).
