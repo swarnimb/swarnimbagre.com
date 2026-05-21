@@ -465,9 +465,475 @@ If a session ends mid-task, the schema migration (Session A) must complete befor
 
 ---
 
+## T43 — Project media multi-image carousel
+
+**Source:** `docs/prd.md` §2.3 + §2.3a (canonical carousel surface) + §3.5 (admin write surface) + §3.5a (post image carve-out) + §5 (data model) + §7.2 (out of scope).
+
+**Files:**
+
+*Schema:*
+- `supabase/migrations/010_project_media.sql` (create)
+
+*Types + queries:*
+- `lib/types.ts` (modify) — add `ProjectMedia` + `PublicProjectMediaItem` interfaces; deprecation comment on `Project.image_id` / `image_after_id`.
+- `lib/db.ts` (modify) — add public-side `getProjectMediaByProject(projectId)` returning ordered rows; respects `images_public_select` RLS.
+- `lib/admin-queries-project-media.ts` (create) — admin-side read with the same shape; uses authenticated client.
+- `lib/admin-queries.ts` (modify) — re-export new `admin-queries-project-media` symbols (barrel).
+- `lib/admin-queries-projects.ts` (modify) — extend admin-side read to optionally include media count for list view warning indicator.
+- `lib/public-project-media.ts` (create) — public resolver `loadPublicProjectMedia(projectId)` with signed URLs, per-row failure isolation mirroring `lib/public-projects.ts`.
+- `lib/public-projects.ts` (modify) — extend `PublicProject` with `media: PublicProjectMediaItem[]`; backfill `imageUrl` / `imageAfterUrl` from legacy columns when `media.length === 0` (fallback).
+
+*Server Actions + validation:*
+- `lib/admin-project-media-mutations.ts` (create — `'use server'` wrapper module per `architecture.md` §6.6.6 trio, exports `saveProjectMedia` only).
+- `lib/admin-project-media-mutations-internal.ts` (create — throwing helpers, zod parse, slot writes).
+- `lib/admin-project-media-mutations-types.ts` (create — client-safe state envelope + field-name union).
+- `lib/admin-project-media-mutations-schemas.ts` (create — zod schemas).
+- `lib/admin-images-mutations-internal.ts` (modify) — extend `uploadImageInternal` to accept optional `attachToProjectMediaRow` parameter (or document path: still upload independently, then bind via `addProjectMedia`).
+
+*Admin form:*
+- `components/admin/ProjectMediaField.tsx` (create — multi-row controller, replaces the two `ProjectImageField` slots inside `ProjectForm`).
+- `components/admin/ProjectMediaRow.tsx` (create — single row: caption, alt, "single" / "pair" image slots, drag handle, delete).
+- `components/admin/ProjectForm.tsx` (modify) — replace the two `ProjectImageField` blocks with one `ProjectMediaField`; keep image FK fields on `projects` row as legacy/deprecated (do NOT remove yet — backward-compat).
+- `components/admin/ImageUpload.tsx` (modify) — CQ-02 MAJOR refactor opportunity (227 lines). Split into `ImageUpload.tsx` (orchestration ≤200) + `ImageUploadPreview.tsx` + `ImageUploadFileInput.tsx`.
+
+*Public render — components:*
+- `components/public/ProjectMediaCarousel.tsx` (create — `'use client'`, embla wrapper, first JS lib on public site).
+- `components/public/BeforeAfterMedia.tsx` (modify) — CQ-02 MAJOR refactor opportunity (226 lines). Split bundle-fallback CSS scenes from real-image path; carousel uses real-image path only.
+- `components/public/ProjectMedia.tsx` (modify) — accept new `media: PublicProjectMediaItem[]` prop; when present, render `ProjectMediaCarousel`; when empty, fall back to current legacy single-image branching.
+- `components/public/ProjectCard.tsx` (modify) — pass `media` through to `ProjectMedia`; backward-compatible additive prop per CONSTRAINT-05's additive-prop carve-out (when `media` undefined, render legacy).
+- `components/public/mobile/MobileProjectCard.tsx` (modify) — mirror desktop changes.
+
+*Public render — pages:*
+- `app/projects/page.tsx` (modify) — extend list loader to include `media` per project; pass through.
+- `app/projects/[slug]/page.tsx` (modify) — extend detail loader to include `media`; pass through to `ProjectCard` / `MobileProjectCard`.
+
+*Tests:*
+- `tests/ProjectMediaCarousel.test.tsx` (create).
+- `tests/admin-project-media-mutations-schemas.test.ts` (create).
+- `tests/server-actions-manifest.test.ts` (modify) — extend the 12-ID allowlist by 1 (new `saveProjectMedia` Server Action; total 13).
+
+*Docs:*
+- `docs/design-decisions.md` (modify) — add Override 2 entry (drafted at T43.A, finalized at T43.I).
+- `docs/constraints.md` (modify) — add CONSTRAINT-22; amend CONSTRAINT-05 with Override 2 cross-link.
+- `docs/architecture.md` (modify) — §1.2 dep line (T43.B); §2.5 new `project_media` schema subsection + §4.9 Carousel surface boundary subsection (T43.I).
+- `docs/founder-brief.md` (modify) — Index row + dated entry for the project media carousel + first public-site JS library decision.
+- `docs/content-model-expansion.md` (modify) — T43-furthered-by line at top (already SUPERSEDED by T42).
+- `manifest.md` (modify) — update Phase 4 status row at T43.I.
+
+**New dependency:** `embla-carousel-react` ^8 — NOT currently in `package.json`. Confirmed via dependency check. T43.B installs it.
+
+**Migration number:** 010 (last applied: 009).
+
+**Risks:**
+
+1. First JS library on the public site (Override 2). Embla becomes the precedent for "when is a public-site JS dep acceptable." Override 2 docs need a JS-lib-on-public-site policy boundary (tree-shakeable, no global styles, runtime size budget under ~10 KB gzipped — embla core+react is ~5 KB). Defer Override 2 docs to T43-close mirroring Override 1 → T42-close pattern.
+
+2. CQ-02 carry-forward refactor scope creep. `ImageUpload.tsx` (227) and `BeforeAfterMedia.tsx` (226) are flagged in S31 handoff. They are touched naturally by T43. Recommend: include the splits as discrete acceptance criteria inside T43.F / T43.G rather than letting them bloat. Risk if not split discretely: T43 commits become large and reviewable-only-in-aggregate.
+
+3. Multi-instance carousel DOM ID collisions on `/projects` list view (carried-from-S31 framework-issues note). N project cards = N embla instances on one page. Each needs `React.useId()`-scoped `aria-controls` / `aria-labelledby` / dot button IDs. Concretely flagged in `tests/ProjectMediaCarousel.test.tsx` acceptance criteria.
+
+4. Migration 010 + `projects.image_id` deprecation. New uploads route through `project_media`; reads fall back to legacy `image_id` / `image_after_id` when no `project_media` rows exist. The legacy columns stay in the schema (don't drop in 010) — admin form keeps them as the "single primary image" path until all existing projects are migrated. Backward-compatibility window is intentional; no end-date set.
+
+5. Storage bucket. T43 reuses the existing `images` bucket per `architecture.md` §2.4. No new bucket → no new `storage.objects` policy needed → CONSTRAINT-20 is N/A for this migration. The new `project_media` table itself gets default-deny RLS + admin-all + public-select-when-parent-published.
+
+6. DB CHECK constraint for ≤20 rows per project_id. PostgreSQL CHECK constraints are per-row, not per-FK-count. Resolution: enforce via a `BEFORE INSERT` trigger that counts rows on that `project_id` and raises if `>= 20`. App-level zod also enforces 20 as a defense layer.
+
+7. In-flight `@designer` decisions (4 from S32 handoff). Aspect-ratio (PRD default: 16:9 letterbox `object-fit: contain`), caption visual treatment, compact card chrome (dot/arrow sizing), mobile touch-conflict (embla direction-lock). These are CONSULT-blocking work; if `@designer` overrides the PRD default aspect-ratio, slot-render code rewires. Mitigation: T43.A `@designer` consult runs BEFORE T43.F (admin) and BEFORE T43.G (carousel).
+
+8. Client-component boundary. `ProjectMediaCarousel` MUST be `'use client'` (embla requires it). `ProjectCard` is already `'use client'`. The chain is uniform.
+
+9. Server Action atomicity. PRD §3.5 G/W/T says reorder persists on form Save (not auto-save). Decision: one atomic Server Action `saveProjectMedia(projectId, mediaRows[])` rather than per-row CRUD actions. Inner helper does delete-then-insert-all inside a single Postgres transaction. The wire-level allowlist grows by exactly 1 action ID.
+
+10. Detail-page boundary with posts. PRD §3.5a clarifies posts keep single-image upload. `app/writing/[slug]/page.tsx` and `components/admin/PostForm.tsx` are untouched by T43.
+
+**Architectural questions:** None blocking.
+
+**Critical assumptions to flag:**
+- `embla-carousel-react` v8+ is stable, tree-shakeable, MIT-licensed, with React 19 / Next 15 support. Well-established library; not formalized as a critical assumption. Bundle-size check is part of T43.B acceptance.
+
+---
+
+### Task T43.A: @designer consult — Override 2 surface, carousel UX decisions
+
+**Files:**
+- `docs/design-decisions.md` — modify (add "Override 2: Public site JS library + carousel chrome" draft section, pre-execution; final Override 2 entry lands at T43.I)
+- No code files.
+
+**Functions to implement:** Consultation task — no code.
+
+**Acceptance criteria:**
+- [x] Aspect-ratio policy resolved. Default proposal: 16:9 letterbox with `object-fit: contain` over `var(--surface)` background. `@designer` either confirms or specifies an alternative.
+- [x] Caption visual treatment specified: type size token (PRD says "muted meta type" — pick from `colors_and_type.css`), color token, position (below slide vs overlaid), padding values in px.
+- [x] Compact card-carousel chrome sized: dot size, dot spacing, arrow size, arrow position on `/projects` list cards (smaller container) vs detail-page card (larger container). Spec gives px values.
+- [x] Mobile touch-conflict resolution confirmed: embla `dragFree: false` + `direction: 'horizontal'` + `axis: 'x'`; vertical page scroll wins below ~10° touch angle (embla default). Pair-row drag-handle priority spec'd.
+- [x] First-class Override 2 boundary defined in draft: which files fall under Override 2 (list mirrors Override 1's surface boundary block). Anchors are `ProjectMediaCarousel.tsx` + the embla dependency itself.
+- [x] CONSTRAINT-13 voice check passes for any new chrome labels (arrows: `←` `→` typographic glyphs only, no "Previous" / "Next" prose; dots: `aria-label="Slide 1"` etc., not "Go to slide 1" — short ARIA strings).
+
+**Tests required:** Consultation task — no tests.
+
+**Depends on:** None. First task in T43.
+
+**Specialist:** `@designer`
+
+---
+
+### Task T43.B: Add `embla-carousel-react` dependency + bundle-size baseline
+
+**Files:**
+- `package.json` — modify (add `embla-carousel-react` ^8 to `dependencies`)
+- `package-lock.json` — modify (install)
+- `docs/architecture.md` §1.2 — modify (add embla to "Frontend libraries — Public site" subsection; one line)
+
+**Functions to implement:** None (dep-add task).
+
+**Acceptance criteria:**
+- [ ] `npm install embla-carousel-react@^8` runs clean. No peer-dependency warnings against React 19 / Next 15.
+- [ ] `npm run build` succeeds with the dep installed (sanity check: addition itself doesn't break the build).
+- [ ] Bundle size delta documented in the T43.B commit message: `embla-carousel-core` + `embla-carousel-react` baseline (~5 KB gzip expected). If >10 KB gzipped, stop and revisit Override 2 budget with `@cto`.
+- [ ] `architecture.md` §1.2 lists embla under "Public site" — explicit acknowledgment that the public site now carries one JS lib (was: "raw React + custom components, no library").
+- [ ] No `eslint`-related blocker (no ESLint config in repo — non-blocking).
+- [ ] Voice check: any new operator-facing label introduced is dry, no SaaS phrasing (CONSTRAINT-13). Dep-add itself has no labels.
+
+**Tests required:** None (dep-add task).
+
+**Depends on:** T43.A
+
+**Specialist:** none (dep-add; `@cto` sanity-check only if bundle exceeds budget)
+
+---
+
+### Task T43.C: Migration 010 — `project_media` table + RLS + indexes + row-cap trigger
+
+**Files:**
+- `supabase/migrations/010_project_media.sql` — create
+
+**Functions to implement:** SQL only.
+
+**SQL surface (the migration creates):**
+- `create table public.project_media (id uuid primary key default gen_random_uuid(), project_id uuid not null references projects(id) on delete cascade, image_id uuid not null references images(id) on delete restrict, image_after_id uuid null references images(id) on delete restrict, caption text null check (caption is null or char_length(caption) <= 280), order_index integer not null check (order_index >= 0), created_at timestamptz not null default now())`
+- Compound index: `(project_id, order_index)` for ordered fetches.
+- `alter table public.project_media enable row level security;`
+- Policy `project_media_public_select` — role `anon`, FOR SELECT, USING `(exists (select 1 from projects where projects.id = project_media.project_id and projects.status = 'published'))` (mirrors `images_public_select` join shape).
+- Policy `project_media_admin_all` — role `authenticated`, FOR ALL, USING `true`, WITH CHECK `true`.
+- `BEFORE INSERT` trigger `project_media_rowcap_trigger`: counts existing rows for `NEW.project_id`; if `>= 20`, raise exception `project_media row cap exceeded`.
+
+**Acceptance criteria:**
+- [ ] Migration applies cleanly to the dev/prod Supabase project via `mcp__supabase__apply_migration`. Idempotent guards (`if not exists`) on table + policies + trigger.
+- [ ] All FKs use sensible delete behavior: `project_id` → cascade (deleting a project deletes its media rows); `image_id` / `image_after_id` → restrict (deleting an image with a `project_media` reference is blocked — admin must remove the row first, mirroring CONSTRAINT-07's parent-FK discipline).
+- [ ] RLS verified: anon SELECT of a `project_media` row whose parent project is `status='draft'` returns 0 rows. Anon SELECT for `status='published'` parent returns rows. Authenticated CRUD passes (SEC-04, CONSTRAINT-08).
+- [ ] Row-cap trigger verified: insert 20 rows for one project_id → succeeds. 21st insert → raises. Bulk insert of 21 in a single statement → raises and rolls back the entire statement.
+- [ ] No new Storage bucket / no new `storage.objects` policy needed (reuses `images` bucket). CONSTRAINT-20 N/A for this migration; noted in migration comment header.
+- [ ] Compound index `(project_id, order_index)` confirmed via `\d project_media` or `pg_indexes`.
+- [ ] Existing `projects.image_id` / `image_after_id` columns left in place (backward-compat). Migration header comment documents the deprecation-in-progress.
+
+**Tests required:**
+- Manual: apply to dev DB, run inserts to confirm RLS + trigger behavior. Logged in `docs/session-log.md`.
+- No Vitest tests for migrations themselves (matches project precedent — migration 009 had none).
+
+**Depends on:** T43.A (caption hard-cap 280 — PRD-default if no override).
+
+**Specialist:** `@supabase` (schema author), `@cto` (review before apply — mirroring T42 pre-migration consult)
+
+---
+
+### Task T43.D: TypeScript types + public/admin queries + signed-URL resolver
+
+**Files:**
+- `lib/types.ts` — modify (add `ProjectMedia` interface, `PublicProjectMediaItem` interface; deprecation comment on `Project.image_id` / `image_after_id`)
+- `lib/db.ts` — modify (add `getProjectMediaByProject(projectId: string, client?: SupabaseClient): Promise<ProjectMedia[]>`)
+- `lib/admin-queries-project-media.ts` — create (admin-side read with the same shape; uses authenticated client)
+- `lib/admin-queries.ts` — modify (re-export `getProjectMediaByProjectAdmin` from the new module — barrel pattern per §6.6.8)
+- `lib/public-project-media.ts` — create (`loadPublicProjectMedia(projectId): Promise<PublicProjectMediaItem[]>` — fetches rows + resolves signed URLs per item; per-row failure isolation mirroring `lib/public-projects.ts::resolveImageUrl`)
+- `lib/public-projects.ts` — modify (extend `PublicProject` with `media: PublicProjectMediaItem[]`; populate via `loadPublicProjectMedia` per project; preserve legacy `imageUrl` / `imageAfterUrl` for the empty-media fallback path)
+
+**Functions to implement:**
+- `getProjectMediaByProject(projectId: string, client?: SupabaseClient): Promise<ProjectMedia[]>` — `lib/db.ts`. Returns ordered by `order_index ASC`. Throws `ServiceError` on DB error. Mirrors `getPublishedProjects` shape.
+- `getProjectMediaByProjectAdmin(projectId: string, client?: SupabaseClient): Promise<ProjectMedia[]>` — `lib/admin-queries-project-media.ts`. Same shape; uses admin client. Uses shared `logQueryError` per §6.6.8.
+- `loadPublicProjectMedia(projectId: string): Promise<PublicProjectMediaItem[]>` — `lib/public-project-media.ts`. Resolves signed URLs for `image_id` + `image_after_id` per row (TTL 3600s, CONSTRAINT-15). Returns `[]` (not throw) when project has zero rows.
+
+**`ProjectMedia` interface (snake_case to mirror DB row):**
+```
+interface ProjectMedia {
+  id: string;
+  project_id: string;
+  image_id: string;
+  image_after_id: string | null;
+  caption: string | null;
+  order_index: number;
+  created_at: string;
+}
+```
+
+**`PublicProjectMediaItem` interface (render-ready):**
+```
+interface PublicProjectMediaItem {
+  id: string;
+  imageUrl: string | null;
+  imageAlt: string;
+  imageAfterUrl: string | null;
+  imageAfterAlt: string | null;
+  caption: string | null;
+  orderIndex: number;
+}
+```
+
+**Acceptance criteria:**
+- [ ] All new exports have JSDoc (DS-01).
+- [ ] `getProjectMediaByProject` is wrapped via `safeLoad` at call sites (page-level Server Components only — CONSTRAINT-14). The function itself throws `ServiceError`.
+- [ ] `loadPublicProjectMedia` does NOT use `safeLoad` internally (CONSTRAINT-14 carve-out — `safeLoad` is boundary-only). Per-item URL failures are caught + logged + nulled (mirror existing `resolveImageUrl` pattern in `lib/public-projects.ts`).
+- [ ] No raw SQL string concatenation (SEC-03 — use Supabase query builder).
+- [ ] `lib/types.ts` deprecation comments on `Project.image_id` / `image_after_id` reference T43 + the migration plan (backward-compat window open-ended).
+- [ ] File sizes: `lib/db.ts` stays ≤300; `lib/admin-queries-project-media.ts` ≤200; `lib/public-project-media.ts` ≤200 (CQ-02).
+- [ ] Function sizes ≤50 lines each (CQ-01).
+
+**Tests required:**
+- `tests/db.test.ts` describe `getProjectMediaByProject` → happy path (returns ordered media for a project with rows) + error case (Supabase error throws `ServiceError`) (TS-01).
+- `tests/public-project-media.test.ts` describe `loadPublicProjectMedia` → happy path (rows resolve to signed URLs in order) + per-item resolution failure (one bad image_id nulls only that item's URL, other items unaffected) (TS-01).
+- `tests/admin-queries-project-media.test.ts` describe `getProjectMediaByProjectAdmin` → happy path + DB error (logged via `logQueryError`, returns empty/typed result per §6.6.8) (TS-01).
+
+**Depends on:** T43.C
+
+**Specialist:** `@supabase` (query shape sanity-check)
+
+---
+
+### Task T43.E: Server Action — `saveProjectMedia` (atomic save-all) + zod schemas
+
+**Files:**
+- `lib/admin-project-media-mutations.ts` — create (`'use server'`, exports `saveProjectMedia` only — 1 new action ID)
+- `lib/admin-project-media-mutations-internal.ts` — create (throwing helpers, transaction wrapper)
+- `lib/admin-project-media-mutations-types.ts` — create (`ProjectMediaMutationState`, `ProjectMediaFieldName` union, initial state)
+- `lib/admin-project-media-mutations-schemas.ts` — create (zod schemas: per-row + payload-level row count ≤20)
+- `tests/server-actions-manifest.test.ts` — modify (add `saveProjectMedia` to the allowlist; baseline goes from 12 → 13 IDs)
+
+**Functions to implement:**
+- `saveProjectMedia(prevState: ProjectMediaMutationState, formData: FormData): Promise<ProjectMediaMutationState>` — Server Action. Reads `projectId` + serialized `rows` (JSON array string in a hidden field; client builds it from form state). Wraps `saveProjectMediaInternal` in the four-channel uniformity contract (try/catch, `padToFloor`, ZodError → fieldErrors, other → `formError`).
+- `saveProjectMediaInternal(projectId: string, raw: unknown): Promise<void>` — `lib/admin-project-media-mutations-internal.ts`. Zod-parses raw payload. Runs delete-all-then-insert-all for `projectId` inside a single Supabase RPC or sequential transaction. On any failure, throws — wrapper catches.
+- `parseProjectMediaPayload(raw: unknown): { projectId: string; rows: ProjectMediaInput[] }` — `lib/admin-project-media-mutations-schemas.ts`. Validates: each row has valid UUID `image_id`, optional UUID `image_after_id`, optional caption ≤280 chars, valid integer `order_index`; total `rows.length <= 20`; row `order_index` values are unique 0..N-1 dense.
+
+**`ProjectMediaMutationState` envelope:**
+```
+interface ProjectMediaMutationState {
+  status: 'idle' | 'ok' | 'error';
+  fieldErrors?: Partial<Record<string, string>>;
+  formError?: string;
+}
+```
+
+**Acceptance criteria:**
+- [ ] `lib/admin-project-media-mutations.ts` exports ONLY `saveProjectMedia` — no helpers (per §6.6.6 wrapper-only-exports rule).
+- [ ] `saveProjectMedia` applies the four-channel uniformity contract: try/finally `padToFloor` (Channel 3); try/catch with ZodError → `fieldErrors`, other → generic `GENERIC_FORM_ERROR` (Channels 1/2); no rethrow to wire (Channel 6); no `Set-Cookie` writes (Channel 5).
+- [ ] Internal helper validates UUID format on `projectId`, `image_id`, `image_after_id` (SEC-02).
+- [ ] Atomic delete-then-insert: if the insert phase fails after the delete, the helper must throw a clear error AND restore prior state. Implementation: Supabase RPC function `save_project_media(p_project_id uuid, p_rows jsonb)` in migration 010 (or extracted to a follow-on migration 010a) wraps both in one Postgres transaction. Decision point: if the RPC route adds complexity, sequential-with-rollback-on-error is acceptable as long as the failure case is documented + tested. Builder picks at T43.E start.
+- [ ] Row-count enforcement at zod boundary (`rows.length <= 20`) — defense layer to the DB trigger from T43.C.
+- [ ] CONSTRAINT-10 hard-delete semantics preserved: this Server Action deletes-and-replaces `project_media` rows; orphan `images` rows from removed media are cleaned up by the existing `/admin/images` orphan sweep (T27, no changes here).
+- [ ] `tests/server-actions-manifest.test.ts` allowlist extended to 13 IDs (SEC-09 / §6.6.5).
+- [ ] No real secrets in any committed file (SEC-01, SEC-07).
+- [ ] File sizes: each ≤200 (types/schemas) or ≤300 (internal/wrapper) per CQ-02. Function sizes ≤80 for validation, ≤50 elsewhere (CQ-01).
+- [ ] Voice check on operator-facing labels: "Save", "Saved." — dry, CONSTRAINT-13.
+
+**Tests required:**
+- `tests/admin-project-media-mutations-schemas.test.ts` → happy path (valid payload), error cases (caption >280 char, row count >20, non-UUID image_id, non-dense order_index, missing image_id on a row) (TS-01).
+- `tests/admin-project-media-mutations.test.ts` → describe `saveProjectMedia` → happy path (envelope returns `{status: 'ok'}`), error case (DB throw → `{status: 'error', formError}`), validation error (returns `{status: 'error', fieldErrors}`) (TS-01).
+- Manifest assertion: `tests/server-actions-manifest.test.ts` confirms exactly 13 action IDs post-T43.
+
+**Depends on:** T43.C, T43.D
+
+**Specialist:** `@supabase` (RPC / transaction shape review)
+
+---
+
+### Task T43.F: Admin component — `ProjectMediaField` + `ProjectMediaRow`
+
+**Files:**
+- `components/admin/ProjectMediaField.tsx` — create (orchestrates the rows array; "+ image" / "+ pair" buttons; drag-reorder; hidden `rows` JSON field; over-cap warning)
+- `components/admin/ProjectMediaRow.tsx` — create (single row UI: caption input, alt input(s), 1 or 2 `ImageUpload` slots, drag handle, delete button)
+- `components/admin/ProjectForm.tsx` — modify (replace the two `ProjectImageField` blocks with one `<ProjectMediaField ...>`; keep `id` hidden input + `status` etc unchanged)
+- `components/admin/ImageUpload.tsx` — refactor for CQ-02 (split into `ImageUpload.tsx` ≤200 + `ImageUploadPreview.tsx` + `ImageUploadFileInput.tsx`). In-scope opportunity per S31 handoff CQ-02 MAJOR carry-forward.
+
+**Functions to implement:**
+- `ProjectMediaField({ projectId, initialMedia }: ProjectMediaFieldProps): React.ReactElement` — top-level field component. Owns `rows` state. Renders header buttons + map of `ProjectMediaRow`. Serializes rows to hidden `<input name="rows" type="hidden" value={JSON.stringify(rows)}>`. Renders soft-warning when `rows.length > 10` and hard-block save when `>20`.
+- `ProjectMediaRow({ row, index, onChange, onDelete, onDragStart, onDrop }: ProjectMediaRowProps): React.ReactElement` — single-row UI. For a "single" row: one `ImageUpload` + alt input + caption. For a "pair" row: two `ImageUpload`s + two alt inputs + caption.
+- Drag-reorder helper: HTML5 drag-and-drop API (no new dependency). Each row is `draggable`; `onDrop` recomputes `order_index` densely.
+
+**Acceptance criteria:**
+- [ ] PRD §3.5 G/W/T all pass in admin smoke:
+  - 5 MB cap enforced on every upload (per existing `ImageUpload` precheck).
+  - Required `alt_text` enforced per image (single OR pair, both slots).
+  - Caption soft-warning ≥140 chars, hard-block at 280 (server-side via zod, client-side soft-warn via inline counter).
+  - Soft-warning visible at 11+ rows; hard-block save at 21+ rows.
+  - Drag-reorder updates visual order; persistence on form Save only (no auto-save).
+  - Per-row delete + confirm modal (reuse existing `DeleteConfirmModal`).
+- [ ] Upload of a successful image lives at `images/projects/{project_id}/{uuid}_{filename}` (CONSTRAINT-07).
+- [ ] Saved `project_media` rows insert with `bucket_path`, `alt_text`, `parent_id`, `parent_type='projects'` (CONSTRAINT-07).
+- [ ] `ProjectMediaField.tsx` ≤200 lines (CQ-02). `ProjectMediaRow.tsx` ≤200 lines.
+- [ ] `ImageUpload.tsx` post-refactor ≤200 lines (closes S31 CQ-02 MAJOR carry-forward).
+- [ ] `ProjectForm.tsx` stays ≤200 lines post-modify.
+- [ ] All operator labels CONSTRAINT-13 voice-clean: "+ image" / "+ pair" / "Delete" / "Save" / "Trim to 20 rows" — dry, no emoji, no SaaS.
+- [ ] Multi-instance DOM ID hygiene: each `ImageUpload` inside a row uses `React.useId()` for input element IDs.
+- [ ] Component file shapes follow existing admin conventions: shadcn primitives (Label, Input, Textarea, Select, Button); no public-site CSS variables.
+- [ ] Nested `<form>` discipline preserved (§6.6.7) — `ProjectMediaField` is rendered inside `ProjectForm`'s `<form>` element; `ImageUpload` instances stay `<div>`-wrapped per existing pattern.
+
+**Tests required:**
+- `tests/ProjectMediaField.test.tsx` describe → happy path (renders initial rows in order; add image button creates new row; delete button removes row; over-cap warning renders at 11+) (TS-01).
+- `tests/ProjectMediaRow.test.tsx` describe → happy path (single-row shape renders 1 ImageUpload; pair-row shape renders 2) + alt-required validation (TS-01).
+- `tests/ImageUpload.test.tsx` regression — existing tests must still pass post-refactor (TS-01); add: split components render the same DOM shape (no behavior change).
+- Playwright admin smoke (extend `tests/e2e/admin-smoke.spec.ts`): create project → add a single + a pair row → reorder via drag → save → reload → confirm order persisted.
+
+**Depends on:** T43.A (designer consult), T43.E (Server Action available)
+
+**Specialist:** `@ui-swarnimbagre` (admin shadcn mode)
+
+---
+
+### Task T43.G: Public component — `ProjectMediaCarousel` (embla wrapper)
+
+**Files:**
+- `components/public/ProjectMediaCarousel.tsx` — create (`'use client'`, wraps `embla-carousel-react`)
+- `components/public/BeforeAfterMedia.tsx` — modify / CQ-02 refactor (split bundle-fallback CSS scenes into `BeforeAfterMediaScenes.tsx`; the real-image path stays in `BeforeAfterMedia.tsx` ≤200 lines). Closes S31 CQ-02 MAJOR carry-forward.
+
+**Functions to implement:**
+- `ProjectMediaCarousel({ media, ariaLabel }: ProjectMediaCarouselProps): React.ReactElement | null` — carousel wrapper. `media: PublicProjectMediaItem[]`. Returns `null` when `media.length === 0` (skip carousel section, PRD §2.3a G/W/T). When `media.length === 1`, renders a single static slide with no nav chrome (no dots, no arrows). When `media.length > 1`, renders embla with: dots row, left/right arrow buttons, swipe (embla default), keyboard ←/→ handlers, ARIA live region announcing "Slide N of M, [alt text]", `prefers-reduced-motion` honored (skips slide transition animation).
+- Per-slide render branch: `image_after_url` non-null → `<BeforeAfterMedia ...>`; otherwise `<img src={imageUrl} alt={imageAlt} ...>`.
+- Pair-slide drag-priority: `BeforeAfterMedia`'s divider drag must take priority over embla swipe within its hit area. Implementation: stop-propagation on `pointerdown` inside the divider handle.
+- Caption render: when active slide has a `caption`, render below the slide in muted meta type per `@designer` spec from T43.A.
+
+**Acceptance criteria — PRD §2.3a G/W/T:**
+- [ ] Multi-slide carousel: dots + arrows + horizontal swipe + keyboard ←/→ all functional. No auto-advance. No loop — `loop: false` in embla options; boundary slides disable the corresponding arrow button.
+- [ ] Single-slide carousel: no nav chrome. Renders the slide static.
+- [ ] Zero-slide carousel: returns `null` (caller renders nothing).
+- [ ] Active-slide caption renders below the image in muted meta type when present.
+- [ ] Screen-reader live region announces "Slide N of M, [alt text]" when active slide changes. Implementation: `aria-live="polite"` element keyed off the embla `select` event.
+- [ ] `prefers-reduced-motion: reduce` honored: embla `duration: 0` when the media query matches.
+- [ ] Pair-row divider drag does NOT advance the carousel — drag within the divider hit area is consumed.
+- [ ] Multi-instance DOM ID hygiene: `React.useId()` for the `aria-controls` / `aria-labelledby` / dot button IDs.
+- [ ] CONSTRAINT-05 Override 2 boundary: this is the only public-site component using a JS library. The verbatim-bundle rule applies everywhere outside `ProjectMediaCarousel` + the embla dep.
+- [ ] All styling uses CSS variables from `colors_and_type.css`. No Tailwind. No inline library defaults.
+- [ ] Arrow + dot button labels are typographic glyphs only (`←`, `→`, `•`) — CONSTRAINT-13. ARIA labels: `aria-label="Slide 1"` etc. (short, no prose).
+- [ ] `ProjectMediaCarousel.tsx` ≤200 lines (CQ-02).
+- [ ] `BeforeAfterMedia.tsx` post-refactor ≤200 lines (closes S31 CQ-02 MAJOR carry-forward).
+- [ ] Bundle delta verified: T43.B + T43.G commits combined add ≤10 KB gzip to the public-route entry chunk.
+
+**Tests required:**
+- `tests/ProjectMediaCarousel.test.tsx` describe →
+  - happy path: 3-slide carousel renders 3 dots + both arrows + first slide visible (TS-01).
+  - single-slide branch: 0 dots, 0 arrows rendered (TS-01).
+  - zero-slide branch: returns null, container empty (TS-01).
+  - keyboard nav: pressing `ArrowRight` advances; `ArrowLeft` at slide 0 does nothing (TS-01).
+  - reduced-motion: when matchMedia mocks `prefers-reduced-motion: reduce`, embla constructed with `duration: 0` (TS-01).
+  - multi-instance: two carousels on one page have non-overlapping DOM IDs (TS-01).
+  - pair-slide drag-priority: pointerdown on divider stops propagation (TS-01).
+  - ARIA: `aria-live` region text matches "Slide N of M, [alt]" on slide change (TS-01).
+- Playwright public-route extension (`tests/e2e/public-carousel.spec.ts` — create): visit `/projects/[slug]` with a multi-media project; verify swipe (mobile viewport via Playwright touch emulation) + keyboard nav; verify mobile vertical-scroll-wins-over-horizontal-swipe at low angles (Playwright touch simulator); verify cards on `/projects` each have an independent carousel.
+
+**Depends on:** T43.A, T43.B, T43.D
+
+**Specialist:** `@ui-swarnimbagre` (public bundle mode + Override 2 boundary author)
+
+---
+
+### Task T43.H: Wire carousel into cards + detail page + list page
+
+**Files:**
+- `components/public/ProjectMedia.tsx` — modify (accept `media: PublicProjectMediaItem[]` prop; when present, render `<ProjectMediaCarousel media={...} ariaLabel={...} />`; when empty, fall back to current legacy single-image branching)
+- `components/public/ProjectCard.tsx` — modify (accept `media` prop; pass to `ProjectMedia`; backward-compat additive prop — when `media` undefined, render unchanged per CONSTRAINT-05 additive-prop carve-out)
+- `components/public/mobile/MobileProjectCard.tsx` — modify (mirror desktop changes)
+- `app/projects/page.tsx` — modify (loader extends per-project to include `media: await loadPublicProjectMedia(project.id)`; pass through)
+- `app/projects/[slug]/page.tsx` — modify (loader extends to include `media`; pass through to both Desktop + Mobile detail wrappers)
+- `lib/public-projects.ts` — modify (already touched in T43.D; verify call sites updated)
+
+**Functions to implement:** No new functions — additive prop wiring + page-loader call updates.
+
+**Acceptance criteria — PRD §2.3 + §2.3a:**
+- [ ] PRD §2.3 G/W/T: `/projects` list — project with `project_media` rows renders carousel in card's image slot; project with zero rows shows no image area.
+- [ ] PRD §2.3a G/W/T: `/projects/[slug]` — detail page renders same carousel above the card content (or in the card's image slot, matching the list-card layout). Container size differs (detail = larger); carousel chrome size adapts per `@designer` spec from T43.A.
+- [ ] Backward-compat: existing projects with `image_id` / `image_after_id` set and no `project_media` rows render exactly as they do today (legacy fallback path in `ProjectMedia.tsx`). No visual regression.
+- [ ] CONSTRAINT-05 additive-prop carve-out honored: when `media` prop is undefined OR `[]`, ProjectCard renders byte-identically to its pre-T43 output.
+- [ ] CONSTRAINT-14 `safeLoad` discipline: page-level loaders wrap `loadPublicProjectMedia` calls in `safeLoad` per project — a failure for one project's media nulls the carousel for that card only, not the whole page.
+- [ ] CONSTRAINT-15: every URL in `media` is a signed URL with TTL 3600s (already guaranteed by `loadPublicProjectMedia` from T43.D).
+- [ ] Mobile mirror: `MobileProjectCard` renders carousel identically on iPhone viewport. Touch-emulation Playwright assertion in T43.G covers this.
+- [ ] No console errors on `/projects` or `/projects/[slug]` (CQ-05).
+
+**Tests required:**
+- `tests/ProjectCard.test.tsx` — extend existing tests: `media` prop with rows renders carousel; `media` undefined or empty falls back to legacy single-image branch (regression for backward-compat) (TS-01).
+- `tests/MobileProjectCard.test.tsx` — mirror.
+- Playwright (extended from T43.G's `public-carousel.spec.ts`): visit `/projects` with 2 multi-media projects → both cards have independent functioning carousels; visit `/projects/[slug]` with a multi-media project → carousel renders + works; visit `/projects/[slug]` with a project having only legacy `image_id` → static image still renders (no regression).
+
+**Depends on:** T43.G
+
+**Specialist:** `@ui-swarnimbagre` (public bundle mode)
+
+---
+
+### Task T43.I: Override 2 documentation + close-out
+
+**Files:**
+- `docs/design-decisions.md` — modify (finalize "Override 2: Public site JS library + carousel chrome" section; mirror Override 1 structure: Rationale, What changed, What stayed, Surface boundary)
+- `docs/constraints.md` — modify (add CONSTRAINT-22: "JS libraries on public site permitted only with documented Override and ≤10 KB gzip budget"; amend CONSTRAINT-05 with Override 2 cross-link)
+- `docs/architecture.md` — modify (§1.2 already updated in T43.B with the dep line; now add §4.9 "Carousel surface — Override 2" subsection documenting the public-site JS-lib boundary policy + multi-instance DOM ID requirement; §2.5 new subsection for the `project_media` table mirroring §2.1's level of detail)
+- `docs/founder-brief.md` — modify (add Index row for "Project media carousel + first public-site JS library" decision; dated entry)
+- `docs/content-model-expansion.md` — modify (further superseded note — already marked SUPERSEDED by T42; add a T43-furthered-by line at the top)
+- `docs/plan-phase-4-launch.md` — modify (mark T43 done, log final session-count + commit list; mirror T42 closure pattern)
+- `manifest.md` — modify (update Phase row 4 status; T43 done)
+
+**Functions to implement:** Documentation only.
+
+**Acceptance criteria:**
+- [ ] `docs/design-decisions.md` "Override 2" section structured identically to Override 1 (Rationale / What changed / What stayed / Surface boundary). Surface boundary lists exactly: `ProjectMediaCarousel.tsx` + the `embla-carousel-react` dependency.
+- [ ] `docs/constraints.md` CONSTRAINT-22 added; summary table updated; CONSTRAINT-05 line amended to reference Override 2.
+- [ ] `docs/architecture.md` new §2.5 (`project_media` schema) + §4.9 (Carousel surface boundary). Cross-references to `founder-brief.md` entry.
+- [ ] `docs/founder-brief.md` Index updated; dated entry under standard heading shape (mirroring entries 23 + 28 from T32/T42).
+- [ ] `docs/content-model-expansion.md` further-superseded line at top.
+- [ ] `docs/plan-phase-4-launch.md` T43 marked `[x]`; all sub-session checkboxes confirmed.
+- [ ] `manifest.md` Project Identity Phase 4 status line updated.
+- [ ] No broken cross-references between docs (DS-02). Manual link audit.
+- [ ] All operator-facing labels added in T43 still voice-clean (CONSTRAINT-13) — final pass.
+- [ ] `npm run build` clean (CQ-05).
+- [ ] Full `npm test` suite passing.
+- [ ] Playwright admin smoke + new public carousel spec both green.
+- [ ] `@security` audit pass: no new XSS vectors (alt text + captions are plain text, not Markdown — confirmed at PRD §7.2 carve-out; rendered as text content, never `dangerouslySetInnerHTML`). No new auth surface. Server Action manifest matches 13 IDs.
+- [ ] `@code-review` pass: file size budgets met across all new files; ImageUpload + BeforeAfterMedia CQ-02 MAJOR carry-forward closed.
+
+**Tests required:**
+- Doc link audit (manual).
+- Full test suite must pass (TS-01, TS-04).
+
+**Depends on:** T43.H (all execution work complete before close-out)
+
+**Specialist:** `@security`, `@code-review`, `@cto` (review Override 2 + CONSTRAINT-22 wording)
+
+---
+
+**Estimated effort:** 7–9 focused sessions / ~28–40h total.
+
+| Sub-task | Hours |
+|---|---|
+| T43.A | 1–2 |
+| T43.B | 0.5–1 |
+| T43.C | 2–3 |
+| T43.D | 3–4 |
+| T43.E | 4–6 |
+| T43.F | 6–8 |
+| T43.G | 6–8 |
+| T43.H | 3–4 |
+| T43.I | 3–4 |
+| **Total** | **~28–40h / 7–9 focused sessions** |
+
+Suggested session slicing (mirrors T42 Session A/B/C precedent):
+- Session 33 — T43.A + T43.B (consult + dep add)
+- Session 34 — T43.C + T43.D (schema + types)
+- Session 35 — T43.E (Server Action)
+- Session 36 — T43.F (admin component) — half
+- Session 37 — T43.F finish + T43.G start
+- Session 38 — T43.G finish (public carousel)
+- Session 39 — T43.H (wire-in)
+- Session 40 — T43.I (close-out) + Override 2 docs + final reviews
+
+---
+
 ## Phase 4 Exit Criteria
 
-- T32–T40 + T42 complete (T41 is a trigger-gated deferred follow-up and does not block Phase 4 exit, same pattern as Phase 3's T29/T31 OpenClaw-operator-gated deferrals).
+- T32–T40 + T42 + T43 complete (T41 is a trigger-gated deferred follow-up and does not block Phase 4 exit, same pattern as Phase 3's T29/T31 OpenClaw-operator-gated deferrals).
 - Site is live at `swarnimbagre.com`, monitored, with content rendering against the expanded project schema.
 - All security and code review findings closed.
 - Mark Phase 4 row Done in [`plan-index.md`](plan-index.md). The `@plan` cycle is complete; future work happens via individual `@plan` follow-up tasks against the same docs.
