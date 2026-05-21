@@ -25,6 +25,16 @@ import { execSync } from 'node:child_process';
 //   - `lib/admin-stats-mutations.ts`    — `insertStat`, `deleteStat`
 //   - `lib/admin-images-mutations.ts`   — `uploadImage`, `deleteOrphanImages`
 //                                         (T27 — orphan cleanup sweep)
+//
+// Not yet in the manifest, awaiting page-graph reachability:
+//   - `lib/admin-project-media-mutations.ts` exports `saveProjectMedia`
+//     (T43.E, 2026-05-20). The action file ships and the throwing helper
+//     is fully covered by tests, but the export does not enter
+//     `server-reference-manifest.json` until T43.F mounts the admin
+//     `ProjectMediaField` component in a `(admin)` route — same gating
+//     pattern that delayed `uploadImage` (T25 commit 2 → T26 import) and
+//     `deleteOrphanImages` (action file → T27 `/admin/images` page). The
+//     allowlist will grow from 12 → 13 at T43.F to track the manifest.
 const SERVER_ACTION_ALLOWLIST = new Set<string>([
   'signInWithMagicLink',
   'signOut',
