@@ -23,9 +23,8 @@ import {
 import type { Project, ProjectStatus } from '@/lib/types';
 import ProjectFormLinks from '@/components/admin/ProjectFormLinks';
 import ProjectFormDisplay from '@/components/admin/ProjectFormDisplay';
-import ProjectImageField, {
-  type ImagePreview,
-} from '@/components/admin/ProjectImageField';
+import ProjectMediaField from '@/components/admin/ProjectMediaField';
+import type { AdminProjectMediaRow } from '@/lib/admin-project-media-preview';
 
 /** Toast copy on success. CONSTRAINT-13: dry, no SaaS phrasing, no emoji. */
 const SAVE_SUCCESS_MESSAGE = 'Saved.';
@@ -40,10 +39,9 @@ const TITLE_INPUT_MAX_LENGTH = 200;
 export interface ProjectFormProps {
   /** Existing project row; absent for create. */
   project?: Project;
-  /** Resolved preview for `project.image_id`. Null when unset/orphaned. */
-  currentImage?: ImagePreview | null;
-  /** Resolved preview for `project.image_after_id`. Null when unset/orphaned. */
-  currentImageAfter?: ImagePreview | null;
+  /** Loaded media rows for `ProjectMediaField` (T43.F). Empty array on
+   *  create or when the project has no media yet. */
+  initialMedia?: AdminProjectMediaRow[];
   /** Optional injected actions — tests override these to avoid Server Action wiring. */
   createAction?: typeof createProject;
   updateAction?: typeof updateProject;
@@ -59,17 +57,19 @@ function fieldError(
 
 /**
  * Admin create / edit form for a project row. One component, two modes —
- * inferred from the `project` prop. T42 splits new fields into three sub-
- * components: `ProjectFormLinks` (3 URLs), `ProjectFormDisplay` (progress +
- * thumb_kind), and two `ProjectImageField` instances (primary + after).
- * Slug is read-only on `status === 'published'` (CONSTRAINT-12; migration
- * 008 is the DB-side guard). Success: toast + push to list. Error: zod
- * field messages inline; generic form-level error above the form.
+ * inferred from the `project` prop. Slug is read-only on
+ * `status === 'published'` (CONSTRAINT-12; migration 008 is the DB-side
+ * guard). Success: toast + push to list. Error: zod field messages inline.
+ *
+ * T43.F replaced the two `ProjectImageField` upload widgets with one
+ * `ProjectMediaField` driving the carousel. The deprecated `image_id` /
+ * `image_after_id` columns are preserved verbatim via hidden inputs so
+ * `updateProject` does NOT null them — those columns survive T43 for
+ * backward-compat (Override 2; CONSTRAINT-22 codification at T43.I).
  */
 export default function ProjectForm({
   project,
-  currentImage = null,
-  currentImageAfter = null,
+  initialMedia = [],
   createAction = createProject,
   updateAction = updateProject,
 }: ProjectFormProps): React.ReactElement {
@@ -105,6 +105,16 @@ export default function ProjectForm({
       <form action={formAction} className="space-y-6" noValidate>
         {isEdit ? <input type="hidden" name="id" value={project.id} /> : null}
         <input type="hidden" name="status" value={status} />
+        {isEdit ? (
+          <input type="hidden" name="image_id" value={project.image_id ?? ''} />
+        ) : null}
+        {isEdit ? (
+          <input
+            type="hidden"
+            name="image_after_id"
+            value={project.image_after_id ?? ''}
+          />
+        ) : null}
 
         <div className="space-y-2">
           <Label htmlFor="project-title">Title</Label>
@@ -161,24 +171,6 @@ export default function ProjectForm({
           </Select>
         </div>
 
-        {isEdit ? (
-          <ProjectImageField
-            parentId={project.id}
-            fieldName="image_id"
-            label="Image"
-            initialPreview={currentImage}
-          />
-        ) : null}
-
-        {isEdit ? (
-          <ProjectImageField
-            parentId={project.id}
-            fieldName="image_after_id"
-            label="After image (before/after slider)"
-            initialPreview={currentImageAfter}
-          />
-        ) : null}
-
         {isEdit && isSlugLocked ? (
           <div className="space-y-2">
             <Label htmlFor="project-slug">Slug</Label>
@@ -194,6 +186,10 @@ export default function ProjectForm({
             {isPending ? 'Saving' : 'Save'}
           </Button>
         </div>
+
+        {isEdit ? (
+          <ProjectMediaField projectId={project.id} initialMedia={initialMedia} />
+        ) : null}
       </form>
     </section>
   );

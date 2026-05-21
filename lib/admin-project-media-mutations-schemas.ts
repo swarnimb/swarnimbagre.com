@@ -16,19 +16,14 @@
  */
 
 import { z } from 'zod';
+import {
+  PROJECT_MEDIA_CAPTION_MAX_LENGTH,
+  PROJECT_MEDIA_MAX_ROWS,
+} from './admin-project-media-mutations-types';
 
-/**
- * Maximum number of carousel rows per project. Mirrors the row-cap trigger
- * `project_media_enforce_row_cap` in migration 010. App-layer enforcement
- * (this constant) is defense-in-depth: the trigger is the source of truth.
- */
-export const PROJECT_MEDIA_MAX_ROWS = 20;
-
-/**
- * Maximum caption length per row. Mirrors the `project_media_caption_length`
- * CHECK constraint in migration 010 (`char_length(caption) <= 280`).
- */
-export const PROJECT_MEDIA_CAPTION_MAX_LENGTH = 280;
+// The row-count + caption-length caps live in the client-safe `-types.ts`
+// module (no `zod` dependency) so the `'use client'` form can import them
+// without that risk. This file consumes them in the schema bounds below.
 
 /**
  * Per-row schema. `order_index` is intentionally absent — migration 010a's

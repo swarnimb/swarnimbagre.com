@@ -2,8 +2,6 @@
 
 import { useActionState, useEffect, useId, useRef, useState, useTransition } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { uploadImage } from '@/lib/admin-images-mutations';
 import {
   ALLOWED_MIME_TYPES,
@@ -12,6 +10,8 @@ import {
   type ImageMutationState,
 } from '@/lib/admin-images-mutations-types';
 import { precheckImageFile } from '@/lib/admin-image-file-precheck';
+import ImageUploadFileInput from '@/components/admin/ImageUploadFileInput';
+import ImageUploadAltInput from '@/components/admin/ImageUploadAltInput';
 import type { ImageRecord } from '@/lib/types';
 
 /** Default file-picker label when `instanceLabel` is not supplied. */
@@ -42,8 +42,8 @@ export interface ImageUploadProps {
   uploadAction?: typeof uploadImage;
   /** Optional human-readable scope label. When set, prefixes the visible
    * file + alt input labels so multiple instances on one page expose
-   * distinct accessible names (T42: `ProjectForm` renders two
-   * `ProjectImageField` instances — one per FK). Omit for single-instance
+   * distinct accessible names (T43.F: `ProjectMediaRow` mounts one or two
+   * `ImageUpload` instances per media row). Omit for single-instance
    * surfaces (`PostForm`) to keep the defaults `Choose image` / `Alt text`. */
   instanceLabel?: string;
 }
@@ -78,8 +78,8 @@ export default function ImageUpload({
   const [, startTransition] = useTransition();
 
   // Per-instance stable id base — guarantees unique DOM ids when the parent
-  // composes more than one `ImageUpload` (T42: two `ProjectImageField`
-  // instances in `ProjectForm`). Hydration-safe via React 19 `useId()`.
+  // composes more than one `ImageUpload` (T43.F: a `ProjectMediaRow` pair
+  // mounts two, and a media list mounts many). Hydration-safe via `useId()`.
   const instanceUid = useId();
   const fileInputId = `image-file-${instanceUid}`;
   const fileErrorId = `image-file-error-${instanceUid}`;
@@ -170,52 +170,24 @@ export default function ImageUpload({
         </p>
       ) : null}
       <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor={fileInputId}>{fileLabelText}</Label>
-          <Input
-            key={fileInputKey}
-            id={fileInputId}
-            type="file"
-            name="file"
-            accept={ALLOWED_MIME_TYPES.join(',')}
-            onChange={(e) => onFileChange(e.target.files?.[0] ?? null)}
-            aria-invalid={Boolean(fileError)}
-            aria-describedby={fileErrorId}
-            required
-          />
-          {fileError ? (
-            <p
-              id={fileErrorId}
-              role="alert"
-              className="text-sm text-destructive"
-            >
-              {fileError}
-            </p>
-          ) : null}
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor={altInputId}>{altLabelText}</Label>
-          <Input
-            id={altInputId}
-            type="text"
-            name="altText"
-            value={altText}
-            onChange={(e) => setAltText(e.target.value)}
-            maxLength={ALT_TEXT_MAX_LENGTH}
-            aria-invalid={Boolean(altTextError)}
-            aria-describedby={altErrorId}
-            required
-          />
-          {altTextError ? (
-            <p
-              id={altErrorId}
-              role="alert"
-              className="text-sm text-destructive"
-            >
-              {altTextError}
-            </p>
-          ) : null}
-        </div>
+        <ImageUploadFileInput
+          id={fileInputId}
+          errorId={fileErrorId}
+          labelText={fileLabelText}
+          accept={ALLOWED_MIME_TYPES.join(',')}
+          fileInputKey={fileInputKey}
+          onChange={onFileChange}
+          error={fileError}
+        />
+        <ImageUploadAltInput
+          id={altInputId}
+          errorId={altErrorId}
+          labelText={altLabelText}
+          value={altText}
+          onChange={setAltText}
+          maxLength={ALT_TEXT_MAX_LENGTH}
+          error={altTextError}
+        />
         <div className="flex items-center gap-2">
           <Button type="button" onClick={handleUpload} disabled={submitDisabled}>
             {isPending ? 'Uploading' : 'Upload'}

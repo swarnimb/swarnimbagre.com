@@ -3,9 +3,11 @@ import { ZodError } from 'zod';
 import {
   projectMediaRowSchema,
   projectMediaSaveSchema,
-  PROJECT_MEDIA_MAX_ROWS,
-  PROJECT_MEDIA_CAPTION_MAX_LENGTH,
 } from '@/lib/admin-project-media-mutations-schemas';
+import {
+  PROJECT_MEDIA_CAPTION_MAX_LENGTH,
+  PROJECT_MEDIA_MAX_ROWS,
+} from '@/lib/admin-project-media-mutations-types';
 
 /**
  * T43.E acceptance — pure schema tests for `projectMediaRowSchema` and

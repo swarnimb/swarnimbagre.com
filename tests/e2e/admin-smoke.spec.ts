@@ -69,6 +69,12 @@ const T42_PROGRESS_PERCENT = '100';
 /** T42 thumb_kind — first entry of `THUMB_KIND_OPTIONS` (`disc`). */
 const T42_THUMB_KIND_LABEL = 'Disc';
 
+/** T43.F media-flow project title — distinct prefix so cleanup can scope by it. */
+const T43F_MEDIA_TITLE = `T43F media project ${RUN_ID}`;
+/** T43.F captions used as stable identifiers for post-reload row assertions. */
+const T43F_CAPTION_SINGLE = `T43F single caption ${RUN_ID}`;
+const T43F_CAPTION_PAIR = `T43F pair caption ${RUN_ID}`;
+
 /** TypoIcon visible-text labels. Unicode characters preserved verbatim per
  * CONSTRAINT-13 — `↗` and `¶` must not be transliterated to `->` or `section`. */
 const TYPO_ICON_GITHUB_TEXT = '{ } code';
@@ -432,13 +438,17 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await expect(slugInput).toHaveAttribute('readonly', '');
     });
 
-    // Image upload + replace (T26 surface). T42 fix: ProjectForm renders TWO
-    // ProjectImageField instances — primary `Image` + after `After image
-    // (before/after slider)`. ImageUpload now derives per-instance ids via
-    // `useId()` and prefixes its visible labels with the parent section
-    // label, so `getByLabel` resolves to a single element per instance.
-    // Locators below target the primary (`Image`) instance explicitly.
-    await runStep(failures, 'images: upload via project edit form (T26 wiring)', async () => {
+    // Image upload + replace (T26 surface, rewired for T43.F).
+    //
+    // T43.F removed `ProjectImageField` and replaced it with the row-based
+    // `ProjectMediaField`. The upload widget (`ImageUpload`) is unchanged —
+    // it still derives per-instance ids via `useId()` and prefixes visible
+    // labels with `instanceLabel`. A single row added via "+ image" mounts
+    // `ImageUpload` with `instanceLabel="Image"`, so the legacy locators
+    // `Image choose image` / `Image alt text` still resolve verbatim. The
+    // only behavioral delta is that the operator must click "+ image" first
+    // to add a row; nothing mounts the upload widget on a fresh edit page.
+    await runStep(failures, 'images: upload via project edit form (T43.F rewired)', async () => {
       await page.goto('/admin/projects/new');
       await page.getByLabel('Title').fill(IMAGE_PROJECT_TITLE);
       await page.getByLabel('Description').fill(`Image upload smoke ${RUN_ID}`);
@@ -449,6 +459,11 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
         .getByRole('link', { name: /^edit$/i })
         .click();
       await page.waitForURL(/\/admin\/projects\/[0-9a-f-]+$/);
+
+      // T43.F: ProjectMediaField mounts in edit mode but is empty by
+      // default — adding a single row reveals the (unchanged) ImageUpload
+      // labels the rest of this step asserts against.
+      await page.getByRole('button', { name: '+ image' }).click();
 
       // Diagnostic: count nested forms — the bug detector. If this is > 0
       // and the upload then fails, the failure root cause is the nested
@@ -578,14 +593,13 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
     // T42 end-to-end path — admin create with the 6 new content-model
     // fields → publish → assert public render on desktop AND mobile.
     //
-    // Image attachment (`image_id`, `image_after_id`) is SKIPPED — the only
-    // image-upload helper available is the existing inline form inside
-    // ProjectImageField, which the T26 step above already shows is broken
-    // (nested-form + strict-mode-violation on the duplicate file input
-    // introduced by the second ProjectImageField for `image_after_id`).
-    // Without a working helper the test exercises the still-no-image
-    // public render path. The image-bound branches (`ProjectMedia`
-    // `<img>` and `BeforeAfterMedia`) are covered by their unit tests.
+    // Image attachment to the deprecated `image_id` / `image_after_id`
+    // columns is SKIPPED — T43.F removed `ProjectImageField`, so those
+    // columns have no admin write surface at all. Project images now live
+    // in `project_media`, exercised by the dedicated T43.F step further
+    // below. This T42 path therefore exercises the still-no-image public
+    // render branch; the image-bound branches (`ProjectMedia` `<img>` and
+    // `BeforeAfterMedia`) stay covered by their unit tests.
     //
     // Mobile assertions use a separate BrowserContext with the iPhone UA
     // matched by `MOBILE_UA_TOKENS` in middleware.ts. Viewport size alone
@@ -721,6 +735,97 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       }
     });
 
+    // -------------------------------------------------------------------
+    // T43.F end-to-end — admin ProjectMediaField round-trip.
+    //
+    // Create project → add single + pair row → fill captions + uploads →
+    // drag-reorder (pair above single) → Save media → reload → assert the
+    // reordered captions match by position.
+    //
+    // HTML5 native drag-drop note: Playwright's `.dragTo()` simulates mouse
+    // events, which do NOT trigger HTML5 DragEvent listeners. The helper
+    // below dispatches DragEvents with a shared DataTransfer so the
+    // `draggable` div's `onDragStart` / `onDragOver` / `onDrop` handlers
+    // fire as they would for a real human drag.
+    // -------------------------------------------------------------------
+
+    await runStep(failures, 'T43.F: media-field create + reorder + save round-trip', async () => {
+      await page.goto('/admin/projects/new');
+      await page.getByLabel('Title').fill(T43F_MEDIA_TITLE);
+      await page.getByLabel('Description').fill(`T43.F media smoke ${RUN_ID}`);
+      await page.getByRole('button', { name: /^save$/i }).click();
+      await page.waitForURL(/\/admin\/projects(\?[^/]*)?$/, { timeout: SHORT_WAIT_MS });
+      await page
+        .getByRole('row', { name: new RegExp(T43F_MEDIA_TITLE) })
+        .getByRole('link', { name: /^edit$/i })
+        .click();
+      await page.waitForURL(/\/admin\/projects\/[0-9a-f-]+$/);
+
+      // Row 1 (single). One ImageUpload — instanceLabel `Image`.
+      await page.getByRole('button', { name: '+ image' }).click();
+      const png = Buffer.from(TINY_PNG_BASE64, 'base64');
+      await page.getByLabel('Image choose image').setInputFiles({
+        name: 't43f-single.png', mimeType: 'image/png', buffer: png,
+      });
+      await page.getByLabel('Image alt text').fill('T43F single alt');
+      await page.getByRole('button', { name: /^upload$/i }).first().click();
+      await expect(
+        page.getByText(/new image saved\. preview refreshes after save\./i).first(),
+      ).toBeVisible({ timeout: SHORT_WAIT_MS });
+      await page.getByLabel(/^caption$/i).first().fill(T43F_CAPTION_SINGLE);
+
+      // Row 2 (pair). Two ImageUploads — `Before image` + `After image`.
+      await page.getByRole('button', { name: '+ pair' }).click();
+      await page.getByLabel('Before image choose image').setInputFiles({
+        name: 't43f-before.png', mimeType: 'image/png', buffer: png,
+      });
+      await page.getByLabel('Before image alt text').fill('T43F before alt');
+      await page.getByRole('button', { name: /^upload$/i }).nth(1).click();
+      await expect(
+        page.getByText(/new image saved\. preview refreshes after save\./i).nth(1),
+      ).toBeVisible({ timeout: SHORT_WAIT_MS });
+      await page.getByLabel('After image choose image').setInputFiles({
+        name: 't43f-after.png', mimeType: 'image/png', buffer: png,
+      });
+      await page.getByLabel('After image alt text').fill('T43F after alt');
+      await page.getByRole('button', { name: /^upload$/i }).nth(2).click();
+      await expect(
+        page.getByText(/new image saved\. preview refreshes after save\./i).nth(2),
+      ).toBeVisible({ timeout: SHORT_WAIT_MS });
+      // Pair row's caption is the second textarea (row 1 already has one).
+      await page.getByLabel(/^caption$/i).nth(1).fill(T43F_CAPTION_PAIR);
+
+      // Drag pair (row 2) above single (row 1) via dispatched DragEvents.
+      // Scope to the media `<ol>` by its aria-label — `getByRole('listitem')`
+      // unscoped also matches AdminNav and other page lists.
+      const mediaList = page.getByRole('list', { name: /project media rows/i });
+      const items = mediaList.getByRole('listitem');
+      await expect(items).toHaveCount(2);
+      await items.evaluateAll((nodes) => {
+        const src = nodes[1].querySelector('[draggable="true"]') as HTMLElement | null;
+        const tgt = nodes[0].querySelector('[draggable="true"]') as HTMLElement | null;
+        if (src === null || tgt === null) throw new Error('draggable handles missing');
+        const dt = new DataTransfer();
+        src.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        tgt.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        tgt.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        src.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      });
+      // After reorder the pair caption should occupy row 1.
+      await expect(page.getByLabel(/^caption$/i).first()).toHaveValue(T43F_CAPTION_PAIR);
+      await expect(page.getByLabel(/^caption$/i).nth(1)).toHaveValue(T43F_CAPTION_SINGLE);
+
+      // Save media — independent from ProjectForm's Save button.
+      await page.getByRole('button', { name: /^save media$/i }).click();
+      // Toast text per CONSTRAINT-13 voice copy.
+      await expect(page.getByText(/^media saved\.$/i)).toBeVisible({ timeout: SHORT_WAIT_MS });
+
+      // Reload and confirm persistence — pair caption still first, single second.
+      await page.reload();
+      await expect(page.getByLabel(/^caption$/i).first()).toHaveValue(T43F_CAPTION_PAIR);
+      await expect(page.getByLabel(/^caption$/i).nth(1)).toHaveValue(T43F_CAPTION_SINGLE);
+    });
+
     // Cleanup — best effort; swallows individual delete failures.
     await runStep(failures, 'cleanup: delete test post', async () => {
       await page.goto('/admin/posts');
@@ -732,6 +837,7 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await deleteRowsMatching(page, new RegExp(PROJECT_TITLE));
       await deleteRowsMatching(page, new RegExp(IMAGE_PROJECT_TITLE));
       await deleteRowsMatching(page, t42TitleRe);
+      await deleteRowsMatching(page, new RegExp(T43F_MEDIA_TITLE));
     });
 
     // Logout + back-button non-restoration.

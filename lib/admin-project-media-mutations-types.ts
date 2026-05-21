@@ -67,3 +67,22 @@ export interface ProjectMediaMutationState {
 export const PROJECT_MEDIA_MUTATION_INITIAL_STATE: ProjectMediaMutationState = {
   status: 'idle',
 };
+
+/**
+ * Maximum number of carousel rows per project. Mirrors the row-cap trigger
+ * `project_media_enforce_row_cap` in migration 010. App-layer enforcement
+ * (this constant) is defense-in-depth: the trigger is the source of truth.
+ *
+ * Lives in this client-safe module (not `-schemas.ts`) so the `'use client'`
+ * `ProjectMediaField` form can import it without risking `zod` in the client
+ * bundle — architecture §6.6.6: the form imports from `-types.ts` only.
+ */
+export const PROJECT_MEDIA_MAX_ROWS = 20;
+
+/**
+ * Maximum caption length per row. Mirrors the `project_media_caption_length`
+ * CHECK constraint in migration 010 (`char_length(caption) <= 280`). Lives
+ * in this client-safe module for the same reason as
+ * {@link PROJECT_MEDIA_MAX_ROWS}.
+ */
+export const PROJECT_MEDIA_CAPTION_MAX_LENGTH = 280;

@@ -13,28 +13,22 @@ import { execSync } from 'node:child_process';
 
 // Single source of truth for the SEC-09 allowlist. Adding a new Server Action
 // requires updating BOTH the `'use server'` module(s) AND this constant in
-// lock-step. The allowlist is twelve IDs spread across five modules. Next.js
+// lock-step. The allowlist is thirteen IDs spread across six modules. Next.js
 // only includes Server Actions in the manifest when they are reachable from
 // an app/** route, so an action stays out of the manifest until a page
 // renders a component (or directly calls the action).
-//   - `lib/auth.ts`                     — `signInWithMagicLink`, `signOut`
-//   - `lib/admin-projects-mutations.ts` — `createProject`, `updateProject`,
-//                                         `deleteProject`
-//   - `lib/admin-posts-mutations.ts`    — `createPost`, `updatePost`,
-//                                         `deletePost`
-//   - `lib/admin-stats-mutations.ts`    — `insertStat`, `deleteStat`
-//   - `lib/admin-images-mutations.ts`   — `uploadImage`, `deleteOrphanImages`
-//                                         (T27 — orphan cleanup sweep)
-//
-// Not yet in the manifest, awaiting page-graph reachability:
-//   - `lib/admin-project-media-mutations.ts` exports `saveProjectMedia`
-//     (T43.E, 2026-05-20). The action file ships and the throwing helper
-//     is fully covered by tests, but the export does not enter
-//     `server-reference-manifest.json` until T43.F mounts the admin
-//     `ProjectMediaField` component in a `(admin)` route — same gating
-//     pattern that delayed `uploadImage` (T25 commit 2 → T26 import) and
-//     `deleteOrphanImages` (action file → T27 `/admin/images` page). The
-//     allowlist will grow from 12 → 13 at T43.F to track the manifest.
+//   - `lib/auth.ts`                          — `signInWithMagicLink`, `signOut`
+//   - `lib/admin-projects-mutations.ts`      — `createProject`, `updateProject`,
+//                                              `deleteProject`
+//   - `lib/admin-posts-mutations.ts`         — `createPost`, `updatePost`,
+//                                              `deletePost`
+//   - `lib/admin-stats-mutations.ts`         — `insertStat`, `deleteStat`
+//   - `lib/admin-images-mutations.ts`        — `uploadImage`, `deleteOrphanImages`
+//                                              (T27 — orphan cleanup sweep)
+//   - `lib/admin-project-media-mutations.ts` — `saveProjectMedia` (T43.E
+//                                              + T43.F mount in the admin
+//                                              edit-project page; manifest-
+//                                              reachable as of T43.F close)
 const SERVER_ACTION_ALLOWLIST = new Set<string>([
   'signInWithMagicLink',
   'signOut',
@@ -48,6 +42,7 @@ const SERVER_ACTION_ALLOWLIST = new Set<string>([
   'deleteStat',
   'uploadImage',
   'deleteOrphanImages',
+  'saveProjectMedia',
 ]);
 
 const MANIFEST_PATH = resolve(
