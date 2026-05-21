@@ -41,6 +41,7 @@ This file is the plain-language record of every architectural decision. The audi
 | 27 | Admin theming tokens declared at `:root` to survive Radix portal escape | [§4.2](architecture.md#42-tailwind-scoping-decision-3--resolves-assumption-04) |
 | 28 | Project content-model expansion — 6 nullable columns + Override 1 (T42) | [§2.1](architecture.md#21-projects) + `design-decisions.md` Override 1 |
 | 29 | Override 2 — embla-carousel-react opens public-site JS-library posture with byte budget (T43.B) | [§1.2](architecture.md#12-frontend-libraries) + `design-decisions.md` Override 2 |
+| 30 | Atomic save — Postgres RPC over application-layer rollback (T43.E) | [§6.6.9](architecture.md#669-atomic-save-surface--postgres-rpc-pattern) + `supabase/migrations/010a_save_project_media_rpc.sql` |
 
 ---
 
@@ -627,6 +628,22 @@ wall-clock proves the wrapper ran end-to-end).
 **What this closes off:** Subsequent public-site library proposals are no longer "absolute no" but require Override + budget + `@cto` approval — meaning every future library decision is a deliberate doctrine event, not a habit. Bundle-baseline measurement becomes part of every public-site dep-add task spec (T43.B's "halt + `@cto` consult if > ceiling" gate becomes the template). Once embla actually ships at T43.G, the real production-route chunk delta must be re-measured against 15 KB — if real delta exceeds budget, that requires another `@cto` revisit rather than silent absorption.
 
 **Implemented in:** T43.B (2026-05-20, Session 34). `package.json` + `package-lock.json` (embla 8.6.0 + 2 transitive); `docs/architecture.md` §1.2 ("One runtime JS dependency... budget ceiling 15 KB gzip per Override 2"); `docs/design-decisions.md` Override 2 budget block (15 KB ceiling, ~11.7 KB current baseline, 3 KB headroom, real-bundle confirmation deferred to T43.G); `docs/plan-phase-4-launch.md` naming reconciliation (v8 renamed `embla-carousel-core` → `embla-carousel`) + T43.B tripwire updated (10 → 15 KB) + T43.G acceptance criterion added (re-measure against ceiling) + CONSTRAINT-22 wording pre-staged at T43.I. Commit `efa294b`. CONSTRAINT-22 codification — the formal text in `constraints.md` — happens at T43.I cross-doc closure per plan.
+
+---
+
+## 2026-05-21 — Atomic save — Postgres RPC over application-layer rollback (T43.E)
+
+**Architecture reference:** [§6.6.9](architecture.md#669-atomic-save-surface--postgres-rpc-pattern) + `supabase/migrations/010a_save_project_media_rpc.sql`
+
+**Decided:** The `saveProjectMedia` Server Action delegates its delete-then-insert work to a single Postgres function call (Option A — RPC `public.save_project_media(p_project_id uuid, p_rows jsonb)`) instead of running the DELETE and the bulk INSERT sequentially from Node with a try/catch rollback (Option B). Both statements live inside one Postgres transaction inside the function body.
+
+**Means for your product:** Admins can save a carousel reorder or edit reliably even if the server crashes mid-save, the network drops between statements, or an INSERT fails for any reason (RLS reject, FK violation, the row-cap trigger raising on the 21st row). The database layer guarantees the project ends up with either entirely the new set of media rows or entirely the old set — never a torn state with the old rows already deleted and no new rows in to replace them. The old worst-case (an admin reorders the carousel, the save half-completes, the carousel goes blank, you reload the form and have to re-upload from scratch) is gone.
+
+**Check before approving:** That the RPC actually runs in one transaction (confirmed at the `@supabase` consult — function body's DELETE + INSERT share a single statement-level transaction by definition; verdict APPROVE WITH MINOR). That `anon` callers cannot invoke it (confirmed via grants check — `EXECUTE` belongs to `authenticated`, `postgres`, `service_role` only; both `revoke from public` and `revoke from anon` are required because Supabase's project-bootstrap default-privileges grant directly to `anon`). That an INSERT-side failure genuinely rolls back the DELETE (covered by the row-cap trigger behavior in migration 010 plus the 21st-row test: a save with 21 rows raises in the trigger and leaves the existing media untouched).
+
+**What this closes off:** The RPC's name and signature (`save_project_media(uuid, jsonb)`) become a contract — renaming or changing the parameter shape requires a coordinated migration + TypeScript redeploy. Switching the transaction strategy underneath (e.g., to serializable isolation or advisory locks) means rewriting the SQL inside the function but the TypeScript caller does not change. Also: future Server Actions that need atomic multi-statement writes on a parent-children pair (replace-all child collections for one parent row) should follow this same pattern — the conventions are codified in architecture.md §6.6.9 (LANGUAGE plpgsql, SECURITY INVOKER, SET search_path = '', revoke EXECUTE from both public and anon, input shape guard via raise exception, ordering via WITH ORDINALITY). The "Option B with app-rollback" path is now reserved for cases where the RPC route adds genuine schema cost; it is not the default.
+
+**Implemented in:** T43.E (2026-05-21). `supabase/migrations/010a_save_project_media_rpc.sql` — RPC definition + grants + comment. The Server Action wrapper (TypeScript) calls the RPC via `supabase.rpc('save_project_media', { p_project_id, p_rows })` instead of running DELETE and INSERT statements directly. Pattern reference for future atomic-save surfaces: architecture.md §6.6.9.
 
 ---
 

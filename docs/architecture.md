@@ -19,7 +19,7 @@ This document cannot change without a corresponding update to [`founder-brief.md
 
 ### 1.2 Frontend libraries
 
-- **Public site:** raw React + custom components from `site/components.jsx` and `site/mobile-components.jsx`. Styling is exclusively CSS variables in `site/colors_and_type.css` plus inline styles. No Tailwind, no component library. **One runtime JS dependency** (added T43 per Override 2): `embla-carousel-react` ^8, with transitive runtime deps `embla-carousel` (core; renamed from `embla-carousel-core` in v8) and `embla-carousel-reactive-utils` — used only by `ProjectMediaCarousel`. Measured baseline ~11.7 KB gzip combined across the three packages; budget ceiling 15 KB gzip per Override 2.
+- **Public site:** raw React + custom components from `site/components.jsx` and `site/mobile-components.jsx`. Styling is exclusively CSS variables in `site/colors_and_type.css` plus inline styles. No Tailwind, no component library. **One runtime JS dependency** (added T43 per Override 2): `embla-carousel-react` ^8, with transitive runtime deps `embla-carousel` (core; renamed from `embla-carousel-core` in v8) and `embla-carousel-reactive-utils` — used only by `ProjectMediaCarousel`. Measured baseline ~11.7 KB gzip combined across the three packages; budget ceiling 15 KB gzip per Override 2. The carousel's admin save path uses a Postgres RPC (`save_project_media`, migration `010a_save_project_media_rpc.sql`) for atomic delete-then-insert; see §6.6.9.
 - **Admin panel:** shadcn/ui + Tailwind CSS, scoped to `/admin/*` only.
 - **Markdown renderer:** `marked` + DOMPurify (see Section 6).
 - **Component testing:** `@testing-library/react` ^16.1.0 + `@testing-library/jest-dom` ^6.6.3 (required for React 19 / Next 15 compatibility).
@@ -525,6 +525,21 @@ The admin read surface mirrors the per-resource decomposition of the mutation su
 The per-module structured-log helpers were duplicated across the three (a CQ-07 DRY violation). They were collapsed into a single `logQueryError(operation, error)` in `lib/admin-mutation-log.ts` — the same module that owns the mutation-side `logMutationError` — and imported by each query module. Admin reads do not route through `lib/safe-load.ts` (that boundary is public-Server-Component-only, EH-01); admin query failures are surfaced loud to the operator via `logQueryError` and an empty/typed result, not silently swallowed.
 
 **Code-review checklist:** a new admin resource gets its own `admin-queries-<resource>.ts`; the barrel re-exports it; query-error logging goes through `logQueryError` — do not reintroduce per-module copies.
+
+#### 6.6.9 Atomic save surface — Postgres RPC pattern
+
+When a Server Action must atomically replace a child collection for one parent (delete-all-then-insert-all), wrap both statements in a single Postgres function call rather than running them sequentially from the application layer with a try/catch rollback. The application-layer "sequential delete then insert with rollback-on-error" approach has more failure modes — a Node crash between the two statements, a connection drop after the DELETE commits but before the INSERT issues, a partial INSERT that leaves the rollback compensating-delete to also fail — than wrapping both statements in one server-side transaction. Option A (RPC) is the preferred pattern. Option B (sequential with app-rollback) is acceptable only when the RPC route adds genuine schema cost — e.g., complex parameter shapes that don't translate cleanly to a `jsonb` payload, or callers that genuinely need per-statement progress reporting.
+
+T43.E (`save_project_media` RPC) is the project's first instance of this pattern. Conventions established by it, binding for future RPCs of this kind:
+
+- `LANGUAGE plpgsql`.
+- `SECURITY INVOKER` — the function runs with the caller's role, so the table's existing admin RLS policy gates both the DELETE and the INSERT exactly as it would for direct table writes. No `SECURITY DEFINER` unless there is a specific reason to elevate; defaulting to `INVOKER` keeps RLS the single source of truth.
+- `SET search_path = ''` with every reference qualified `public.*` (Supabase advisor `0011_function_search_path_mutable`).
+- `EXECUTE` revoked from both `public` and `anon`, then granted only to `authenticated`. Supabase's project-bootstrap default-privileges run `grant execute ... to anon, authenticated, service_role` on every new function in `public` — so `anon` ends up with a direct grant that survives a `revoke from public`. Both revokes are required.
+- Input shape guard at the top of the function body — `raise exception` on NULL or non-array `jsonb` payloads. Without this, `jsonb_array_elements(null)` returns zero rows silently and an unguarded DELETE-then-INSERT would silently wipe the collection.
+- Where ordering matters, derive `order_index` from array position via `WITH ORDINALITY` rather than trusting a caller-supplied `order_index` field. The array IS the order; this eliminates the "two rows with the same order_index" failure mode at the source.
+
+**Forward applicability:** any future Server Action that does atomic multi-statement writes on a parent-children pair should follow this pattern. Reference implementation: `supabase/migrations/010a_save_project_media_rpc.sql`.
 
 ---
 
