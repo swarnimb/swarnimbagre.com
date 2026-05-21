@@ -1,6 +1,7 @@
 import { getImageById, getPublishedProjects } from './db';
 import { getImageUrl } from './images';
-import type { Project } from './types';
+import { loadPublicProjectMedia } from './public-project-media';
+import type { Project, PublicProjectMediaItem } from './types';
 
 /**
  * Public-render-ready project shape.
@@ -11,7 +12,10 @@ import type { Project } from './types';
  * components (`ProjectRow`, `ProjectCard`) without any further DB or
  * Storage access.
  *
- * Introduced in T42 Session B.
+ * Introduced in T42 Session B. Extended in T43.D (2026-05-20) with the
+ * `media` field — the carousel-ready rows from `public.project_media`.
+ * `imageUrl` / `imageAfterUrl` are retained as a fallback for projects that
+ * have not yet been migrated to media rows.
  */
 export interface PublicProject {
   id: string;
@@ -25,14 +29,24 @@ export interface PublicProject {
   postUrl: string | null;
   imageUrl: string | null;
   imageAfterUrl: string | null;
+  /**
+   * Carousel-ready media rows ordered by `order_index` ASC. Empty array when
+   * the project has zero `project_media` rows — in that case the render
+   * surface falls back to `imageUrl` / `imageAfterUrl` above (T43.D).
+   */
+  media: PublicProjectMediaItem[];
 }
 
 /**
- * Fetch all published projects and pre-resolve their image URLs for the
- * public render surface.
+ * Fetch all published projects and pre-resolve their image URLs and media
+ * carousel rows for the public render surface.
  *
  * Image resolution failures are isolated per-row: a failed URL becomes
  * `null` and is logged, but the row still renders (without the image).
+ * Media-query failures are isolated per-project: a failed media query
+ * returns `[]` for that project's `media` field (and is logged) so a single
+ * project's media issue cannot fail the whole list render.
+ *
  * The function as a whole throws only on the underlying `getPublishedProjects`
  * failure — that error is caught at the page-level `safeLoad` boundary.
  *
@@ -45,14 +59,16 @@ export async function loadPublicProjects(): Promise<PublicProject[]> {
 }
 
 /**
- * Convert a raw `Project` row to a `PublicProject` with image URLs resolved.
+ * Convert a raw `Project` row to a `PublicProject` with image URLs and media
+ * rows resolved.
  *
  * @param row The DB row.
  */
 async function toPublicProject(row: Project): Promise<PublicProject> {
-  const [imageUrl, imageAfterUrl] = await Promise.all([
+  const [imageUrl, imageAfterUrl, media] = await Promise.all([
     resolveImageUrl(row.image_id, row.id, 'image_id'),
     resolveImageUrl(row.image_after_id, row.id, 'image_after_id'),
+    loadProjectMediaSafe(row.id),
   ]);
   return {
     id: row.id,
@@ -66,6 +82,7 @@ async function toPublicProject(row: Project): Promise<PublicProject> {
     postUrl: row.post_url,
     imageUrl,
     imageAfterUrl,
+    media,
   };
 }
 
@@ -98,5 +115,28 @@ async function resolveImageUrl(
       stack: error instanceof Error ? error.stack : undefined,
     });
     return null;
+  }
+}
+
+/**
+ * Load a project's media rows with per-project failure isolation. A failed
+ * media query returns `[]` (and is logged) so a single project's media issue
+ * cannot fail the whole list render. Mirrors `resolveImageUrl`'s per-item
+ * isolation pattern at the project granularity (T43.D).
+ *
+ * @param projectId The owning project id, used both as the query argument
+ *                  and as log context.
+ */
+async function loadProjectMediaSafe(projectId: string): Promise<PublicProjectMediaItem[]> {
+  try {
+    return await loadPublicProjectMedia(projectId);
+  } catch (error) {
+    console.error('[public-projects] project media load failed', {
+      operation: 'loadProjectMediaSafe',
+      projectId,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    return [];
   }
 }

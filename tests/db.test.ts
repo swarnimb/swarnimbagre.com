@@ -6,9 +6,10 @@ import {
   getProjectBySlug,
   getPostBySlug,
   getStatsByCategory,
+  getProjectMediaByProject,
 } from '@/lib/db';
 import { ServiceError } from '@/lib/errors';
-import type { Project, Post, Stat } from '@/lib/types';
+import type { Project, Post, Stat, ProjectMedia } from '@/lib/types';
 
 /**
  * Build a stub Supabase client whose chained query terminal resolves with the
@@ -243,6 +244,57 @@ describe('getStatsByCategory', () => {
     await expect(getStatsByCategory(stub)).rejects.toBeInstanceOf(ServiceError);
     await expect(getStatsByCategory(stub)).rejects.toMatchObject({
       operation: 'getStatsByCategory',
+    });
+  });
+});
+
+/** Sample `project_media` row that satisfies the ProjectMedia type. */
+const SAMPLE_MEDIA: ProjectMedia = {
+  id: 'm1',
+  project_id: 'p1',
+  image_id: 'img-1',
+  image_after_id: null,
+  caption: null,
+  order_index: 0,
+  created_at: '2026-05-20T00:00:00.000Z',
+};
+
+describe('getProjectMediaByProject', () => {
+  it('returns rows when the database returns data', async () => {
+    const stub = makeStub({ data: [SAMPLE_MEDIA], error: null });
+    const result = await getProjectMediaByProject('p1', stub);
+    expect(result).toEqual([SAMPLE_MEDIA]);
+  });
+
+  it('returns an empty array when the project has no media rows', async () => {
+    const stub = makeStub({ data: [], error: null });
+    const result = await getProjectMediaByProject('p1', stub);
+    expect(result).toEqual([]);
+  });
+
+  it('throws a ServiceError tagged with the operation when projectId is an empty string', async () => {
+    const stub = makeStub({ data: null, error: null });
+    await expect(getProjectMediaByProject('', stub)).rejects.toBeInstanceOf(ServiceError);
+    await expect(getProjectMediaByProject('', stub)).rejects.toMatchObject({
+      operation: 'getProjectMediaByProject',
+    });
+  });
+
+  it('throws a ServiceError tagged with the operation when projectId is not a string', async () => {
+    const stub = makeStub({ data: null, error: null });
+    await expect(
+      getProjectMediaByProject(null as unknown as string, stub),
+    ).rejects.toBeInstanceOf(ServiceError);
+    await expect(
+      getProjectMediaByProject(null as unknown as string, stub),
+    ).rejects.toMatchObject({ operation: 'getProjectMediaByProject' });
+  });
+
+  it('throws a ServiceError tagged with the operation when the database fails', async () => {
+    const stub = makeStub({ data: null, error: DB_ERROR });
+    await expect(getProjectMediaByProject('p1', stub)).rejects.toBeInstanceOf(ServiceError);
+    await expect(getProjectMediaByProject('p1', stub)).rejects.toMatchObject({
+      operation: 'getProjectMediaByProject',
     });
   });
 });

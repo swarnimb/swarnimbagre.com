@@ -12,13 +12,23 @@ vi.mock('@/lib/images', () => ({
   getImageUrl: vi.fn(),
 }));
 
+vi.mock('@/lib/public-project-media', () => ({
+  loadPublicProjectMedia: vi.fn(),
+}));
+
 const { getPublishedProjects, getImageById } = await import('@/lib/db');
 const { getImageUrl } = await import('@/lib/images');
+const { loadPublicProjectMedia } = await import('@/lib/public-project-media');
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | undefined;
 
 beforeEach(() => {
   consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  // T43.D: existing tests exercise `loadPublicProjects` without media. Default
+  // the new dependency to `[]` so each test only has to override when it
+  // specifically wants populated media (none currently do — T43.D's media
+  // coverage lives in `tests/public-project-media.test.ts`).
+  vi.mocked(loadPublicProjectMedia).mockResolvedValue([]);
 });
 
 afterEach(() => {

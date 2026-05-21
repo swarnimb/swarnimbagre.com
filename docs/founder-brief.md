@@ -40,6 +40,7 @@ This file is the plain-language record of every architectural decision. The audi
 | 26 | `/api/admin/*` route handlers self-gate via `getServerSession()` (F-17) | [§6.6.4](architecture.md#664-apiadmin-route-handler-gate-f-17-audit-pass-5) |
 | 27 | Admin theming tokens declared at `:root` to survive Radix portal escape | [§4.2](architecture.md#42-tailwind-scoping-decision-3--resolves-assumption-04) |
 | 28 | Project content-model expansion — 6 nullable columns + Override 1 (T42) | [§2.1](architecture.md#21-projects) + `design-decisions.md` Override 1 |
+| 29 | Override 2 — embla-carousel-react opens public-site JS-library posture with byte budget (T43.B) | [§1.2](architecture.md#12-frontend-libraries) + `design-decisions.md` Override 2 |
 
 ---
 
@@ -608,6 +609,24 @@ wall-clock proves the wrapper ran end-to-end).
 **What this closes off:** Progress as anything other than an integer percent — lifecycle stages, multi-stage rings, named milestones — now becomes a migration. A 4th link slot is a migration (or a Shape B / Shape C revisit). A video-demo type is a new component plus a new Storage path (the current path is screenshots only for v1; clips were deferred post-launch).
 
 **Implemented in:** T42 Session A (schema + admin form) and Session B (public render desktop), 2026-05-19. Migration `009_projects_expand.sql` applied to prod. New code: `components/public/ProgressRing.tsx`, `lib/public-projects.ts`, four test files (+35 tests, suite at 259/259). Modified: `ProjectRow`, `ProjectCard`, `ProjectMedia`, `BeforeAfterMedia`, public Home and Projects pages, app routes. `StillMedia` bundle-dummy bypassed for the real-image path because the dummy has no image-input slot — direct `<img>` matches `renderRealImage` styling from `BeforeAfterMedia` to keep visual continuity (falls under Override 1).
+
+---
+
+## 2026-05-20 — Override 2 — embla-carousel-react opens public-site JS-library posture with byte budget (T43.B)
+
+**Architecture reference:** [§1.2 Frontend libraries](architecture.md#12-frontend-libraries) + `design-decisions.md` Override 2 (lines 123–185) + `constraints.md` CONSTRAINT-05 (override pointer; CONSTRAINT-22 codification deferred to T43.I)
+
+**Decided:** Add `embla-carousel-react` ^8 to the public site as the first runtime JS dependency. The public-site posture narrows from "no JS libraries at all" (the original CONSTRAINT-05 bundle-verbatim reading) to "JS libraries are allowed only via a named Override entry in `design-decisions.md` with a measured byte budget pinned in the Override." Override 2's budget is **15 KB gzip** with 3 KB headroom above the measured baseline of ~11.7 KB across three packages (`embla-carousel-react` + transitive `embla-carousel` core + `embla-carousel-reactive-utils`). Real production-route-chunk delta will be re-measured at T43.G against the same 15 KB ceiling. Recovered as a retroactive Founder Brief at S34 `@end-session` — the original Founder Brief was issued in the `@cto` consult body but lost at the prior `/clear`; full reconstruction here based on session-log details.
+
+**Means for your product:** The project media carousel ships with battle-tested touch + keyboard + accessibility behavior at a known, capped cost (~12 KB gzip — a fraction of one screenshot). Future patch upgrades of embla have explicit headroom built in. More importantly: any next library proposal must come in through the same gate — named Override entry, measured byte budget, `@cto` review on the budget number. The "we just install whatever feels right" drift back into framework-by-default thinking is closed off.
+
+**Why this over scroll-snap + custom JS:** `@cto` consult weighed scroll-snap as the budget-zero alternative. Rejected because: (a) custom JS would need to re-implement the dot indicators, arrow keys, swipe physics, focus management, and ARIA roles embla provides out of the box — net new bug surface vs. battle-tested library; (b) bundle delta is ~12 KB gzip total, smaller than a single project screenshot, so the cost is non-material; (c) the doctrine narrowing ("Overrides + byte budget" instead of "no libraries ever") is more honest about how this codebase will evolve than a "we never use libraries" stance that always eventually breaks.
+
+**Check before approving (you already did at S34 mid-session):** Are you OK that the no-library purity of the public site is now formally relaxed? (Yes — accepted at the `@cto` consult.) Are you OK with the 15 KB ceiling being a hard tripwire requiring `@cto` re-consult to raise? (Yes — exactly the discipline you wanted.) Are you OK that future libraries must go through a named Override entry instead of just `npm install`? (Yes — that's the boundary that prevents drift.)
+
+**What this closes off:** Subsequent public-site library proposals are no longer "absolute no" but require Override + budget + `@cto` approval — meaning every future library decision is a deliberate doctrine event, not a habit. Bundle-baseline measurement becomes part of every public-site dep-add task spec (T43.B's "halt + `@cto` consult if > ceiling" gate becomes the template). Once embla actually ships at T43.G, the real production-route chunk delta must be re-measured against 15 KB — if real delta exceeds budget, that requires another `@cto` revisit rather than silent absorption.
+
+**Implemented in:** T43.B (2026-05-20, Session 34). `package.json` + `package-lock.json` (embla 8.6.0 + 2 transitive); `docs/architecture.md` §1.2 ("One runtime JS dependency... budget ceiling 15 KB gzip per Override 2"); `docs/design-decisions.md` Override 2 budget block (15 KB ceiling, ~11.7 KB current baseline, 3 KB headroom, real-bundle confirmation deferred to T43.G); `docs/plan-phase-4-launch.md` naming reconciliation (v8 renamed `embla-carousel-core` → `embla-carousel`) + T43.B tripwire updated (10 → 15 KB) + T43.G acceptance criterion added (re-measure against ceiling) + CONSTRAINT-22 wording pre-staged at T43.I. Commit `efa294b`. CONSTRAINT-22 codification — the formal text in `constraints.md` — happens at T43.I cross-doc closure per plan.
 
 ---
 

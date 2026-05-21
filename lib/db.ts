@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServerClient } from './supabase';
 import { ServiceError } from './errors';
-import type { Project, Post, Stat, ImageRecord } from './types';
+import type { Project, Post, Stat, ImageRecord, ProjectMedia } from './types';
 
 /**
  * Column projection for project list and detail queries.
@@ -24,6 +24,16 @@ const STAT_COLUMNS = 'id, category, label, value, unit, created_at';
 
 /** Column projection for image queries. */
 const IMAGE_COLUMNS = 'id, bucket_path, alt_text, parent_id, parent_type, created_at';
+
+/**
+ * Column projection for `project_media` queries (T43.D).
+ *
+ * Snake-case mirror of the migration 010 row shape. Kept identical to the
+ * admin-side projection in `lib/admin-queries-project-media.ts` so a single
+ * `as ProjectMedia[]` cast on either side is a structural identity.
+ */
+const PROJECT_MEDIA_COLUMNS =
+  'id, project_id, image_id, image_after_id, caption, order_index, created_at';
 
 /** Status literal used to filter public reads. */
 const PUBLISHED = 'published';
@@ -226,4 +236,49 @@ export async function getImageById(
     throw new ServiceError(`${operation} failed`, { cause: error, operation });
   }
   return (data ?? null) as ImageRecord | null;
+}
+
+/**
+ * Fetch every `project_media` row for a project, ordered by `order_index` ASC.
+ *
+ * Public read surface — `status='published'` is NOT applied: the project's
+ * own publication state already gates whether this query is reached, and
+ * `project_media` rows have no independent status (T43 spec). RLS still
+ * gates access: anon callers see only rows whose parent project is published
+ * (`project_media_public_read` policy, migration 010).
+ *
+ * Mirrors `getPublishedProjects` shape (projection + thenable terminal + throw
+ * on error). The admin-side equivalent lives in
+ * `lib/admin-queries-project-media.ts` and uses `logQueryError` instead of
+ * `logDbError`.
+ *
+ * @param projectId Owning project UUID. Must be a non-empty string.
+ * @param client    Optional injected client (for tests). Defaults to a
+ *                  request-scoped server client.
+ * @returns Array of media rows in `order_index` ASC order. Empty array if
+ *          the project has no media (or none visible to the caller under RLS).
+ * @throws  ServiceError on invalid input or any database error.
+ */
+export async function getProjectMediaByProject(
+  projectId: string,
+  client?: SupabaseClient,
+): Promise<ProjectMedia[]> {
+  const operation = 'getProjectMediaByProject';
+  if (typeof projectId !== 'string' || projectId.length === 0) {
+    throw new ServiceError('invalid projectId argument', {
+      operation,
+      cause: new Error(`projectId must be a non-empty string, got: ${typeof projectId}`),
+    });
+  }
+  const supabase = client ?? (await createServerClient());
+  const { data, error } = await supabase
+    .from('project_media')
+    .select(PROJECT_MEDIA_COLUMNS)
+    .eq('project_id', projectId)
+    .order('order_index', { ascending: true });
+  if (error) {
+    logDbError(operation, error);
+    throw new ServiceError(`${operation} failed`, { cause: error, operation });
+  }
+  return (data ?? []) as ProjectMedia[];
 }

@@ -32,6 +32,14 @@ export interface Project {
   slug: string;
   description: string;
   status: ProjectStatus;
+  /**
+   * @deprecated since T43 (migration 010, 2026-05-20) — superseded by rows in
+   * `public.project_media` linked by `project_id`. Retained for backward
+   * compatibility with rows authored before T43 (the public render falls back
+   * to `image_id` / `image_after_id` when a project has zero `project_media`
+   * rows). The deprecation window stays open-ended pending a backfill audit;
+   * CONSTRAINT-22 will formalize the schedule at T43.I.
+   */
   image_id: string | null;
   created_at: string;
   updated_at: string;
@@ -40,6 +48,11 @@ export interface Project {
   post_url: string | null;
   progress_percent: number | null;
   thumb_kind: ThumbKind | null;
+  /**
+   * @deprecated since T43 (migration 010, 2026-05-20) — superseded by the
+   * `image_after_id` column on `project_media` rows. Same rationale and
+   * deprecation window as the legacy `image_id` field above.
+   */
   image_after_id: string | null;
 }
 
@@ -76,4 +89,46 @@ export interface ImageRecord {
   parent_id: string | null;
   parent_type: 'projects' | 'posts' | null;
   created_at: string;
+}
+
+/**
+ * A media row attached to a project. One row in `public.project_media`
+ * (migration 010, T43 Override 2). Each row is one carousel slide. Up to
+ * 20 rows per project — enforced by trigger `project_media_enforce_row_cap`.
+ *
+ * The pair shape (`image_id` + `image_after_id`) holds an optional
+ * before/after slide; when `image_after_id` is null the row is a
+ * single-image slide. `caption` is plain text only (no markdown — T43
+ * Override 2 spec). `order_index` is the carousel order, ASC.
+ *
+ * Snake-case mirror of the DB row, per the file-level convention.
+ */
+export interface ProjectMedia {
+  id: string;
+  project_id: string;
+  image_id: string;
+  image_after_id: string | null;
+  caption: string | null;
+  order_index: number;
+  created_at: string;
+}
+
+/**
+ * Render-ready carousel item built from a `ProjectMedia` row plus pre-resolved
+ * signed Storage URLs. Built by `loadPublicProjectMedia` in
+ * `lib/public-project-media.ts`; consumed by `ProjectMediaCarousel` and
+ * `MobileProjectMediaCarousel` (T43 Override 2).
+ *
+ * Held in `types.ts` rather than next to its builder because it is also
+ * referenced by `PublicProject.media` in `lib/public-projects.ts`; centralising
+ * the type avoids a circular import.
+ */
+export interface PublicProjectMediaItem {
+  id: string;
+  imageUrl: string | null;
+  imageAlt: string;
+  imageAfterUrl: string | null;
+  imageAfterAlt: string | null;
+  caption: string | null;
+  orderIndex: number;
 }
