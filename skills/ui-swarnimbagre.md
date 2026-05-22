@@ -1,7 +1,7 @@
 # Skill: @ui-swarnimbagre
 
 ## Purpose
-Routes UI tasks for swarnimbagre.com to the correct mode based on target path. Replaces the standard global `@ui` skill for this project. The public site (`site/*` and any non-`/admin` route) uses the verbatim design bundle; the admin panel (`/admin/*`) uses shadcn/ui + Tailwind. This skill enforces that split — it does not invent patterns, and it does not let one mode bleed into the other.
+Routes UI tasks for swarnimbagre.com to the correct mode based on target path. Replaces the standard global `@ui` skill for this project. The public site (`components/public/*` plus the non-`/admin` route pages under `app/`) uses the verbatim design bundle; the admin panel (`/admin/*`) uses shadcn/ui + Tailwind. This skill enforces that split — it does not invent patterns, and it does not let one mode bleed into the other.
 
 ---
 
@@ -11,7 +11,7 @@ Routes UI tasks for swarnimbagre.com to the correct mode based on target path. R
 Reports the two modes (Public, Admin), restates the canonical-source rule from `docs/design-decisions.md`, and asks which mode the task targets. Does nothing else until a target path is confirmed.
 
 ### `@ui-swarnimbagre public [target]`
-Mode A — Public site work. Touches files under `site/*` or any non-`/admin` route. Uses the existing component bundle verbatim — no library substitutions, no improvisation.
+Mode A — Public site work. Touches files under `components/public/*` or any non-`/admin` route page under `app/`. Uses the existing component bundle verbatim — no library substitutions, no improvisation.
 
 ### `@ui-swarnimbagre admin [target]`
 Mode B — Admin panel work. Touches files under `/admin/*`. Uses shadcn/ui + Tailwind with eight namespaced `--admin-*` tokens (4 brand + 4 semantic) defined in `app/styles/admin.css`. Hex values for 3 of the 4 semantic tokens (`--admin-destructive`, `--admin-border`, `--admin-muted-fg`) match public palette siblings in `app/styles/colors_and_type.css` for brand coherence. See CONSTRAINT-16.
@@ -24,19 +24,19 @@ Before executing:
 1. Read `docs/design-decisions.md` — this is the only valid pattern source for both modes. If it is missing or stale, stop and surface this.
 2. Confirm the target path of the task. If the path is ambiguous (e.g., a shared utility, a top-level layout file), ask the builder which mode applies before writing any code.
 3. Confirm the correct mode (Public vs Admin) explicitly with the builder before writing any code. Do not infer mode silently.
-4. For Public mode: confirm `site/components.jsx`, `site/mobile-components.jsx`, and `site/colors_and_type.css` exist and are readable. If a needed pattern does not exist in the bundle, stop and recommend `@designer` — do not improvise.
+4. For Public mode: confirm the ported bundle components under `components/public/*.tsx` (desktop) and `components/public/mobile/*.tsx` (mobile), and the CSS variables in `app/styles/colors_and_type.css`, exist and are readable. The canonical design source is the bundle at `docs/design-source/personal-site-web/`. If a needed pattern does not exist in the bundle, stop and recommend `@designer` — do not improvise.
 5. For Admin mode: confirm shadcn/ui + Tailwind are set up in the project. If admin tooling is not yet in place, surface this to `@cto` / `@supabase` as a setup prerequisite before proceeding.
 
 ---
 
 ## Process
 
-### Mode A — Public site (`site/*` or any non-`/admin` route)
+### Mode A — Public site (`components/public/*` or any non-`/admin` route page under `app/`)
 
-1. Use existing components from `site/components.jsx` (desktop) and `site/mobile-components.jsx` (mobile) verbatim. Import and compose; do not duplicate or reimplement.
-2. Style only via the CSS variables defined in `site/colors_and_type.css`. No new tokens. No overrides. No "close enough" substitutes.
+1. Use the existing ported bundle components under `components/public/*.tsx` (desktop) and `components/public/mobile/*.tsx` (mobile) verbatim. Import and compose; do not duplicate or reimplement.
+2. Style only via the CSS variables defined in `app/styles/colors_and_type.css`. No new tokens. No overrides. No "close enough" substitutes.
 3. NO Tailwind. NO shadcn. NO Aceternity. NO Magic UI. NO library substitutions of any kind. The bundle is the library.
-4. New components extend the existing files (`site/components.jsx`, `site/mobile-components.jsx`) — they do not replace them and they do not live in separate files unless the bundle's structure already does so.
+4. New public components are added as their own `.tsx` files under `components/public/` (desktop) or `components/public/mobile/` (mobile) — one component per file, matching the existing post-Next.js-migration structure. Do not replace or rewrite the existing ported components.
 5. Match the bundle exactly: same hex codes, same px values, same font weights (Fraunces / Inter / JetBrains Mono only), same spacing tokens, same animation timing (220ms `cubic-bezier(.2, .7, .2, 1)`). "Similar-looking" is not acceptable.
 6. Enforce the bundle's anti-patterns: no rounded pill cards (max 12px on mobile section buttons, 4px or 0 elsewhere), no shadows, no SaaS phrases, no emoji, no logo brands, no external images, no external fonts beyond the three already used, no page-load animations, no scroll-triggered animations, no opacity-based hover states, no deep-shadow buttons, no standard form chrome, no background gradients (except inside `DemoLoop` SVG scenes), no nested anchors, no blue.
 7. If a needed pattern does not exist in the bundle: STOP. Do not improvise. Recommend `@designer` consult before continuing.
@@ -44,7 +44,7 @@ Before executing:
 ### Mode B — Admin (`/admin/*`)
 
 1. Use shadcn/ui components and Tailwind for all layout, forms, tables, modals, dropdowns, file upload UIs, and any other CRUD chrome. Use shadcn defaults — do not customize back toward the public-site aesthetic.
-2. Borrow ONLY these four color tokens from `site/colors_and_type.css` (apply via Tailwind theme config or CSS custom properties):
+2. Borrow ONLY these four color tokens from `app/styles/colors_and_type.css` (apply via Tailwind theme config or CSS custom properties):
    - Background: `--bg` (#1C1712)
    - Surface: `--surface` (#252018)
    - Body text: `--fg` (#E8E0D0)
@@ -64,8 +64,8 @@ For both modes: present the planned approach (which components used or extended,
 
 ## Output Format
 
-- Public mode: edits land in existing files (`site/components.jsx`, `site/mobile-components.jsx`, `site/pages/*.jsx`, `site/pages-mobile/*.jsx`, `site/colors_and_type.css`). New components are appended to the existing component files unless the bundle's structure dictates otherwise.
-- Admin mode: edits land in `/admin/*` route files (path confirmed at `@plan` time — likely `app/admin/*` after Next.js migration, or `site/admin/*` in the interim). Tailwind config and shadcn component installs go in their conventional locations.
+- Public mode: edits land in `components/public/*.tsx` (desktop components), `components/public/mobile/*.tsx` (mobile components), `app/*/page.tsx` (public route pages), and `app/styles/colors_and_type.css` (CSS variables). Each new component is its own `.tsx` file under `components/public/`.
+- Admin mode: edits land in `app/(admin)/*/page.tsx` (admin route pages) and `components/admin/*.tsx` (admin components). Tailwind config and shadcn component installs go in their conventional locations; admin styles live in `app/styles/admin.css`.
 
 Every output starts with: which mode applies, which files will be touched, and which tokens or components will be reused.
 

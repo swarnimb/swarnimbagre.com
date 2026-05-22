@@ -805,21 +805,21 @@ interface ProjectMediaMutationState {
 - Caption render: when active slide has a `caption`, render below the slide in muted meta type per `@designer` spec from T43.A.
 
 **Acceptance criteria — PRD §2.3a G/W/T:**
-- [ ] Multi-slide carousel: dots + arrows + horizontal swipe + keyboard ←/→ all functional. No auto-advance. No loop — `loop: false` in embla options; boundary slides disable the corresponding arrow button.
-- [ ] Single-slide carousel: no nav chrome. Renders the slide static.
-- [ ] Zero-slide carousel: returns `null` (caller renders nothing).
-- [ ] Active-slide caption renders below the image in muted meta type when present.
-- [ ] Screen-reader live region announces "Slide N of M, [alt text]" when active slide changes. Implementation: `aria-live="polite"` element keyed off the embla `select` event.
-- [ ] `prefers-reduced-motion: reduce` honored: embla `duration: 0` when the media query matches.
-- [ ] Pair-row divider drag does NOT advance the carousel — drag within the divider hit area is consumed.
-- [ ] Multi-instance DOM ID hygiene: `React.useId()` for the `aria-controls` / `aria-labelledby` / dot button IDs.
-- [ ] CONSTRAINT-05 Override 2 boundary: this is the only public-site component using a JS library. The verbatim-bundle rule applies everywhere outside `ProjectMediaCarousel` + the embla dep.
-- [ ] All styling uses CSS variables from `colors_and_type.css`. No Tailwind. No inline library defaults.
-- [ ] Arrow + dot button labels are typographic glyphs only (`←`, `→`, `•`) — CONSTRAINT-13. ARIA labels: `aria-label="Slide 1"` etc. (short, no prose).
-- [ ] `ProjectMediaCarousel.tsx` ≤200 lines (CQ-02).
-- [ ] `BeforeAfterMedia.tsx` post-refactor ≤200 lines (closes S31 CQ-02 MAJOR carry-forward).
-- [ ] Bundle delta verified: T43.B + T43.G commits combined add ≤10 KB gzip to the public-route entry chunk.
-- [ ] Run `npm run build`, diff the route chunk size for `/projects/[slug]` (and `/projects` list page if also affected) against pre-T43 baseline. Confirm production-bundle delta ≤15 KB gzip on the route chunk that loads `ProjectMediaCarousel`. If >15 KB, escalate to `@cto` before T43.G close.
+- [x] Multi-slide carousel: dots + arrows + horizontal swipe + keyboard ←/→ all functional. No auto-advance. No loop — `loop: false` in embla options; boundary slides disable the corresponding arrow button.
+- [x] Single-slide carousel: no nav chrome. Renders the slide static.
+- [x] Zero-slide carousel: returns `null` (caller renders nothing).
+- [x] Active-slide caption renders below the image in muted meta type when present.
+- [x] Screen-reader live region announces "Slide N of M, [alt text]" when active slide changes. Implementation: `aria-live="polite"` element keyed off the embla `select` event.
+- [x] `prefers-reduced-motion: reduce` honored: embla `duration: 0` when the media query matches.
+- [x] Pair-row divider drag does NOT advance the carousel — drag within the divider hit area is consumed.
+- [x] Multi-instance DOM ID hygiene: `React.useId()` for the `aria-controls` / `aria-labelledby` / dot button IDs.
+- [x] CONSTRAINT-05 Override 2 boundary: this is the only public-site component using a JS library. The verbatim-bundle rule applies everywhere outside `ProjectMediaCarousel` + the embla dep.
+- [x] All styling uses CSS variables from `colors_and_type.css`. No Tailwind. No inline library defaults.
+- [x] Arrow + dot button labels are typographic glyphs only (`←`, `→`, `•`) — CONSTRAINT-13. ARIA labels: `aria-label="Slide 1"` etc. (short, no prose).
+- [x] `ProjectMediaCarousel.tsx` ≤200 lines (CQ-02). — 198 lines; presentational sub-components extracted to `ProjectMediaCarouselParts.tsx` (164).
+- [x] `BeforeAfterMedia.tsx` post-refactor ≤200 lines (closes S31 CQ-02 MAJOR carry-forward). — 161 lines; bundle-fallback CSS scenes extracted to `BeforeAfterMediaScenes.tsx` (91).
+- [~] Bundle delta verified: T43.B + T43.G commits combined add ≤10 KB gzip to the public-route entry chunk. — **DEFERRED to T43.H.** `ProjectMediaCarousel` is not yet imported by any route, so it is in no route chunk and the T43.G entry-chunk delta is 0. embla measured standalone at ~11.4 KB gzip (within the 15 KB Override 2 budget). Real combined route-chunk delta is measurable only once T43.H wires the carousel in.
+- [~] Run `npm run build`, diff the route chunk size for `/projects/[slug]` (and `/projects` list page if also affected) against pre-T43 baseline. Confirm production-bundle delta ≤15 KB gzip on the route chunk that loads `ProjectMediaCarousel`. If >15 KB, escalate to `@cto` before T43.G close. — **DEFERRED to T43.H** (same reason). `npm run build` runs clean (exit 0, 19 routes); `/projects` and `/projects/[slug]` chunks are unchanged because nothing references the carousel yet. The route-chunk diff + ≤15 KB gate + `@cto` escalation transfer to T43.H.
 
 **Tests required:**
 - `tests/ProjectMediaCarousel.test.tsx` describe →
@@ -836,6 +836,8 @@ interface ProjectMediaMutationState {
 **Depends on:** T43.A, T43.B, T43.D
 
 **Specialist:** `@ui-swarnimbagre` (public bundle mode + Override 2 boundary author)
+
+**Closed:** 2026-05-21, Session 38. **Commit `5afac09`.** 13/15 acceptance criteria PASS; 2 deferred with reason (bundle route-chunk delta + ≤15 KB build-diff gate → T43.H — `ProjectMediaCarousel` is not yet wired into any route chunk; wiring lands at T43.H). Files: `components/public/ProjectMediaCarousel.tsx` 198, `ProjectMediaCarouselParts.tsx` 164 (coordination-vs-render split — legit per `@code-review`, not cap-dodging), `BeforeAfterMedia.tsx` 161 + extracted `BeforeAfterMediaScenes.tsx` 91 (CSS-scenes extract, public interface byte-identical — closes the S31 CQ-02 MAJOR carry-forward), `tests/ProjectMediaCarousel.test.tsx` + `tests/e2e/public-carousel.spec.ts`. 394/394 vitest (+9 new); `next build` exit 0, 19 routes; embla ~11.4 KB gzip standalone (within the 15 KB Override 2 budget). `@code-review` PASS WITH MINOR — 0 gating; the mandatory SSR/hydration audit ran clean on all 3 bug classes; 2 advisory fixed (hollow e2e assertion removed; `dotGap`→`dotPitch` rename); CQ-A1 (`prefersReducedMotion` in render body) reviewed — confirmed not a hydration bug, left as-is. `@security` audit 21 CLEAR (0 Critical / 0 High / 0 Medium / 0 Low new; render-only — no XSS, secrets, or DB/auth surface; F-3 / F-4 / F-37 carry-forwards untouched). Signature note: a `view: 'list' | 'detail'` prop was added to the plan's documented `{ media, ariaLabel }` signature — Override 2's list/detail chrome sizing requires it; flag at T43.I doc close-out. e2e spec created but execution deferred to T43.H (needs the carousel wired into a route + a multi-media seed project).
 
 ---
 
