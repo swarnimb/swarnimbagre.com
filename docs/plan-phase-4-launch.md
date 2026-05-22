@@ -854,14 +854,14 @@ interface ProjectMediaMutationState {
 **Functions to implement:** No new functions — additive prop wiring + page-loader call updates.
 
 **Acceptance criteria — PRD §2.3 + §2.3a:**
-- [ ] PRD §2.3 G/W/T: `/projects` list — project with `project_media` rows renders carousel in card's image slot; project with zero rows shows no image area.
-- [ ] PRD §2.3a G/W/T: `/projects/[slug]` — detail page renders same carousel above the card content (or in the card's image slot, matching the list-card layout). Container size differs (detail = larger); carousel chrome size adapts per `@designer` spec from T43.A.
-- [ ] Backward-compat: existing projects with `image_id` / `image_after_id` set and no `project_media` rows render exactly as they do today (legacy fallback path in `ProjectMedia.tsx`). No visual regression.
-- [ ] CONSTRAINT-05 additive-prop carve-out honored: when `media` prop is undefined OR `[]`, ProjectCard renders byte-identically to its pre-T43 output.
-- [ ] CONSTRAINT-14 `safeLoad` discipline: page-level loaders wrap `loadPublicProjectMedia` calls in `safeLoad` per project — a failure for one project's media nulls the carousel for that card only, not the whole page.
-- [ ] CONSTRAINT-15: every URL in `media` is a signed URL with TTL 3600s (already guaranteed by `loadPublicProjectMedia` from T43.D).
-- [ ] Mobile mirror: `MobileProjectCard` renders carousel identically on iPhone viewport. Touch-emulation Playwright assertion in T43.G covers this.
-- [ ] No console errors on `/projects` or `/projects/[slug]` (CQ-05).
+- [x] PRD §2.3 G/W/T: `/projects` list — project with `project_media` rows renders carousel in card's image slot; project with zero rows shows no image area.
+- [x] PRD §2.3a G/W/T: `/projects/[slug]` — detail page renders same carousel above the card content (or in the card's image slot, matching the list-card layout). Container size differs (detail = larger); carousel chrome size adapts per `@designer` spec from T43.A.
+- [x] Backward-compat: existing projects with `image_id` / `image_after_id` set and no `project_media` rows render exactly as they do today (legacy fallback path in `ProjectMedia.tsx`). No visual regression.
+- [x] CONSTRAINT-05 additive-prop carve-out honored: when `media` prop is undefined OR `[]`, ProjectCard renders byte-identically to its pre-T43 output.
+- [x] CONSTRAINT-14 `safeLoad` discipline: page-level loaders wrap `loadPublicProjectMedia` calls in `safeLoad` per project — a failure for one project's media nulls the carousel for that card only, not the whole page.
+- [x] CONSTRAINT-15: every URL in `media` is a signed URL with TTL 3600s (already guaranteed by `loadPublicProjectMedia` from T43.D).
+- [x] Mobile mirror: `MobileProjectCard` renders carousel identically on iPhone viewport. Touch-emulation Playwright assertion in T43.G covers this.
+- [x] No console errors on `/projects` or `/projects/[slug]` (CQ-05).
 
 **Tests required:**
 - `tests/ProjectCard.test.tsx` — extend existing tests: `media` prop with rows renders carousel; `media` undefined or empty falls back to legacy single-image branch (regression for backward-compat) (TS-01).
@@ -871,6 +871,8 @@ interface ProjectMediaMutationState {
 **Depends on:** T43.G
 
 **Specialist:** `@ui-swarnimbagre` (public bundle mode)
+
+**Closed:** 2026-05-21, Session 39. **Commit `0029072`.** All 8 acceptance criteria PASS. `ProjectMediaCarousel` (built T43.G) wired into the public render surface. Files (mod): `components/public/ProjectMedia.tsx` (optional `media` + `view` props; branches to the carousel when `media` rows exist, else the legacy `imageUrl`/`imageAfterUrl` path — CONSTRAINT-05 additive carve-out), `ProjectCard.tsx` + `components/public/mobile/MobileProjectCard.tsx` (both forward `media` + `view`), `components/public/pages/Projects.tsx` + `components/public/mobile/pages/Projects.tsx` (thread `project.media`), `app/projects/[slug]/page.tsx` (`loadPublicProjectMedia` via `safeLoad`, `view="detail"`). Tests: `tests/ProjectCard.test.tsx` created, `tests/ProjectMedia.test.tsx` + `tests/MobileProjectCard.test.tsx` extended — vitest 411/411 (+17); `tests/e2e/public-carousel.spec.ts` swipe-test drag-distance fix — e2e 3/3. `next build` exit 0; bundle +8 KB First Load JS on `/projects` + `/projects/[slug]` — under the 15 KB Override 2 budget. `@code-review` PASS (1 advisory — CQ-07 test-helper duplication). `@security` audit 22 CLEAR (0 Critical / 0 High). **Plan-doc divergence — reconcile when T43 is marked done at T43.I:** the Files list above named `app/projects/page.tsx` + `lib/public-projects.ts` to modify — neither needed changing (T43.D already returns `media` on `loadPublicProjects()`); the real edits were the two `pages/Projects.tsx` page-body components. `lib/db.ts` untouched (resolves the S35 284/300 watchpoint).
 
 ---
 
