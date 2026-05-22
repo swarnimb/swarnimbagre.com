@@ -4,6 +4,7 @@ import { ReactNode } from 'react';
 import { ProgressRing } from '../ProgressRing';
 import { TypoIcon } from '../TypoIcon';
 import { ProjectMedia } from '../ProjectMedia';
+import type { PublicProjectMediaItem } from '@/lib/types';
 
 /**
  * Full-width single-column project card used on the mobile `/projects`
@@ -34,6 +35,14 @@ interface MobileProjectCardProps {
   imageUrl?: string | null;
   /** Signed Storage URL for the after-screenshot (enables before/after slider). */
   imageAfterUrl?: string | null;
+  /**
+   * Ordered `project_media` rows. When present with at least one item the
+   * card's media slot renders the carousel; when omitted the legacy
+   * `imageUrl` / `imageAfterUrl` branches run unchanged.
+   */
+  media?: PublicProjectMediaItem[];
+  /** Surface context passed through to the media slot for carousel sizing. */
+  view?: 'list' | 'detail';
   /** Click handler — typically navigates to the project detail page. */
   onClick?: () => void;
 }
@@ -47,6 +56,8 @@ export function MobileProjectCard({
   postUrl,
   imageUrl,
   imageAfterUrl,
+  media,
+  view,
   onClick,
 }: MobileProjectCardProps) {
   const hasAnyLink = Boolean(githubUrl || liveUrl || postUrl);
@@ -76,6 +87,8 @@ export function MobileProjectCard({
           imageUrl={imageUrl}
           imageAfterUrl={imageAfterUrl}
           title={typeof title === 'string' ? title : ''}
+          media={media}
+          view={view}
         />
       </div>
       <div style={{ padding: '18px 18px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>

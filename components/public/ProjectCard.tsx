@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ProgressRing } from './ProgressRing'
 import { TypoIcon } from './TypoIcon'
 import { ProjectMedia } from './ProjectMedia'
+import type { PublicProjectMediaItem } from '@/lib/types'
 
 /**
  * Card-shaped project tile used on the `/projects` grid. T42 Session B
@@ -33,6 +34,14 @@ interface ProjectCardProps {
   imageUrl?: string | null;
   /** Signed Storage URL for the after-screenshot (enables before/after slider). */
   imageAfterUrl?: string | null;
+  /**
+   * Ordered `project_media` rows. When present with at least one item the
+   * card's media slot renders the carousel; when omitted the legacy
+   * `imageUrl` / `imageAfterUrl` branches run unchanged.
+   */
+  media?: PublicProjectMediaItem[];
+  /** Surface context passed through to the media slot for carousel sizing. */
+  view?: 'list' | 'detail';
   /** Click handler — typically navigates to the project detail page. */
   onClick?: () => void;
 }
@@ -46,6 +55,8 @@ export function ProjectCard({
   postUrl,
   imageUrl,
   imageAfterUrl,
+  media,
+  view,
   onClick,
 }: ProjectCardProps) {
   const [hover, setHover] = useState(false);
@@ -76,7 +87,7 @@ export function ProjectCard({
           overflow: 'hidden',
         }}
       >
-        <ProjectMedia imageUrl={imageUrl} imageAfterUrl={imageAfterUrl} title={title} />
+        <ProjectMedia imageUrl={imageUrl} imageAfterUrl={imageAfterUrl} title={title} media={media} view={view} />
       </div>
 
       <div style={{ padding: '22px 24px 22px', display: 'flex', flexDirection: 'column', gap: 10 }}>

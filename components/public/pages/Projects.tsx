@@ -66,6 +66,7 @@ export function Projects({ items = [] }: ProjectsProps = {}) {
             postUrl={p.postUrl}
             imageUrl={p.imageUrl}
             imageAfterUrl={p.imageAfterUrl}
+            media={p.media}
             onClick={() => router.push(`/projects/${p.slug}`)}
           />
         ))}

@@ -1,6 +1,8 @@
 'use client'
 
 import { BeforeAfterMedia } from './BeforeAfterMedia'
+import { ProjectMediaCarousel } from './ProjectMediaCarousel'
+import type { PublicProjectMediaItem } from '@/lib/types'
 
 /**
  * Media slot for a project card. T42 Session B removed the bundle's
@@ -28,6 +30,15 @@ interface ProjectMediaProps {
   imageAfterUrl?: string | null;
   /** Project title — used as the alt text on the rendered `<img>`. */
   title?: string;
+  /**
+   * Ordered `project_media` rows, pre-resolved to signed URLs (T43.D). When
+   * present with at least one item, the carousel renders instead of the
+   * legacy `imageUrl` / `imageAfterUrl` branches. When omitted or empty, the
+   * legacy branches run unchanged (CONSTRAINT-05 backward-compat).
+   */
+  media?: PublicProjectMediaItem[];
+  /** Surface context passed through to the carousel for dot / arrow sizing. */
+  view?: 'list' | 'detail';
 }
 
 /**
@@ -37,7 +48,10 @@ interface ProjectMediaProps {
  * `DemoLoop` system) are intentionally absent. Callers must migrate to
  * `imageUrl` / `imageAfterUrl` (T42 Session B).
  */
-export function ProjectMedia({ imageUrl, imageAfterUrl, title = '' }: ProjectMediaProps) {
+export function ProjectMedia({ imageUrl, imageAfterUrl, title = '', media, view = 'list' }: ProjectMediaProps) {
+  if (media && media.length > 0) {
+    return <ProjectMediaCarousel media={media} ariaLabel={`${title} media`} view={view} />;
+  }
   if (imageUrl && imageAfterUrl) {
     return <BeforeAfterMedia beforeUrl={imageUrl} afterUrl={imageAfterUrl} altTitle={title} />;
   }

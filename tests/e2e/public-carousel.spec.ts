@@ -4,7 +4,7 @@ import { test, expect } from '@playwright/test';
  * T43.G e2e — public `ProjectMediaCarousel` (CONSTRAINT-05 Override 2).
  *
  * These specs exercise the carousel against a real browser: swipe via
- * touch emulation, keyboard nav, the vertical-scroll-wins gesture rule,
+ * pointer drag, keyboard nav, the vertical-scroll-wins gesture rule,
  * and multi-instance independence on the `/projects` grid.
  *
  * The carousel only renders nav chrome for a project with 2+ media rows.
@@ -46,13 +46,19 @@ test.describe('/projects/[slug] — media carousel', () => {
     const live = carousel.locator('[aria-live="polite"]');
     const box = await carousel.boundingBox();
     expect(box, 'carousel has no layout box').not.toBeNull();
-    const cx = box!.x + box!.width / 2;
     const cy = box!.y + box!.height / 2;
+    // embla snaps to the next slide only when the drag carries the track
+    // past the slide midpoint, so the swipe must travel more than half the
+    // carousel width — a fixed 200px delta is too short for a wide detail
+    // carousel and embla settles back to slide 1. Drag near-edge to
+    // near-edge (~70% of the width) to clear the midpoint deterministically.
+    const startX = box!.x + box!.width * 0.85;
+    const endX = box!.x + box!.width * 0.15;
 
     // Horizontal-dominant drag — embla should advance.
-    await page.mouse.move(cx, cy);
+    await page.mouse.move(startX, cy);
     await page.mouse.down();
-    await page.mouse.move(cx - 200, cy + 8, { steps: 10 });
+    await page.mouse.move(endX, cy + 8, { steps: 20 });
     await page.mouse.up();
     await expect(live).toContainText(/^Slide 2 of \d+/);
 
@@ -60,9 +66,9 @@ test.describe('/projects/[slug] — media carousel', () => {
     // the carousel must NOT advance past the current slide. The
     // still-on-"Slide 2" assertion is the meaningful check here:
     // embla declined to capture the gesture as a horizontal swipe.
-    await page.mouse.move(cx, cy);
+    await page.mouse.move(startX, cy);
     await page.mouse.down();
-    await page.mouse.move(cx + 12, cy - 220, { steps: 10 });
+    await page.mouse.move(startX + 12, cy - 220, { steps: 20 });
     await page.mouse.up();
     await expect(live).toContainText(/^Slide 2 of \d+/);
   });

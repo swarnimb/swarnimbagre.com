@@ -4,7 +4,8 @@ import { notFound } from 'next/navigation';
 import { getProjectBySlug, getImageById } from '@/lib/db';
 import { getImageUrl } from '@/lib/images';
 import { safeLoad } from '@/lib/safe-load';
-import type { Project } from '@/lib/types';
+import { loadPublicProjectMedia } from '@/lib/public-project-media';
+import type { Project, PublicProjectMediaItem } from '@/lib/types';
 import { Page } from '@/components/public/Page';
 import { Nav } from '@/components/public/Nav';
 import { Footer } from '@/components/public/Footer';
@@ -44,16 +45,17 @@ export default async function ProjectDetailPage({ params }: DetailParams) {
   const { slug } = await params;
   const project = await safeLoad<Project | null>(() => getProjectBySlug(slug), null, 'page:projects/[slug]');
   if (!project) notFound();
-  const [imageUrl, imageAfterUrl] = await Promise.all([
+  const [imageUrl, imageAfterUrl, media] = await Promise.all([
     safeLoad<string | null>(() => resolveProjectImage(project.image_id), null, 'page:projects/[slug]:image'),
     safeLoad<string | null>(() => resolveProjectImage(project.image_after_id), null, 'page:projects/[slug]:image-after'),
+    safeLoad<PublicProjectMediaItem[]>(() => loadPublicProjectMedia(project.id), [], 'page:projects/[slug]:media'),
   ]);
   const h = await headers();
   const variant = h.get('x-device-variant');
   if (variant === 'mobile') {
-    return <MobileDetail project={project} imageUrl={imageUrl} imageAfterUrl={imageAfterUrl} />;
+    return <MobileDetail project={project} imageUrl={imageUrl} imageAfterUrl={imageAfterUrl} media={media} />;
   }
-  return <DesktopDetail project={project} imageUrl={imageUrl} imageAfterUrl={imageAfterUrl} />;
+  return <DesktopDetail project={project} imageUrl={imageUrl} imageAfterUrl={imageAfterUrl} media={media} />;
 }
 
 /**
@@ -72,9 +74,10 @@ interface DesktopDetailProps {
   project: Project;
   imageUrl: string | null;
   imageAfterUrl: string | null;
+  media: PublicProjectMediaItem[];
 }
 
-function DesktopDetail({ project, imageUrl, imageAfterUrl }: DesktopDetailProps) {
+function DesktopDetail({ project, imageUrl, imageAfterUrl, media }: DesktopDetailProps) {
   return (
     <Page>
       <Nav current="projects" hrefs={NAV_PATHS} />
@@ -96,6 +99,8 @@ function DesktopDetail({ project, imageUrl, imageAfterUrl }: DesktopDetailProps)
         postUrl={project.post_url}
         imageUrl={imageUrl}
         imageAfterUrl={imageAfterUrl}
+        media={media}
+        view="detail"
       />
       <div style={{ flex: 1 }} />
       <Footer />
@@ -107,9 +112,10 @@ interface MobileDetailProps {
   project: Project;
   imageUrl: string | null;
   imageAfterUrl: string | null;
+  media: PublicProjectMediaItem[];
 }
 
-function MobileDetail({ project, imageUrl, imageAfterUrl }: MobileDetailProps) {
+function MobileDetail({ project, imageUrl, imageAfterUrl, media }: MobileDetailProps) {
   return (
     <MobilePage>
       <MobileNav current="projects" hrefs={NAV_PATHS} />
@@ -123,6 +129,8 @@ function MobileDetail({ project, imageUrl, imageAfterUrl }: MobileDetailProps) {
         postUrl={project.post_url}
         imageUrl={imageUrl}
         imageAfterUrl={imageAfterUrl}
+        media={media}
+        view="detail"
       />
       <div style={{ flex: 1 }} />
       <MobileFooter line="Made between disc golf rounds." />
