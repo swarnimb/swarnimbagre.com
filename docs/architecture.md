@@ -116,6 +116,38 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 
 **Storage-layer RLS (migration 007).** `storage.objects` carries its own RLS layer separate from the `public.images` table; migration 007 (`supabase/migrations/007_rls_storage_images.sql`) installs `images_storage_admin_all` (FOR ALL on `authenticated`, USING and WITH CHECK both `bucket_id = 'images'`). This is the Storage analogue of the per-table `*_admin_all` policies and must accompany every Supabase Storage bucket in use — see CONSTRAINT-20. Migration 005 created the `images` bucket but deferred the policy work; the deferred work was forgotten and only surfaced at T28's first end-to-end upload. **Diagnostic anchor:** the Supabase JS SDK strips the `for table "X"` suffix from RLS error messages, so a `storage.objects` denial surfaces as `'new row violates row-level security policy'` indistinguishable from a `public.{table}` denial. When debugging, read raw Postgres logs via the Supabase MCP `mcp__supabase__get_logs` (which preserves the `for table "objects"` clause) or query `pg_policies` directly to confirm which layer is denying.
 
+### 2.5 `project_media`
+
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | `uuid` | PK, default `gen_random_uuid()` |
+| `project_id` | `uuid` | NOT NULL, FK → `projects.id` ON DELETE CASCADE |
+| `image_id` | `uuid` | NOT NULL, FK → `images.id` ON DELETE RESTRICT — the primary image when `image_after_id` is NULL, or the "before" image when `image_after_id` is non-NULL |
+| `image_after_id` | `uuid` | NULL, FK → `images.id` ON DELETE RESTRICT — when non-NULL, this row renders as a before/after pair via `BeforeAfterMedia`; when NULL, the row renders as a single image |
+| `caption` | `text` | NULL, CHECK `caption is null or char_length(caption) <= 280` — plain text, NOT Markdown (rendered as text content, never `dangerouslySetInnerHTML`; carve-out at PRD §7.2) |
+| `order_index` | `integer` | NOT NULL, CHECK `order_index >= 0` — derived by the `save_project_media` RPC from array position via `WITH ORDINALITY`, not trusted from the client |
+| `created_at` | `timestamptz` | NOT NULL, default `now()` |
+
+**Shape discriminator.** `project_media` carries no explicit `kind` enum column. A row is a "single" when `image_after_id IS NULL` and a "pair" when `image_after_id` is non-NULL; the public render path branches on this nullability (see `components/public/ProjectMedia.tsx` + `ProjectMediaCarouselParts.tsx`). Keeping the discriminator implicit in FK nullability avoids a redundant column that could disagree with FK presence — and removes the need for a synchronizing CHECK constraint to keep `kind` and `image_after_id` consistent.
+
+**Image FK delete semantics.** Both `image_id` and `image_after_id` use `ON DELETE RESTRICT` — deleting an `images` row still referenced by any `project_media` row raises an error. This is the inverse of the legacy `projects.image_id` / `projects.image_after_id` columns (migrations 001 + 009), which use `ON DELETE SET NULL`. The RESTRICT posture here makes media-row removal explicit: the admin must delete the `project_media` row first, which releases the FK and lets the image be cleaned. This protects published carousel slides from silent breakage during orphan cleanup at `/admin/images` (T27).
+
+**Indexes:** compound `(project_id, order_index)` for the ordered public-listing query (`project_media_project_order_idx`). No unique constraint on `(project_id, order_index)` — ordering is rebuilt atomically by the `save_project_media` RPC each save, not maintained incrementally.
+
+**Row-cap trigger (`project_media_rowcap_trigger`):** fires `BEFORE INSERT OR UPDATE OF project_id` and raises an exception when the count of existing rows for the same `project_id` is `>= 20`. Triggering on `UPDATE OF project_id` (in addition to INSERT) closes the move-row-between-projects bypass — a direct `update project_media set project_id = '<B>' where ...` against a project B already at the cap would otherwise sidestep the limit. PostgreSQL CHECK constraints are per-row, not per-FK-count, so the trigger is the canonical guard. Zod schema in `lib/admin-project-media-mutations-schemas.ts` enforces the same `<=20` cap as a defense layer above it.
+
+**Pair distinctness:** CHECK constraint `project_media_before_after_distinct` — `image_after_id is null or image_after_id <> image_id`. A pair's before and after must be different images; a single (where `image_after_id IS NULL`) is unconstrained against `image_id` by definition.
+
+**RLS (migration 010).** `project_media_admin_all` (authenticated, FOR ALL, USING + WITH CHECK both `true`) and `project_media_public_select` (anon, FOR SELECT, USING `exists (select 1 from public.projects p where p.id = public.project_media.project_id and p.status = 'published')`). The public-read policy re-resolves the parent's published status at query time, so a forged `project_id` cannot read an unpublished project's media via the anon role.
+
+**Atomic save surface.** Writes go through the Server Action `saveProjectMedia(projectId, mediaRows[])` (one Server Action, atomic, via the `save_project_media(uuid, jsonb)` RPC defined in migration `010a`). The RPC does delete-then-insert-all inside a single Postgres transaction — see §6.6.9 for the RPC conventions established here and binding for future atomic-save surfaces.
+
+**Storage bucket.** Reuses the existing `images` bucket per §2.4. No new bucket, no new `storage.objects` policy — CONSTRAINT-20 is N/A for migrations 010 / 010a. Storage-object access for media images is already gated by the `images` table's parent-published-status policy from migration 007.
+
+**Public render surface.** The carousel that renders these rows is documented in §4.9 (Carousel surface — Override 2) and `design-decisions.md` "Override 2: Project media carousel". The schema is content-model; the carousel is the visual surface; CONSTRAINT-22 (the public-site JS-library budget) governs the carousel's runtime dependency.
+
+**Founder Brief:** entries 29 (Override 2 / embla decision), 30 (atomic save — RPC pattern), and 31 (CONSTRAINT-22 codified + Override 2 surface boundary recorded) in [`founder-brief.md`](founder-brief.md).
+
 ---
 
 ## 3. API Structure
@@ -356,6 +388,20 @@ E2E tests log in via a server-side magic-link flow that mirrors the production c
 **Serial-mode requirement.** Specs that share a fixture user must use `test.describe.configure({ mode: 'serial' })`. `auth.admin.generateLink` invalidates the prior magic-link token for the email; concurrent workers calling generate+verify against the same user race and one fails with `otp_expired`. If a future spec needs parallelism, mint per-test-isolated identities (`playwright-fixture-${testId}@test.swarnimbagre.com`).
 
 **Cross-references:** `tests/e2e/fixtures/auth.ts` (`loginAsAdmin()` helper), `tests/e2e/admin-logout.spec.ts` (consumer + serial-mode example), `docs/plan-phase-2-admin.md` T19.2 (origin), `docs/founder-brief.md` entries 19 + 20.
+
+### 4.9 Carousel surface — Override 2
+
+The public-site project media carousel introduced at T43 is the first surface on the public site to depend on a runtime JS library. This section documents the boundary policy that surrounds it; the visual + chrome specs themselves live in `design-decisions.md` "Override 2: Project media carousel".
+
+**Public-site JS-library policy (CONSTRAINT-22).** Adding any runtime npm dependency to a public-site code path requires (a) a named Override entry in `design-decisions.md` with a Surface boundary listing every file the library touches, and (b) a build-time measurement showing the route-chunk delta on each affected production route stays at or under 15 KB gzip. Measurement source is `next build`'s First Load JS output on the route mounting the new code, not the published ESM size on npm — bundler tree-shaking and shared-chunk attribution make the published size a misleading proxy. Exceeding the budget escalates to `@cto`, not silent absorption. Override 2's measured delta at T43.H: +8 KB First Load JS on `/projects` + `/projects/[slug]`, inside budget.
+
+**Multi-instance DOM-id requirement.** `/projects` renders N project cards on one page; each card mounts its own carousel instance. Embla's `aria-controls` / `aria-labelledby` wiring and the dot-button IDs all need to be carousel-scoped — `React.useId()` per `ProjectMediaCarousel` mount, then prefix every accessibility-bearing id with that scope. The carousel must not assume it is the only instance on the page; a hardcoded DOM id (e.g., `id="carousel-prev"`) would collide on the second card and break screen-reader navigation for both. This requirement is enforced in `tests/ProjectMediaCarousel.test.tsx` (multi-mount test asserting per-instance id uniqueness).
+
+**Client-component boundary.** `ProjectMediaCarousel` and `ProjectMediaCarouselParts` are both `'use client'`. Server Components above them (`ProjectMedia`, `ProjectCard`, page loaders) pass already-resolved data — signed image URLs (TTL 3600s per CONSTRAINT-15), caption text, alt text, kind, order — and never reach into the carousel's runtime state. The `view: 'list' | 'detail'` prop is the only render-time switch the server passes in; it selects dot/arrow sizing per the Decision specs table in Override 2.
+
+**Surface boundary (referenced, not duplicated).** The file-by-file list of what counts as "the Override 2 surface" lives at `design-decisions.md` "Override 2: Project media carousel" → "Surface boundary." Changes to that list (adding or removing a file) require an Override 2 amendment, not a silent architecture-doc edit.
+
+**Cross-references:** `design-decisions.md` "Override 2: Project media carousel" + `constraints.md` CONSTRAINT-22 + `docs/founder-brief.md` entry 31 (CONSTRAINT-22 codification) + entry 29 (Override 2 / embla decision) + §2.5 above (the schema the carousel renders) + §6.6.9 below (the atomic save RPC that backs the admin write path).
 
 ---
 

@@ -1,9 +1,9 @@
 # Security Report: swarnimbagre.com
 
-**Last audit:** 2026-05-21 (audit 22 — T43.H wires `ProjectMediaCarousel` into public project cards + detail page + list pages; CLEAR)
-**Scope:** T43.H delta. Modified — `app/projects/[slug]/page.tsx`, `components/public/ProjectMedia.tsx`, `components/public/ProjectCard.tsx`, `components/public/mobile/MobileProjectCard.tsx`, `components/public/pages/Projects.tsx`, `components/public/mobile/pages/Projects.tsx`, `tests/ProjectMedia.test.tsx`, `tests/MobileProjectCard.test.tsx`. Created — `tests/ProjectCard.test.tsx`. Out of scope: `ProjectMediaCarousel` / `ProjectMediaCarouselParts` / `BeforeAfterMedia` (audited CLEAR in audit 21 — T43.G, unchanged by T43.H); `loadPublicProjectMedia` + `getProjectMediaByProject` + migration 010 RLS (audited CLEAR in prior audits, unchanged); the `saveProjectMedia` Server Action + RPC + migration 010a (audited CLEAR in audit 19, unchanged).
+**Last audit:** 2026-05-23 (audit 23 — T43.I documentation-only close-out: Override 2 finalized + CONSTRAINT-22 codified + T43 closed; CLEAR with 1 LOW opened-and-closed in-session)
+**Scope:** T43.I delta. Modified — `docs/design-decisions.md` (Override 2 Surface boundary), `docs/constraints.md` (CONSTRAINT-22 + CONSTRAINT-05 amendment + summary table), `docs/architecture.md` (new §2.5 + §4.9), `docs/founder-brief.md` (Index #31 + entry #31), `docs/content-model-expansion.md` (T43-furthered-by line), `docs/plan-phase-4-launch.md` (T43 Status + T43.I Closed + amended T43.I acceptance criteria), `manifest.md` (Project Identity + Current plan file). Zero runtime code modified in T43.I. Out of scope: all source files in `components/`, `lib/`, `app/`, `supabase/migrations/`, `tests/` — none touched this session.
 **Status:** CLEAR
-**Summary:** 0 Critical / 0 High / 2 Medium / ~19 Low (carry-forward F-3, F-4 Mediums unchanged; F-37 Low unchanged; no new findings opened in audit 22)
+**Summary:** 0 Critical / 0 High / 2 Medium / ~19 Low (carry-forward F-3, F-4 Mediums unchanged; F-37 Low unchanged). **F-38 (Low) opened and closed in-session** — `architecture.md` §2.5 schema table named a `kind` column + `updated_at` column/trigger + `ON DELETE CASCADE` on image FKs that did not match migration 010 (real schema: discriminator implicit in `image_after_id IS NULL`, no `updated_at`, image FKs `ON DELETE RESTRICT`). §2.5 corrected verbatim against migration 010 before close-out. Pre-existing audit 22's "Opened: None / Closed: None" framing extended: audit 23 opened F-38, closed F-38, no other status changes.
 
 **Unresolved Critical/High findings:** None
 
@@ -101,3 +101,58 @@ F-6–F-11, F-20–F-25, F-27, F-28 — prior-audit carry-forwards. F-31–F-35 
 **Opened audit 22:** None.
 **Closed audit 22:** None.
 **Verdict:** CLEAR — no Critical or High findings. T43.H ships. Next security review point: T43.I close-out.
+
+---
+
+## Audit 23 (2026-05-23) — T43.I documentation-only close-out
+
+### Scope and method
+
+Audit pass for T43.I, the documentation close-out task for T43 (project media multi-image carousel + first public-site JS library). Zero runtime code modified this session — the changeset is seven documentation files. The audit method is therefore different from a code audit: instead of walking SEC-NN rules over runtime behavior, the focus is on whether the new documentation accurately describes the existing security-relevant posture (RLS gates, plain-text caption render, client-component boundary, Server Action count, build-discipline framing of CONSTRAINT-22) without introducing false claims that would mislead a future audit reasoning from the docs.
+
+### Findings
+
+**§2.5 RLS claim accuracy — PASS.** `architecture.md` §2.5 paragraph on `project_media_admin_all` + `project_media_public_select` matches migration `010_project_media.sql` (lines 105–116, 125–131) verbatim in semantics. The doc claim "the public-read policy re-resolves the parent's published status at query time, so a forged `project_id` cannot read an unpublished project's media via the anon role" is correct — the `exists (... p.status = 'published')` subquery is evaluated per row at query time.
+
+**§4.9 client-component boundary claim — PASS.** `ProjectMediaCarousel.tsx` + `ProjectMediaCarouselParts.tsx` both declare `'use client'`; neither file imports `next/headers`, calls `cookies()`, references `server-only`, or uses `dangerouslySetInnerHTML`. Caption + alt render exclusively as React text children and JSX attributes (auto-escaped). The doc claim that the carousel receives only pre-resolved data (signed URLs per CONSTRAINT-15, plain-text strings) matches the `PublicProjectMediaItem` interface at `lib/types.ts:126`.
+
+**§2.5 caption/alt plain-text claim — PASS.** Caption render: `ProjectMediaCarouselParts.tsx` `<div>{text}</div>` — React-escaped. Alt render: `alt={item.imageAlt}` JSX attribute — React-escaped. No `marked()` or `dangerouslySetInnerHTML` on the carousel path. Repo-wide grep for `dangerouslySetInnerHTML` in `components/public/` returns only the pre-existing `MarkdownContent.tsx:27` post-content surface (audited in prior cycles), not on any T43 path.
+
+**Server Action manifest = 13 IDs — PASS.** `tests/server-actions-manifest.test.ts` `SERVER_ACTION_ALLOWLIST` confirmed at exactly 13 entries (`signInWithMagicLink`, `signOut`, `createProject`, `updateProject`, `deleteProject`, `createPost`, `updatePost`, `deletePost`, `insertStat`, `deleteStat`, `uploadImage`, `deleteOrphanImages`, `saveProjectMedia`). T43.I adds zero Server Actions.
+
+**CONSTRAINT-22 wording security accuracy — PASS.** `constraints.md` CONSTRAINT-22, `architecture.md` §4.9, and `founder-brief.md` entry #31 all frame the 15 KB budget as a build-discipline policy (route-chunk drift cap measured against `next build` First Load JS), never as a dependency-vulnerability protection or supply-chain audit mechanism. No overclaim. "What this closes off" correctly frames reversal as drift from CONSTRAINT-05's verbatim-bundle posture, not as a security regression.
+
+**No new auth / public-write / env-var / cross-origin surface — PASS.** T43.I introduces zero new claims about authentication, public-write paths (the existing `saveProjectMedia` Server Action + `save_project_media` RPC were audited at audit 19 and unchanged), environment variables, or cross-origin behavior. `embla-carousel-react` was added at T43.B and audited as part of that delta; T43.I does not introduce additional dependencies.
+
+**Carry-forwards preserved — PASS.** F-3 Medium (`EMAIL_SCHEMA` length cap, `lib/auth-internal.ts:20`), F-4 Medium (callback handler OTP type set width, `app/(admin)/admin/auth/callback/route.ts`), F-37 Low (TypoIcon render-side scheme guard), and ~19 prior-audit Low carry-forwards remain tracked with status unchanged. T43.I does not touch any file underlying these findings.
+
+### F-38 (Low, OPENED and CLOSED audit 23) — §2.5 schema table drifted from migration 010
+
+**Severity:** Low. Not a runtime security regression — the live RLS, FK, and trigger gates are correct against the actual on-disk schema. The risk is doc-driven future error: a subsequent audit, migration author, or `@cto` consult reading §2.5 as ground truth would reason against a phantom schema.
+
+**Discovery:** Caught during this audit's Q1 (§2.5 RLS claim accuracy cross-check) by comparing `architecture.md` §2.5 column list against `supabase/migrations/010_project_media.sql` lines 54–75.
+
+**What was wrong (initial T43.I write of §2.5):**
+- Named a `kind text NOT NULL CHECK (kind IN ('single','pair'))` column — migration 010 has no such column; the shape discriminator is the nullable `image_after_id` FK.
+- Named an `updated_at timestamptz NOT NULL default now(), trigger on update` row — migration 010 has no `updated_at` column and no trigger on update.
+- Declared `image_id` and `image_after_id` as `ON DELETE CASCADE` — migration 010 uses `ON DELETE RESTRICT` on both, an inversion of the legacy `projects.image_id` / `projects.image_after_id` `ON DELETE SET NULL` semantics (the RESTRICT posture is deliberate: it prevents orphan cleanup at `/admin/images` from silently breaking a published carousel slide).
+- The pair-distinctness CHECK was described with informal wording rather than the migration's actual SQL form (`image_after_id is null or image_after_id <> image_id`).
+
+**Resolution (in-session, before close-out commit):** `architecture.md` §2.5 rewritten verbatim against migration 010 — removed the `kind` row, removed the `updated_at` row, changed both image FKs to `ON DELETE RESTRICT`, restated the pair-distinctness CHECK using the migration's actual SQL, added a new "Shape discriminator" paragraph explaining the implicit nullability-based discrimination, and added a new "Image FK delete semantics" paragraph explaining the RESTRICT posture and its difference from the legacy slot columns. Row-cap trigger description also tightened to record that it fires on `BEFORE INSERT OR UPDATE OF project_id` (not just INSERT) — closing the move-row-between-projects bypass per the migration's existing trigger scope and `@cto` pre-apply review note in the migration header.
+
+**Status:** CLOSED in same audit (opened and resolved within T43.I).
+
+**Root cause for the discipline note:** mirroring §2.1's schema-table shape was the right pattern, but verifying each row against the actual migration SQL was skipped. The "mirror templates — read for sense" memory feedback (caught at T23 PostForm + ProjectForm; same class of latent bug) applies here too. Future schema-doc edits must source from migration SQL, not from intent.
+
+### Summary Table (audit 23)
+
+| Severity | Count | F-codes |
+|---|---|---|
+| Critical | 0 | — |
+| High | 0 | — |
+| Medium | 2 | F-3 (carry), F-4 (carry) |
+| Low | ~19 | F-31–F-35 (audit 16); F-37 (audit 18); F-6–F-11, F-20–F-25, F-27, F-28 (carry) |
+
+**Opened audit 23:** F-38 (architecture.md §2.5 schema-vs-migration-010 drift, Low).
+**Closed audit 23:** F-38 (corrected in-session before close-out).
+**Verdict:** CLEAR — no Critical or High findings. T43.I ships. T43 fully closed. Next security review point: T40 (content addition + pre-launch hygiene sweep).

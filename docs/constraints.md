@@ -69,6 +69,7 @@
 
 **Overrides:**
 - **Override 1 (T42, 2026-05-19):** approved for the project-card surface only. See `docs/design-decisions.md` "Override 1: Project card redesign" entry for the surface boundary (named file list) and the rationale.
+- **Override 2 (T43, 2026-05-20):** approved for the project media carousel surface only. See `docs/design-decisions.md` "Override 2: Project media carousel" entry for the surface boundary (named file list), the chrome specs, and the rationale. Override 2 also introduces the public site's first runtime JS dependency (`embla-carousel-react`); the dependency budget for any public-site Override is codified at CONSTRAINT-22.
 
 **Who decided and when:** Kickoff + `@designer`, 2026-05-05. Reaffirmed at `@plan`, 2026-05-06.
 
@@ -283,6 +284,16 @@ or a re-evaluation of header uniformity under PKCE.
 
 **What this closes off:** A `www`-canonical or dual-canonical setup. Reversing means re-pointing Vercel primary, Supabase Site URL + redirect allowlist, `NEXT_PUBLIC_SITE_URL`, and the email template base, then re-testing the magic-link callback end-to-end.
 
+### [CONSTRAINT-22] JS libraries on the public site require a named Override and a 15 KB gzip budget
+
+**Decision:** JS libraries on the public site are permitted only with a documented Override and ≤15 KB gzip total per Override surface (measured against the production route chunk, not published ESM).
+
+**What it means in practice:** Adding a runtime npm dependency to any public-site code path is not a unilateral choice — it requires (a) a named Override entry in `docs/design-decisions.md` with a Surface boundary listing every file the library touches, and (b) a build-time measurement showing the route-chunk delta on the affected production route stays at or under 15 KB gzip. The measurement is taken from `next build` output on the route that mounts the new code (e.g., `/projects` First Load JS delta), not from the package's published ESM size on npm — bundler tree-shaking, code-splitting, and shared-chunk attribution make the published size a misleading proxy. Exceeding the budget triggers an `@cto` re-evaluation, not a silent absorption. The first invocation of this constraint is Override 2 (T43, `embla-carousel-react`), which measured ~11.7 KB gzip published ESM at T43.B and +8 KB First Load JS on `/projects` + `/projects/[slug]` at T43.H — both inside budget.
+
+**Who decided and when:** `@cto` pre-T43.B consultation, Session 34, 2026-05-20. Codified at T43.I, 2026-05-23.
+
+**What this closes off:** Adding a public-site JS library "to see if it works" without a documented surface and a route-chunk measurement. Reversing means accepting drift from CONSTRAINT-05's verbatim-bundle posture without a paper trail — the Override + budget pair is the mechanism that makes a deviation from CONSTRAINT-05 reviewable instead of incremental.
+
 ---
 
 ## Summary Table
@@ -310,3 +321,4 @@ or a re-evaluation of header uniformity under PKCE.
 | 19 | Dev-only routes use bracket NODE_ENV indirection | Defeats Next 15 compile-time inlining; runtime gate enforced | `@dev` + T19.2 | 2026-05-12 |
 | 20 | Storage bucket RLS policies accompany table FK migrations | Every bucket gets a `storage.objects` policy scoped to `bucket_id` (USING + WITH CHECK); default-deny applies to Storage | `@supabase` + T28 | 2026-05-14 |
 | 21 | Canonical domain = apex `swarnimbagre.com` (no `www`) | All origin config (Vercel/Supabase/env/email) resolves to apex; `www` redirects to it | Main thread on builder behalf, confirmed by builder | 2026-05-16 |
+| 22 | Public-site JS libraries require a named Override + ≤15 KB gzip route-chunk budget | Every public-site npm dep gets a Surface boundary doc and a measured route-chunk delta; first instance is Override 2 (embla, T43) | `@cto` S34, codified at T43.I | 2026-05-20 / codified 2026-05-23 |

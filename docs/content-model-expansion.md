@@ -2,6 +2,8 @@
 
 **STATUS: SUPERSEDED by T42 (2026-05-19).** This document proposed Shape C (new tables + JSONB) for the project content-model expansion. T42 shipped Shape A (6 nullable columns, zero new tables) after `@cto` pre-migration consult on 2026-05-19. See `docs/plan-phase-4-launch.md` T42 + this doc's Schema-deltas section for Shape A vs Shape C rationale. Kept as historical reference.
 
+**Further superseded by T43 (2026-05-23).** Project media (multi-row carousel with captions, optional before/after pairs, atomic save) replaces the single `image_id` / `image_after_id` slot pattern referenced in this doc's inventory. The new `project_media` table is documented at `docs/architecture.md` §2.5; the public-render carousel surface at §4.9 + `docs/design-decisions.md` "Override 2: Project media carousel"; the public-site JS-library policy at `docs/constraints.md` CONSTRAINT-22. The legacy `projects.image_id` / `image_after_id` columns remain in the schema for backward compatibility — see the deprecation JSDoc on `Project.image_id` / `Project.image_after_id` in `lib/types.ts`.
+
 **Date surfaced:** 2026-05-11 (during T11)
 **Status:** Awaiting `@cpo` + `@designer` pickup as a plan amendment
 **Owner:** unassigned — recommended: `@cpo` for scope, `@designer` for visual contract, `@cto` for migration shape

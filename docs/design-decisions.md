@@ -147,15 +147,20 @@ Everything outside this list remains bundle-verbatim. A further deviation requir
 
 **Surface boundary.** Override 2 applies to these files only:
 
-- `components/public/ProjectMediaCarousel.tsx` (new)
-- `components/public/mobile/MobileProjectMediaCarousel.tsx` (new — if a separate mobile component is required by the responsive split; if a single component serves both, only the desktop file lands)
-- The `embla-carousel-react` npm dependency
-- `components/admin/ProjectMediaRow.tsx` (drag-handle glyph)
-- `app/projects/[slug]/page.tsx` (mounts the carousel on the detail page)
-- `components/public/ProjectCard.tsx` (image-slot interior swapped to render the carousel; outer frame unchanged)
-- `components/public/mobile/MobileProjectCard.tsx` (same)
+- `components/public/ProjectMediaCarousel.tsx` (new — embla wrapper; accepts `view: 'list' | 'detail'` prop that scales dot/arrow sizing and hit-areas per the Decision specs table below)
+- `components/public/ProjectMediaCarouselParts.tsx` (new — dots, arrows, and helper sub-components extracted from the carousel for the CQ-02 file-size budget)
+- `components/public/BeforeAfterMedia.tsx` (modified — pair-slide drag-isolation hit zone, 28px-wide, lives here; CQ-02 split landed at T43.G)
+- `components/public/BeforeAfterMediaScenes.tsx` (new — scenes split off from `BeforeAfterMedia` at T43.G; participates because it is the pair-slide render path inside a carousel slide)
+- `components/public/ProjectMedia.tsx` (modified — branches to the carousel when `media` rows exist; falls back to the legacy `imageUrl` / `imageAfterUrl` path otherwise)
+- `components/public/ProjectCard.tsx` (modified — threads `media` + `view` to `ProjectMedia`; outer card frame unchanged)
+- `components/public/mobile/MobileProjectCard.tsx` (modified — same threading on the mobile card; no separate mobile carousel component exists)
+- `components/public/pages/Projects.tsx` (modified — page-body threads `project.media` into the cards)
+- `components/public/mobile/pages/Projects.tsx` (modified — same on the mobile Projects page)
+- `app/projects/[slug]/page.tsx` (modified — loads media via `loadPublicProjectMedia` inside `safeLoad`; passes `view="detail"` to the card)
+- `components/admin/ProjectMediaRow.tsx` (modified — `⋮⋮` reorder-handle glyph; the only admin file in this boundary because it carries Override 2 chrome)
+- The `embla-carousel-react` npm dependency (and its transitive `embla-carousel` core + `embla-carousel-reactive-utils`)
 
-Everything outside this list remains bundle-verbatim. The chrome decisions above (dots, arrows, caption typography, hit-zone widths) are not portable to any other surface without a further named Override entry of its own.
+Everything outside this list remains bundle-verbatim. The chrome decisions above (dots, arrows, caption typography, hit-zone widths, view-prop sizing) are not portable to any other surface without a further named Override entry of its own. Data-layer files (`lib/db.ts`, `lib/public-projects.ts`, type modules), the `save_project_media` RPC and migrations `010` / `010a`, and the admin field component `ProjectMediaField.tsx` are deliberately excluded — Override 2 is a visual + JS-runtime surface boundary, not a content-model boundary.
 
 **Decision specs:**
 
