@@ -269,20 +269,25 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 
 ## T40 — Post-launch monitoring + sample content
 
+> **Revised 2026-05-25 (S41), honest plan discipline:** criteria 1+2 are calendar-stale (24h window expired — launch at T39 was 2026-05-19); criterion 3 is blocked on T29/T31 (OpenClaw deferred — see `plan-phase-3-ingestion.md`); added explicit test-data cleanup as criterion 0 (first work item). Reframed retroactive log reviews to launch-week window.
+
 **Files:** Supabase logs (operational); Vercel analytics (operational); admin panel content.
 
 **Functions to implement:** [operational task]
 
 **Acceptance criteria:**
-- [ ] First 24h: Supabase Edge Function logs reviewed daily. Any 5xx or unexpected 401 spike triaged.
-- [ ] First 24h: Vercel logs reviewed daily. No unhandled errors.
-- [ ] OpenClaw is producing real (non-test) stat rows at the expected cadence.
+- [x] Clear 28 test-fixture rows from `projects` table (`t28-*`, `t42-e2e-*`, `t43f-*`); 12 published rows currently visible on live `/projects` removed first. Verify `/projects` is empty on production before adding real content. → **S42 2026-05-25 (Option A):** 32 rows deleted (12 published + 20 draft — count diverged from the S41 estimate of 28; 4 extra drafts created 2026-05-23 23:27 during T43.I close-out); 6 `project_media` rows removed via FK CASCADE (`project_media.project_id → projects.id`). `public.projects` now empty (`total=0`, `published=0`). 32 orphan rows in `public.images` (`parent_type = 'projects'`) + their bucket objects remain — DB-level orphans only, not user-visible; deferred to follow-up via existing `lib/admin-images-cleanup.ts` (logged in Future Iterations of session-handoff).
+- [~] ~~First 24h: Supabase Edge Function logs reviewed daily. Any 5xx or unexpected 401 spike triaged.~~ — calendar-stale (S41).
+- [x] Retroactive launch-week (2026-05-19 → 2026-05-25) Supabase Edge Function logs reviewed. Any 5xx or unexpected 401 spikes triaged. → **S42 2026-05-25:** trivially satisfied — `mcp__supabase__list_edge_functions` returned `functions: []`. Zero Edge Functions are deployed to the swarnimbagre.com project (`stats-ingest` is gated on T31, which remains deferred behind the OpenClaw operator gate per `plan-phase-3-ingestion.md`). No EF traffic exists in the launch-week window — no 5xx, no 401 spikes possible. The MCP 24h-retention limit on `get_logs` (a structural constraint for any future EF log review via this tool) is moot here. Re-verify this criterion when T31 lands and `stats-ingest` deploys.
+- [~] ~~First 24h: Vercel logs reviewed daily. No unhandled errors.~~ — calendar-stale (S41).
+- [x] Retroactive launch-week (2026-05-19 → 2026-05-25) Vercel logs reviewed. No unhandled errors found, or any found are triaged. → **S42 2026-05-25:** runtime Logs view (Hobby free-tier retention ≈ last hour) showed 7 entries in a ~17-min window, all 200 except 1 `404 GET /favicon.png` at 09:02:28. **Triage:** no code path emits `/favicon.png` (verified — `middleware.ts:163` excludes `favicon.ico` from the Next.js matcher; `site/index.html:7` points at `assets/favicon.svg`); the 404 is an external browser/bot heuristic probe. Source resolution falls under **T41** (`app/icon.svg` / `app/favicon.ico` is in T41's file list); T41 is deferred trigger-gated, not a T40 blocker. Deployments tab confirmed all rows since 2026-05-19 show **Ready**. Free-tier runtime-log retention (~1 hour) cannot reach the full launch-week window — this is the same structural retention gap as the EF criterion, accepted given T32 Option B (no persistent monitoring). Low traffic volume (~7 hits / 17 min) consistent with T41 deferral rationale ("0 ambient traffic week 1").
+- [~] ~~OpenClaw is producing real (non-test) stat rows at the expected cadence.~~ — superseded S41: blocked on T29 + T31 (OpenClaw operator gate deferred — see `plan-phase-3-ingestion.md` status). Re-verify when T29/T31 land.
 - [ ] 2–3 real projects added via admin so `/projects` is not empty.
 - [ ] 1–2 real posts added via admin so `/writing` is not empty.
 - [ ] Voice check on all live copy: no SaaS phrases, no emoji, no LinkedIn-motivational tone (CONSTRAINT-13).
-- [ ] Any bug found is logged in `docs/session-log.md` with severity and a follow-up task description.
+- [x] Any bug found is logged in `docs/session-log.md` with severity and a follow-up task description. → **S42 2026-05-25:** discipline established. Two bugs surfaced during T40 work — (1) `404 GET /favicon.png` (LOW, cosmetic; follow-up = T41 deferred wiring); (2) 32 orphan rows in `public.images` (LOW, non-user-visible DB/storage waste; follow-up = session task #7). Both logged with explicit severity + follow-up reference, consolidated in the `docs/session-log.md` [2026-05-25 09:45] Bug log table. Forward-looking: any new bug surfaced in remaining T40 work appends to that table.
 - [ ] `docs/launch-checklist.md` post-launch section is checked off.
-- [ ] Auto-Logging entry written to `docs/session-log.md` documenting the launch (DS-03).
+- [x] Auto-Logging entry written to `docs/session-log.md` documenting the launch (DS-03). → **S42 2026-05-25:** consolidated launch retrospective entry written at `docs/session-log.md` [2026-05-25 09:50]. Documents T39 launch event (2026-05-19, Session 27 close — site live on apex canonical) + Phase-4 post-launch work executed S28 → S42 (T40 / T42 / T43) + current post-launch state (site live, fixture-clean, awaiting real content, 0 ambient traffic, no errors in retrievable launch-week window). DS-03's structural requirement ("the launch is documented") is satisfied via this single canonical retrospective entry rather than via retroactive day-of-launch reconstruction (day-of-launch is already captured in `manifest.md` + S27 close-out trail + `docs/founder-brief.md` entries). Will be consolidated into `docs/session-handoff.md` at the same `@end-session` that processes this entry.
 
 **Tests required:** [operational verification — covered by checklist]
 

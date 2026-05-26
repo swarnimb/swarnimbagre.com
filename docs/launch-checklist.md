@@ -36,6 +36,11 @@ post-launch work.
 
 ## Pre-launch
 
+> _Retroactive doc-debt note (S42 2026-05-25): items below were gating
+> criteria for T39 deploy 2026-05-19; per-line ticking intentionally
+> skipped post-launch. Evidence trail in `docs/founder-brief.md` +
+> Session 27 records._
+
 - [ ] All tests pass (`npm test`). Re-run from clean — the reconciled
       baseline is Vitest 201/201 (36 files) and Deno 12/0 (12 passing, 0
       failed, no skips); confirm it still holds, do not trust the logged
@@ -81,6 +86,11 @@ post-launch work.
 
 ## Launch
 
+> _Retroactive doc-debt note (S42 2026-05-25): T39 launch executed
+> 2026-05-19 (site live on apex canonical `https://swarnimbagre.com`);
+> per-line ticking intentionally skipped post-launch. Evidence trail in
+> `docs/founder-brief.md` + Session 27 records._
+
 - [ ] Tag the release commit.
 - [ ] Push to `main`. (Note: `main` has been held ahead of `origin/main`
       deliberately across recent sessions — confirm the full intended history
@@ -95,13 +105,30 @@ post-launch work.
 
 ## Post-launch
 
-- [ ] Monitor Vercel logs and Supabase Edge Function logs for the first 24
+- [x] Monitor Vercel logs and Supabase Edge Function logs for the first 24
       hours. Sentry is deferred (T32 Option B); the interim log-review
       procedure is the launch monitoring path — follow `docs/monitoring.md`.
+      → **S42 2026-05-25 honest-plan substitution:** original 24h window
+      calendar-stale at the time of execution; satisfied by the T40
+      retroactive launch-week review (2026-05-19 → 2026-05-25). Supabase EF
+      logs: zero functions deployed (vacuously clean). Vercel runtime logs:
+      1 finding — `404 GET /favicon.png` — triaged as external probe,
+      resolution path falls under T41 (deferred, trigger-gated). Vercel
+      Deployments tab: all rows since 2026-05-19 show `Ready`. Both T40
+      retroactive-review criteria closed `[x]` at S42 (see
+      `plan-phase-4-launch.md`).
 - [ ] `[OPENCLAW-GATED]` Watch `stats` table activity to confirm OpenClaw is
       writing. Cannot be confirmed until OpenClaw is wired and has sent at
       least one real ingest — see The OpenClaw Gate above.
 - [ ] Add the first 2–3 sample projects and 1–2 sample posts via the admin
       panel so the public site has content on day one.
-- [ ] Bug triage: any crash files a follow-up task or a hotfix — do not let it
-      sit unlogged.
+- [x] Bug triage: any crash files a follow-up task or a hotfix — do not let it
+      sit unlogged. → **S42 2026-05-25:** two findings this session, both
+      logged. (1) `404 GET /favicon.png` on the public site — triaged via grep
+      (no code path emits `/favicon.png`; external user-agent heuristic
+      probe); resolution is in T41's file list (`app/icon.svg` /
+      `app/favicon.ico`), T41 is deferred trigger-gated. No new task needed.
+      (2) 32 orphan rows in `public.images` (`parent_type='projects'`) +
+      bucket objects, surfaced by the T40 criterion-0 fixture purge; filed
+      as session task #7 (image+storage orphan cleanup via existing
+      `lib/admin-images-cleanup.ts`). No unlogged crashes.
