@@ -282,8 +282,8 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 - [~] ~~First 24h: Vercel logs reviewed daily. No unhandled errors.~~ — calendar-stale (S41).
 - [x] Retroactive launch-week (2026-05-19 → 2026-05-25) Vercel logs reviewed. No unhandled errors found, or any found are triaged. → **S42 2026-05-25:** runtime Logs view (Hobby free-tier retention ≈ last hour) showed 7 entries in a ~17-min window, all 200 except 1 `404 GET /favicon.png` at 09:02:28. **Triage:** no code path emits `/favicon.png` (verified — `middleware.ts:163` excludes `favicon.ico` from the Next.js matcher; `site/index.html:7` points at `assets/favicon.svg`); the 404 is an external browser/bot heuristic probe. Source resolution falls under **T41** (`app/icon.svg` / `app/favicon.ico` is in T41's file list); T41 is deferred trigger-gated, not a T40 blocker. Deployments tab confirmed all rows since 2026-05-19 show **Ready**. Free-tier runtime-log retention (~1 hour) cannot reach the full launch-week window — this is the same structural retention gap as the EF criterion, accepted given T32 Option B (no persistent monitoring). Low traffic volume (~7 hits / 17 min) consistent with T41 deferral rationale ("0 ambient traffic week 1").
 - [~] ~~OpenClaw is producing real (non-test) stat rows at the expected cadence.~~ — superseded S41: blocked on T29 + T31 (OpenClaw operator gate deferred — see `plan-phase-3-ingestion.md` status). Re-verify when T29/T31 land.
-- [ ] 2–3 real projects added via admin so `/projects` is not empty.
-- [ ] 1–2 real posts added via admin so `/writing` is not empty.
+- [x] 2–3 real projects added via admin so `/projects` is not empty. → **S43 2026-05-28:** 6 placeholder projects published via admin (ParSaveables, Claude Code Magic, swarnimbagre.com, Totes Sales CRM, AmIBroke, CardMaxxer) — title + dry blurb + GitHub link (+ live URL on ParSaveables / AmIBroke / swarnimbagre.com). Thumbnails + carousel media deferred to a later content pass. Slugs auto-derived and now LOCKED (CONSTRAINT-12): `parsaveables`, `claude-code-magic`, `swarnimbagre-com`, `totes-sales-crm`, `amibroke`, `cardmaxxer`. `/projects` no longer empty.
+- [x] 1–2 real posts added via admin so `/writing` is not empty. → **S43 2026-05-28:** placeholder post(s) published via admin; `/writing` no longer empty. Post bodies (`content` markdown) to be fleshed out later. Voice check on builder-written post copy tracked under the voice-check criterion below (still open).
 - [ ] Voice check on all live copy: no SaaS phrases, no emoji, no LinkedIn-motivational tone (CONSTRAINT-13).
 - [x] Any bug found is logged in `docs/session-log.md` with severity and a follow-up task description. → **S42 2026-05-25:** discipline established. Two bugs surfaced during T40 work — (1) `404 GET /favicon.png` (LOW, cosmetic; follow-up = T41 deferred wiring); (2) 32 orphan rows in `public.images` (LOW, non-user-visible DB/storage waste; follow-up = session task #7). Both logged with explicit severity + follow-up reference, consolidated in the `docs/session-log.md` [2026-05-25 09:45] Bug log table. Forward-looking: any new bug surfaced in remaining T40 work appends to that table.
 - [ ] `docs/launch-checklist.md` post-launch section is checked off.
@@ -950,6 +950,264 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 - Session 38 — T43.G finish (public carousel)
 - Session 39 — T43.H (wire-in)
 - Session 40 — T43.I (close-out) + Override 2 docs + final reviews
+
+---
+
+## T44 — Manual drag-reorder for projects & posts
+
+**Status:** Planned 2026-05-28 (Session 43) via `@create-plan`. Source: `docs/prd.md` §3.7. Queued behind T40 — do not start until the T40 placeholder projects are published. Mirrors the T43 project-media drag-reorder pattern (four-file mutation + `WITH ORDINALITY` RPC), but uses `UPDATE … FROM` (not delete-insert) because `projects` / `posts` rows carry content + FKs.
+
+**Decisions locked at `@create-plan` (Session 43):**
+- Public lists reflect the manual order — `/projects` + `/writing` order by `sort_order`, superseding the reverse-chronological default (PRD 2.1 + 2.3 updated).
+- One order per type. Stats stay reverse-chronological. Media-row reorder inside a project (T43 / 3.5) is unaffected.
+- New rows append to the END of the order (insert trigger sets `max+1`); admin drags up to feature.
+- Explicit "Save order" action; no auto-save on drop (mirrors the T43 media field).
+- Admin is desktop-only (single operator) — HTML5 native DnD, no touch-drag, no new dependency.
+
+---
+
+### T44.A — Schema: `sort_order` column + reorder RPCs
+
+**Files:**
+- `supabase/migrations/011_sort_order.sql` (create)
+- `supabase/migrations/011a_save_sort_order_rpc.sql` (create)
+
+**Functions / SQL to implement:**
+- `011`: `alter table public.projects` + `public.posts` add `sort_order integer`; backfill `row_number() over (order by created_at desc) - 1` per table; then set `not null` + `check (sort_order >= 0)` (mirror `project_media_order_index_nonneg`, migration 010). Add a `(status, sort_order)` btree index per table (mirror `*_status_created_at_idx`). Add a BEFORE INSERT trigger per table that sets `sort_order = coalesce((select max(sort_order) + 1 from <table>), 0)` when not supplied (append-to-end).
+- `011a`: `save_project_order(p_rows jsonb)` and `save_post_order(p_rows jsonb)` — `update public.<table> t set sort_order = (r.ord - 1) from jsonb_array_elements(p_rows) with ordinality as r(value, ord) where t.id = (r.value->>'id')::uuid;`. `language plpgsql security invoker set search_path = ''`. Guard: raise loudly when `p_rows` is null or not a jsonb array. `revoke execute ... from public; revoke ... from anon; grant execute ... to authenticated;` (mirror the 010a grant triplet).
+
+**Acceptance criteria:**
+- [ ] Migration 011 applies cleanly to dev + production; guarded/idempotent (`add column if not exists`).
+- [ ] `sort_order` is `not null` with `check (sort_order >= 0)` on both `projects` and `posts`.
+- [ ] Backfill preserves the current newest-first order (newest row = `sort_order` 0).
+- [ ] `(status, sort_order)` index exists on both tables.
+- [ ] BEFORE INSERT trigger appends a new row to the end of the order (`max+1`, or 0 when the table is empty).
+- [ ] `save_project_order` / `save_post_order` set `sort_order` by array position via `WITH ORDINALITY`; raise loudly on null / non-array input (EH: loud failure with context).
+- [ ] RPCs are `security invoker` + `search_path = ''`; EXECUTE revoked from `public` AND `anon`, granted to `authenticated` (SEC: least privilege; matches migration 010a).
+- [ ] No new RLS policy — confirm `projects_admin_all` / `posts_admin_all` (`for all to authenticated using (true) with check (true)`) already cover the `sort_order` write.
+- [ ] `@cto` decision recorded on `updated_at`: the reorder UPDATE fires the `*_set_updated_at` trigger — accept the bump (updated_at is not displayed; admin shows `created_at`) or suppress it.
+
+**Tests required:**
+- `migration 011 backfill ranks existing rows newest-first` → happy.
+- `save_project_order persists array order into sort_order` → happy.
+- `save_project_order raises on non-array p_rows` → error.
+- `save_post_order` mirror of the two above.
+- RLS empirical: authenticated reorder succeeds; `anon` EXECUTE on the RPC is denied.
+
+**Depends on:** T39 (production deploy + live DB).
+**Specialist:** `@supabase` (migration + RLS + RPC), `@cto` (schema + `updated_at` call, pre-apply).
+
+---
+
+### T44.B — Types + switch read-path to `sort_order`
+
+**Files:**
+- `lib/types.ts` (modify — add `sort_order: number` to `Project` and `Post`)
+- `lib/db.ts` (modify — `getPublishedProjects` line 87 + `getPublishedPosts` line 112; add `sort_order` to the `PROJECT_COLUMNS` / `POST_COLUMNS` projections)
+- `lib/admin-queries-projects.ts` (modify — `getAllProjects` line 90)
+- `lib/admin-queries-posts.ts` (modify — `getAllPosts` line 90)
+
+**Functions to implement:**
+- All four list reads change to `.order('sort_order', { ascending: true }).order('created_at', { ascending: false })` — `created_at` desc as a deterministic tiebreaker.
+
+**Acceptance criteria:**
+- [ ] `Project` and `Post` include `sort_order: number`.
+- [ ] Public `/projects` and `/writing` render published rows in `sort_order` ascending (verify by reorder → reload).
+- [ ] Admin `/admin/projects` and `/admin/posts` render in `sort_order` ascending.
+- [ ] `created_at` desc retained as tiebreaker on all four reads.
+- [ ] Public loads still route through `lib/safe-load.ts` (CONSTRAINT-14) — unchanged.
+- [ ] Existing query tests updated to expect `sort_order` ordering.
+
+**Tests required:**
+- `getPublishedProjects orders by sort_order asc then created_at desc` → happy.
+- `getAllPosts orders by sort_order asc` → happy.
+- mirror for the other two reads.
+
+**Depends on:** T44.A.
+**Specialist:** `@dev`.
+
+---
+
+### T44.C — Reorder Server Action (four-file pattern)
+
+**Files:**
+- `lib/admin-reorder-mutations-types.ts` (create — `ReorderMutationState` envelope + initial-state const)
+- `lib/admin-reorder-mutations-schemas.ts` (create — zod: `{ rows: z.array(z.object({ id: z.string().uuid() }).strict()) }`)
+- `lib/admin-reorder-mutations-internal.ts` (create — throwing dispatch; resolves resource → RPC name; `supabase.rpc(...)`; wraps errors in `ServiceError`)
+- `lib/admin-reorder-mutations.ts` (create — `'use server'` wrappers `saveProjectOrder` + `savePostOrder`)
+- `tests/server-actions-manifest.test.ts` (modify — register the two new action IDs, SEC-09)
+
+**Functions to implement:**
+- `saveProjectOrder(_prev: ReorderMutationState, formData: FormData): Promise<ReorderMutationState>`
+- `savePostOrder(_prev: ReorderMutationState, formData: FormData): Promise<ReorderMutationState>`
+- internal `saveOrderInternal(resource: 'projects' | 'posts', raw: unknown, client?): Promise<void>` — parse schema, call the resource's RPC.
+
+**Acceptance criteria:**
+- [ ] Each action reads an ordered `rows` array (`[{ id }]`) from FormData and calls the matching RPC (`save_project_order` / `save_post_order`).
+- [ ] Uniform `{ status, fieldErrors?, formError? }` envelope; never throws to the wire; `padToFloor` timing floor (Channel 3 pattern).
+- [ ] Zod rejects non-uuid ids and malformed payloads (EH: loud at the boundary).
+- [ ] Both new action IDs registered in `server-actions-manifest` (SEC-09) — manifest test green.
+- [ ] Longest function < 50 lines; each file < 300 lines (CQ-01 / CQ-04).
+- [ ] `@security` audit: writes are server-side only; RPC `security invoker` keeps RLS as the boundary; no new public surface.
+
+**Tests required:**
+- `saveProjectOrder persists order on a valid payload` → happy.
+- `saveProjectOrder returns an error envelope on a non-uuid id` → error.
+- `savePostOrder` mirror.
+
+**Depends on:** T44.A.
+**Specialist:** `@security`.
+
+---
+
+### T44.D — Admin drag UI + "Save order"
+
+**Files:**
+- `components/admin/ResourceList.tsx` (modify — draggable rows + `⠿` handle + drag handlers + "Save order" button; reuse `reorderRows`. If it exceeds the CQ-02 200-line cap, split, e.g. `ResourceListReorder.tsx`)
+- `components/admin/ProjectsList.tsx` (modify — pass `saveProjectOrder`)
+- `components/admin/PostsList.tsx` (modify — pass `savePostOrder`)
+- `lib/admin-project-media-form-state.ts` (reference — reuse the generic `reorderRows`; if it cannot be imported cleanly, lift it to a shared `lib/reorder.ts`)
+- `tests/e2e/admin-smoke.spec.ts` (modify — add a drag → Save order → reload-persists step)
+
+**Functions / behaviour:**
+- Rows gain `draggable` + `onDragStart` / `onDragOver` / `onDrop`, mirroring `ProjectMediaRow`; a `draggingIndexRef`; optimistic reorder via `reorderRows`.
+- "Save order" dispatches the resource action with `JSON.stringify` of `[{ id }]` in current display order.
+
+**Acceptance criteria:**
+- [ ] Rows in `/admin/projects` and `/admin/posts` are drag-reorderable via HTML5 native DnD (no new dependency).
+- [ ] Drop reorders optimistically; "Save order" persists + shows a `sonner` success toast; reload preserves the order.
+- [ ] No auto-save on drop — explicit save (PRD §3.7; mirrors 3.5).
+- [ ] Operator labels are CONSTRAINT-13 clean (dry, no SaaS phrases, no emoji; `⠿` typographic handle only).
+- [ ] Touch-drag not implemented (desktop-only, single operator — stated, not a gap).
+- [ ] Components ≤ 200 lines (CQ-02) — split if exceeded.
+- [ ] `@ui-swarnimbagre` admin (shadcn) mode + `@code-review` PASS.
+
+**Tests required:**
+- `reorderRows reorders the client list on drop` → happy (largely covered by reuse).
+- `Save order dispatches the action with ordered ids` → happy.
+- Playwright admin smoke: drag a row in `/admin/projects`, click Save order, reload, verify the new order persists.
+
+**Depends on:** T44.B, T44.C.
+**Specialist:** `@ui-swarnimbagre`, `@code-review`.
+
+---
+
+## T45 — Embedded project writeup (linked post on the detail page)
+
+**Status:** Planned 2026-05-28 (Session 43) via `@designer` (Override 3) + `@cpo` (PRD §3.8) + `@create-plan`. Source: `docs/prd.md` §3.8 + `docs/design-decisions.md` Override 3. Queued behind T44 (which is behind T40). Reuses the `/writing` post-body rendering on the project detail page; does NOT add a project-only body field.
+
+**Decisions locked at planning (Session 43):**
+- A project attaches ONE existing post via a new `projects.post_id` FK (nullable, `on delete set null`); the post is a normal post that also appears in `/writing`.
+- The detail page renders the linked post's body below the card via the existing `MarkdownContent`, per Override 3 — no repeated post `<h1>`; a hairline + post-date meta label separates card from body.
+- The `/projects` title links to the detail page only when `post_id` is set OR the project has more than one media item; bare single-image projects are non-clickable.
+- Only a `published` linked post renders publicly (no draft-body leak).
+- `post_url` (`¶ notes`) stays independent of `post_id`.
+- `MarkdownContent` hydrates client-side, so the embedded body is not in the initial SSR HTML — accepted tradeoff, identical to `/writing`.
+
+---
+
+### T45.A — Schema + types: `post_id` FK
+
+**Files:**
+- `supabase/migrations/012_project_post_link.sql` (create — or the next free number if T44's `011`/`011a` have not landed)
+- `lib/types.ts` (modify — add `post_id: string | null` to `Project`)
+- `lib/admin-projects-mutations-schemas.ts` (modify — add `post_id` to create + update schemas: uuid-or-empty → null)
+- `lib/admin-projects-mutations.ts` + `lib/admin-projects-mutations-internal.ts` (modify — read + persist `post_id`)
+
+**Functions / SQL:**
+- Migration mirrors the `image_after_id` pattern (009): `add column if not exists post_id uuid null`; drop-then-add `projects_post_id_fkey foreign key (post_id) references posts(id) on delete set null`.
+- Zod: `post_id` nullable uuid; empty string coerces to null (like the image FKs).
+
+**Acceptance criteria:**
+- [ ] Migration applies cleanly to dev + production; idempotent (drop-then-add FK).
+- [ ] `post_id` is nullable, FK to `posts(id)` with `on delete set null` (matches `image_after_id`).
+- [ ] No new RLS policy — the column-agnostic `projects_*` policies cover it (verify).
+- [ ] `Project` type carries `post_id: string | null`.
+- [ ] `createProject` / `updateProject` accept and persist `post_id`; zod coerces empty → null and rejects non-uuid.
+
+**Tests required:**
+- `zod accepts null/empty post_id and rejects non-uuid` → happy + error.
+- `createProject persists post_id` → happy.
+
+**Depends on:** T39. (Migration number depends on T44 landing first.)
+**Specialist:** `@supabase` (migration), `@cto` (FK choice, pre-apply).
+
+---
+
+### T45.B — Admin "Linked writeup" picker
+
+**Files:**
+- `lib/admin-queries-posts.ts` (modify — add `listPostsForPicker(): Promise<{ id, title }[]>`, `status='published'`, ordered `title asc`)
+- `lib/admin-queries.ts` (modify — re-export `listPostsForPicker`)
+- `components/admin/ProjectFormDisplay.tsx` (modify — add a "Linked writeup" shadcn Select + hidden `name="post_id"` input, mirroring the `thumb_kind` pattern; "Unset" option first)
+- `components/admin/ProjectForm.tsx` (modify — accept + thread a `posts` option prop)
+- `app/(admin)/admin/projects/new/page.tsx` + `app/(admin)/admin/projects/[id]/page.tsx` (modify — fetch `listPostsForPicker()` and pass `posts` to `ProjectForm`)
+
+**Acceptance criteria:**
+- [ ] `listPostsForPicker` returns published posts as `{ id, title }`, ordered by title.
+- [ ] `ProjectForm` renders a "Linked writeup" dropdown (published posts + "Unset"); selection saves to `post_id` via the hidden-input pattern (empty → null).
+- [ ] Both the `new` and `[id]` admin pages fetch and pass `posts`.
+- [ ] Operator label "Linked writeup" is CONSTRAINT-13 clean (dry, no emoji, no SaaS phrases).
+- [ ] CQ-02: if `ProjectFormDisplay` exceeds 200 lines, split.
+
+**Tests required:**
+- `listPostsForPicker returns published posts only` → happy.
+- `ProjectForm renders the linked-writeup options and prefills on edit` → happy.
+
+**Depends on:** T45.A.
+**Specialist:** `@ui-swarnimbagre` (admin shadcn mode).
+
+---
+
+### T45.C — Public detail render: embedded post body
+
+**Files:**
+- `app/projects/[slug]/page.tsx` (modify — load the linked published post inside the existing `Promise.all` / `safeLoad`; render its body below `ProjectCard` / `MobileProjectCard` per Override 3)
+- `lib/db.ts` and/or `lib/public-projects.ts` (modify — a published-post-by-id read, or reuse `getPostBySlug`; must filter `status='published'`)
+
+**Functions:**
+- Resolve `project.post_id` → published post; render `renderBody(post.content)` (mirror `/writing`) below the card; render nothing when null/draft.
+- Desktop: hairline + post-date meta + body below `ProjectCard`. Mobile: same below `MobileProjectCard`.
+
+**Acceptance criteria:**
+- [ ] When `post_id` → a published post, the detail page renders the post body below the card (desktop + mobile), styled per Override 3 (720px, `font-serif`, hairline + date meta, no repeated `<h1>`).
+- [ ] When `post_id` is null OR the post is a draft, no body renders — no error (missing/draft is a clean empty, not a failure).
+- [ ] Public loads route through `lib/safe-load.ts` (CONSTRAINT-14); the post fetch is its own `safeLoad`.
+- [ ] `@security`: only `published` posts render — no draft body leak via `post_id`.
+
+**Tests required:**
+- e2e: project with a published linked post shows the body on `/projects/<slug>`.
+- e2e: project with null `post_id` shows no body, no error.
+- unit: the linked-post loader returns null for a draft/missing post.
+
+**Depends on:** T45.A.
+**Specialist:** `@ui-swarnimbagre` (public bundle mode), `@security` (draft-leak check).
+
+---
+
+### T45.D — Title-link gating + Override 3 docs
+
+**Files:**
+- `lib/public-projects.ts` (modify — `PublicProject` gains `postId: string | null`; set it in the row mapper)
+- `components/public/pages/Projects.tsx` + `components/public/mobile/pages/Projects.tsx` (modify — gate `onClick`: navigate only when `postId` set OR more than one media item; else pass `undefined`)
+- `components/public/ProjectCard.tsx` + `components/public/mobile/MobileProjectCard.tsx` (verify — a missing `onClick` renders an inert title + `cursor: default`; adjust if needed)
+- `docs/design-decisions.md` (Override 3 — written at planning; verify present)
+- `tests/e2e/admin-smoke.spec.ts`, `tests/e2e/public-carousel.spec.ts`, `tests/ProjectCard.test.tsx`, `tests/MobileProjectCard.test.tsx`, `tests/public-projects.test.ts` (modify — gated-link cases + `postId` mapping)
+
+**Acceptance criteria:**
+- [ ] `PublicProject` carries `postId`; the mapper sets it from the row.
+- [ ] A project with no linked post and at most one media item has a non-clickable title (no detail navigation) on both desktop + mobile lists.
+- [ ] A project with a linked post OR more than one media item links its title to `/projects/<slug>`.
+- [ ] `ProjectCard` / `MobileProjectCard` render cleanly with no `onClick` (inert title, `cursor: default`).
+- [ ] Tests updated for the gated state + `postId` mapping; `@code-review` PASS.
+
+**Tests required:**
+- `ProjectCard renders an inert title when no onClick` → happy.
+- `public-projects mapper sets postId` → happy.
+- e2e: a bare project card title is not a link; an enriched one is.
+
+**Depends on:** T45.A, T45.C.
+**Specialist:** `@code-review`, `@designer` (confirm Override 3 layout in render).
 
 ---
 

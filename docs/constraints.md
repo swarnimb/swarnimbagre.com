@@ -70,6 +70,7 @@
 **Overrides:**
 - **Override 1 (T42, 2026-05-19):** approved for the project-card surface only. See `docs/design-decisions.md` "Override 1: Project card redesign" entry for the surface boundary (named file list) and the rationale.
 - **Override 2 (T43, 2026-05-20):** approved for the project media carousel surface only. See `docs/design-decisions.md` "Override 2: Project media carousel" entry for the surface boundary (named file list), the chrome specs, and the rationale. Override 2 also introduces the public site's first runtime JS dependency (`embla-carousel-react`); the dependency budget for any public-site Override is codified at CONSTRAINT-22.
+- **Override 3 (T45, 2026-05-28):** approved for the project detail page + the project-list title-link only. See `docs/design-decisions.md` "Override 3: Project detail page — embedded writeup" entry for the surface boundary (named file list) and rationale. A linked post's body renders below the project card on the detail page, reusing the `/writing` body rendering. No new public-site JS dependency. (T45 planned, not yet built.)
 
 **Who decided and when:** Kickoff + `@designer`, 2026-05-05. Reaffirmed at `@plan`, 2026-05-06.
 

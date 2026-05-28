@@ -1,7 +1,7 @@
 # Plan Index: swarnimbagre.com
 
 **Date:** 2026-05-06
-**Total tasks:** 44 across 4 phases (40 original + T10.5 testing-infra inserted 2026-05-07; T41 + T42 added 2026-05-19, Session 28; T43 added 2026-05-20, Session 32).
+**Total tasks:** 46 across 4 phases (40 original + T10.5 testing-infra inserted 2026-05-07; T41 + T42 added 2026-05-19, Session 28; T43 added 2026-05-20, Session 32; T44 project + post reordering added 2026-05-28, Session 43; T45 project writeup embedding added 2026-05-28, Session 43).
 **Entry point for `@session-start`** — load this file to find the active phase file, then load that phase file.
 
 ---
@@ -13,7 +13,7 @@
 | 1 — Foundation | [`plan-phase-1-foundation.md`](plan-phase-1-foundation.md) | T1–T14 + T10.5 (15 tasks) | External-deps prep, Next.js scaffold, Supabase project + schema + RLS, public reads, Markdown render, Storage integration, testing harness, first deploy | Done (2026-05-11) |
 | 2 — Admin panel | [`plan-phase-2-admin.md`](plan-phase-2-admin.md) | T15–T28 (14 tasks) | Admin layout, Tailwind scoping, shadcn install, magic link auth, projects + posts CRUD, stats view + manual insert, image upload, orphan cleanup | Done (2026-05-14) |
 | 3 — OpenClaw ingestion | [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md) | T29–T31 (3 tasks) | Edge Function `stats-ingest`, OpenClaw config notes, monitoring setup | **Deferred — T30 done; T29 + T31 await OpenClaw operator gate (see session-handoff)** |
-| 4 — Polish + launch | [`plan-phase-4-launch.md`](plan-phase-4-launch.md) | T32–T43 (12 tasks; T41 trigger-gated deferred, not an exit blocker) | Admin smoke test, error monitoring, README, env checklist, launch checklist, security review, code review, doc audit, production deploy + post-launch ops + project content-model expansion + project media multi-image carousel | **Active (T32–T39 done; T39 closed 2026-05-19, Session 27 — site live on apex canonical; T42 done 2026-05-19, Sessions 29–31; T43 next — project media multi-image carousel; T40 partial-blocked + 24h log review calendar-bounded; T41 deferred trigger-gated; see session-handoff)** |
+| 4 — Polish + launch | [`plan-phase-4-launch.md`](plan-phase-4-launch.md) | T32–T45 (14 tasks; T41 trigger-gated deferred, not an exit blocker) | Admin smoke test, error monitoring, README, env checklist, launch checklist, security review, code review, doc audit, production deploy + post-launch ops + project content-model expansion + project media multi-image carousel + manual project/post drag-reorder + project writeup embedding | **Active (T32–T39 done; T39 closed 2026-05-19, Session 27 — site live on apex canonical; T42 done 2026-05-19, Sessions 29–31; T43 next — project media multi-image carousel; T40 partial-blocked + 24h log review calendar-bounded; T41 deferred trigger-gated; see session-handoff)** |
 
 ---
 

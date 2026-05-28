@@ -36,7 +36,7 @@ Server-side UA detection via Next.js middleware. Each page has a single canonica
 ### 2.3 Page: Projects (`/projects`)
 
 **G/W/T:**
-- Given a visitor lands on `/projects`, when the page renders, then all `projects` rows with `status='published'` are listed in reverse-chronological order.
+- Given a visitor lands on `/projects`, when the page renders, then all `projects` rows with `status='published'` are listed in the admin-defined order (`sort_order` ascending; see 3.7).
 - Given a project has `project_media` rows, when its card renders, then the card's image slot is a swipeable carousel of those rows. Carousel chrome and behavior are canonical in 2.3a (same component, same data — no separate "card primary image" concept).
 - Given a project has zero `project_media` rows, when its card renders, then no image area is shown.
 - Given a project is `status='draft'`, when any anonymous request hits the page, then that project is invisible in the response (RLS-enforced, not app-filtered).
@@ -64,7 +64,7 @@ The showcase surface for a single project. Renders the project's card content (t
 ### 2.4 Page: Writing (`/writing`)
 
 **G/W/T:**
-- Given a visitor lands on `/writing`, when the page renders, then all `posts` rows with `status='published'` are listed in reverse-chronological order with title, excerpt, and date.
+- Given a visitor lands on `/writing`, when the page renders, then all `posts` rows with `status='published'` are listed in the admin-defined order (`sort_order` ascending; see 3.7) with title, excerpt, and date.
 - Given a visitor opens an individual post (`/writing/[slug]`), when the page renders, then the post's raw Markdown is parsed by `marked` and sanitized by DOMPurify against the locked whitelist before being injected into the DOM.
 - Given a draft post exists, when an anonymous request hits its slug URL, then the response is a 404 (RLS returns no row, page renders not-found).
 
@@ -155,6 +155,49 @@ Single image per post. No change from the original Phase 1 behavior — posts do
 ### 3.6 Orphan cleanup
 
 Best-effort. A button on `/admin/images` that deletes `images` rows with both `parent_id` and `parent_type` NULL and `created_at` older than 7 days, plus the corresponding Storage objects. Confirm modal. No automation, no scheduler.
+
+### 3.7 Project & Post Reordering (`/admin/projects`, `/admin/posts`)
+
+Manual drag-to-reorder for the project list and the post list. Sets the order both admin and public lists render in. Supersedes the reverse-chronological default in 2.1 and 2.3.
+
+**Scope:** projects and posts only, one order per type. Stats stay reverse-chronological. Media-row reorder inside a project (3.5) is unaffected.
+**Mechanism:** drag a row in the admin list; release to set visual order; persistence on an explicit "Save order" action — not auto-save (mirrors 3.5).
+**Persistence:** a per-row `sort_order` integer; saved array position is the order (0-based, ascending).
+**Default order:** existing rows backfilled newest-first (preserves current behaviour); a newly created project or post appends to the end of the order until dragged.
+**Desktop-only:** single operator; no touch-drag.
+
+**G/W/T:**
+- Given the admin loads `/admin/projects` or `/admin/posts`, when the page renders, then rows are listed in `sort_order` ascending, not reverse-chronological.
+- Given the admin drags a row and drops it, when they release, then the visual order updates but is not yet persisted.
+- Given the admin clicks "Save order", when it succeeds, then the new order persists, a success toast shows, and reloading the page preserves it.
+- Given the admin reorders rows then navigates away without saving, when they return, then the previously saved order is shown.
+- Given a visitor lands on `/projects` or `/writing`, when the page renders, then published rows appear in the admin-defined `sort_order`, not by date.
+- Given a draft sits between two published rows in the admin order, when the public list renders, then only the published rows show, in their relative order.
+
+**Out of scope:** cross-page reordering (admin lists paginate at 50; reorder operates within the loaded page); touch / mobile drag (admin is desktop-only); reordering stats; per-section "featured" flags or multiple orderings.
+**Success metric:** the admin can set the public display order of projects and posts by dragging, and the public site renders that order.
+
+---
+
+### 3.8 Project Writeup Embedding (`/projects/<slug>`)
+
+A project may attach one existing writing post; its body renders on the project detail page below the card/carousel. Makes the detail page show content the list card does not. Layout: see Override 3 in `design-decisions.md`.
+
+**Scope:** projects only, one attached post per project. The attached post is a normal post that also appears in `/writing` (reused, not project-only).
+**Reference:** new `projects.post_id` FK → `posts(id)`, nullable, `on delete set null`. Distinct from `post_url` (the `¶ notes` outbound link, which stays independent).
+**Link activation:** the `/projects` list links a card's title to its detail page only when the project has an attached post OR more than one media item; otherwise the card is non-clickable.
+**Visibility:** only a `published` attached post renders publicly; a draft or null `post_id` renders nothing.
+
+**G/W/T:**
+- Given a project's `post_id` points to a published post, when a visitor opens `/projects/<slug>`, then that post's body renders below the carousel, styled like `/writing`.
+- Given a project has no `post_id` and at most one media item, when a visitor views `/projects`, then that project's title is not a link (no detail navigation).
+- Given a project has a `post_id` OR more than one media item, when a visitor views `/projects`, then its title links to `/projects/<slug>`.
+- Given the attached post is a draft or missing, when the detail page renders, then no body shows — no error, no leak.
+- Given the admin edits a project, when the form loads, then a "Linked writeup" dropdown lists published posts plus an "Unset" option and saves to `post_id`.
+- Given a project has both `post_id` and `post_url`, when the detail page renders, then the embedded body shows and the `¶ notes` button still links to `post_url`.
+
+**Out of scope:** multiple posts per project; project-only posts hidden from `/writing`; embedding bodies on the `/projects` list cards (detail page only).
+**Success metric:** opening a project that has a writeup shows real long-form content, not a duplicate of the card.
 
 ---
 

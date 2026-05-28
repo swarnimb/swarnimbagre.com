@@ -191,6 +191,42 @@ Codified as CONSTRAINT-22 at T43.I.
 
 ---
 
+### Override 3: Project detail page — embedded writeup (T45, 2026-05-28)
+
+**Rationale.** The bundle has no project detail page; projects were self-contained cards and the title was an inert label. The build added a `/projects/<slug>` route that re-rendered the same card — a dead-end click that showed nothing new. Rather than delete the route or duplicate the posts system with a project-only body field, a project may attach an existing writing post whose body renders below the card/carousel on its detail page. This makes the detail page earn its place by showing content the list card does not, while reusing the `/writing` body rendering verbatim. CONSTRAINT-05 cannot hold on this surface because a project detail page that stacks a post body under a carousel is a layout the bundle does not contain.
+
+**What changed (project detail page + project list title-link only):**
+- When a project has an attached post (`post_id`) that is published, the detail page renders that post's body below the existing project card, using the same `MarkdownContent` + body wrapper as `/writing/[slug]` — `max-width 720`, `font: var(--font-serif)`, `color: var(--fg)`, `margin-top 24`.
+- A hairline rule (`1px solid var(--hairline)`, 32px top margin) plus a small meta label (the post date, `var(--meta-sm)` / `var(--fg-muted)` / 0.14em tracking, mirroring the `/writing` header meta) separates the card from the embedded body. The post's own `<h1>` is NOT repeated — the project title already heads the page.
+- The `/projects` list links a card's title to its detail page only when the project has an attached post OR more than one media item; otherwise the card stays inert (`cursor: default`), as the bundle prescribes.
+- `post_url` (the `¶ notes` link button, Override 1) is unchanged and independent of `post_id`.
+
+**What stayed (no change):**
+- Palette — verbatim hex codes from `colors_and_type.css`.
+- Typography — Fraunces (`var(--font-serif)`) for the embedded body, matching `/writing`; no new fonts or tokens.
+- Spacing — reuses the `720` body/header max-width and the `24px` body offset already used by `/writing`.
+- Animation timing — 220ms `cubic-bezier(.2, .7, .2, 1)`, unchanged.
+- Voice — CONSTRAINT-13 still binding on the meta label.
+- Everything outside the project detail page and the two `/projects` list pages remains bundle-verbatim under CONSTRAINT-05.
+
+**Decision specs:**
+| Area | Spec |
+|---|---|
+| Body max-width | 720px (matches `/writing` `BODY_MAX`) |
+| Body typography | `var(--font-serif)`, `color: var(--fg)`, rendered via `MarkdownContent` |
+| Card → body separator | `1px solid var(--hairline)` + 32px top margin |
+| Body meta label | post date, `var(--meta-sm)` / `var(--fg-muted)` / 0.14em — no repeated post `<h1>` |
+| Title-link activation | list title links to detail only when `post_id` set OR more than one media item; else inert |
+| Mobile | same body below `MobileProjectCard`, within the mobile page gutters; reuse the `/writing` `renderBody` styling |
+
+**Surface boundary.** Override 3 applies to these files only:
+- `app/projects/[slug]/page.tsx` (desktop + mobile detail render — embedded body)
+- `components/public/pages/Projects.tsx` + `components/public/mobile/pages/Projects.tsx` (title-link gating)
+- `components/public/MarkdownContent.tsx` is reused unchanged.
+Everything outside this list remains bundle-verbatim. A further deviation requires its own Override entry.
+
+---
+
 ## Admin Panel
 
 **Scope:** The admin panel at `/admin` follows DIFFERENT rules from the public site. The bundle's anti-patterns and component conventions do NOT apply here.
