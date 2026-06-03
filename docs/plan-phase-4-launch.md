@@ -977,25 +977,26 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 - `012a`: `save_project_order(p_rows jsonb)` and `save_post_order(p_rows jsonb)` — `update public.<table> t set sort_order = (r.ord - 1) from jsonb_array_elements(p_rows) with ordinality as r(value, ord) where t.id = (r.value->>'id')::uuid;`. `language plpgsql security invoker set search_path = ''`. Guard: raise loudly when `p_rows` is null or not a jsonb array. `revoke execute ... from public; revoke ... from anon; grant execute ... to authenticated;` (mirror the 010a grant triplet).
 
 **Acceptance criteria:**
-- [ ] Migration 012 applies cleanly to dev + production; guarded/idempotent (`add column if not exists`).
-- [ ] `sort_order` is `not null` with `check (sort_order >= 0)` on both `projects` and `posts`.
-- [ ] Backfill preserves the current newest-first order (newest row = `sort_order` 0).
-- [ ] `(status, sort_order)` index exists on both tables.
-- [ ] BEFORE INSERT trigger appends a new row to the end of the order (`max+1`, or 0 when the table is empty).
-- [ ] `save_project_order` / `save_post_order` set `sort_order` by array position via `WITH ORDINALITY`; raise loudly on null / non-array input (EH: loud failure with context).
-- [ ] RPCs are `security invoker` + `search_path = ''`; EXECUTE revoked from `public` AND `anon`, granted to `authenticated` (SEC: least privilege; matches migration 010a).
-- [ ] No new RLS policy — confirm `projects_admin_all` / `posts_admin_all` (`for all to authenticated using (true) with check (true)`) already cover the `sort_order` write.
-- [ ] `@cto` decision recorded on `updated_at`: the reorder UPDATE fires the `*_set_updated_at` trigger — accept the bump (updated_at is not displayed; admin shows `created_at`) or suppress it.
+- [x] Migration 012 applies cleanly to dev + production; guarded/idempotent (`add column if not exists`). → applied to prod `oosretprveorrjzjcbxb` S45; `list_migrations` shows `012_sort_order` + `012a_save_sort_order_rpc`.
+- [x] `sort_order` is `not null` with `check (sort_order >= 0)` on both `projects` and `posts`. → verified via `information_schema` + `pg_constraint` (`*_sort_order_nonneg` = `CHECK ((sort_order >= 0))`).
+- [x] Backfill preserves the current newest-first order (newest row = `sort_order` 0). → verified live: projects 0→5, posts 0→4, `sort_order` ascends as `created_at` descends.
+- [x] `(status, sort_order)` index exists on both tables. → verified via `pg_indexes` (`projects_status_sort_order_idx`, `posts_status_sort_order_idx`).
+- [x] BEFORE INSERT trigger appends a new row to the end of the order (`max+1`, or 0 when the table is empty). → both triggers present + wired BEFORE INSERT (verified via `pg_trigger`); append logic verified by inspection. NOTE: not exercised with a live INSERT (would create/hard-delete a real row, CONSTRAINT-10) — will be naturally confirmed when the first row is created via the T44.D admin UI.
+- [x] `save_project_order` / `save_post_order` set `sort_order` by array position via `WITH ORDINALITY`; raise loudly on null / non-array input (EH: loud failure with context). → write path proven live (reverse round-trip moved row 0→5 and restored); non-array raises `P0001: ... must be a jsonb array (got object)`.
+- [x] RPCs are `security invoker` + `search_path = ''`; EXECUTE revoked from `public` AND `anon`, granted to `authenticated` (SEC: least privilege; matches migration 010a). → verified via `has_function_privilege`: anon=false, authenticated=true on both RPCs; advisor 0011 does NOT flag the 4 new functions.
+- [x] No new RLS policy — confirm `projects_admin_all` / `posts_admin_all` (`for all to authenticated using (true) with check (true)`) already cover the `sort_order` write. → confirmed; no new policy added.
+- [x] `@cto` decision recorded on `updated_at`: the reorder UPDATE fires the `*_set_updated_at` trigger — **ACCEPT the bump** (S45 `@cto` call: `updated_at` is not displayed; admin shows `created_at`; suppression needs elevated privs incompatible with `security invoker` model — accept costs nothing). No suppression logic in the RPCs.
 
-**Tests required:**
-- `migration 012 backfill ranks existing rows newest-first` → happy.
-- `save_project_order persists array order into sort_order` → happy.
-- `save_project_order raises on non-array p_rows` → error.
-- `save_post_order` mirror of the two above.
-- RLS empirical: authenticated reorder succeeds; `anon` EXECUTE on the RPC is denied.
+**Tests required:** → Repo has NO live-DB unit harness (all "db" tests use a stubbed client; confirmed in `vitest.config.ts`). Behavioral criteria below verified empirically against the live DB via Supabase MCP (see closure note). Static-shape regression test added: `tests/migration-sort-order.test.ts` (14 assertions, reads both migration files and locks the load-bearing idioms — mirrors `tests/server-actions-manifest.test.ts` precedent). Suite 441/441.
+- [x] `migration 012 backfill ranks existing rows newest-first` → happy. (live-DB verified)
+- [x] `save_project_order persists array order into sort_order` → happy. (live-DB reverse round-trip)
+- [x] `save_project_order raises on non-array p_rows` → error. (live-DB `P0001`)
+- [x] `save_post_order` mirror of the two above. → schema/privileges verified live; write path is a literal mirror of `save_project_order` (proven), raise guard identical.
+- [x] RLS empirical: authenticated reorder succeeds; `anon` EXECUTE on the RPC is denied. → `has_function_privilege` anon=false / authenticated=true on both RPCs.
 
 **Depends on:** T39 (production deploy + live DB).
 **Specialist:** `@supabase` (migration + RLS + RPC), `@cto` (schema + `updated_at` call, pre-apply).
+**Closed:** Session 45 (2026-06-03). Migrations 012/012a written, applied to prod, and empirically verified (backfill order, write path, raise guard, EXECUTE grants, advisors clean of new findings). `@cto` `updated_at` call = ACCEPT. T44.B (read-path switch) is next.
 
 ---
 
