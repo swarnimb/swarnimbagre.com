@@ -20,7 +20,8 @@ export type PostFilter = 'all' | PostStatus;
  * render the body — a wider projection would waste bandwidth on every page
  * load.
  */
-const POST_LIST_COLUMNS = 'id, title, slug, status, image_id, created_at, updated_at';
+const POST_LIST_COLUMNS =
+  'id, title, slug, status, image_id, created_at, updated_at, sort_order';
 
 /**
  * Column projection for {@link getPostById}. Includes `content` — the edit
@@ -49,11 +50,13 @@ export interface PostRow {
   image_id: string | null;
   created_at: string;
   updated_at: string;
+  sort_order: number;
 }
 
 /**
- * Fetch posts for the admin list view, newest first, with status filter and
- * pagination. Admin sees both draft and published rows — RLS permits SELECT
+ * Fetch posts for the admin list view, ordered by manual `sort_order` ASC
+ * (with `created_at` DESC as a deterministic tiebreaker, T44), with status
+ * filter and pagination. Admin sees both draft and published rows — RLS permits SELECT
  * on `posts` for the `authenticated` role via the `posts_admin_all` policy
  * from migration 002.
  *
@@ -87,6 +90,7 @@ export async function getAllPosts(
     query = query.eq('status', filter);
   }
   const { data, error, count } = await query
+    .order('sort_order', { ascending: true })
     .order('created_at', { ascending: false })
     .range(from, to);
   if (error) {

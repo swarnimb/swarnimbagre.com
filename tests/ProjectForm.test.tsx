@@ -61,6 +61,7 @@ const PUBLISHED_PROJECT: Project = {
   thumb_kind: null,
   image_after_id: null,
   post_id: null,
+  sort_order: 0,
 };
 
 const DRAFT_PROJECT: Project = {
@@ -79,6 +80,7 @@ const DRAFT_PROJECT: Project = {
   thumb_kind: null,
   image_after_id: null,
   post_id: null,
+  sort_order: 0,
 };
 
 /** Published posts offered by the "Linked writeup" picker (T45.B). */

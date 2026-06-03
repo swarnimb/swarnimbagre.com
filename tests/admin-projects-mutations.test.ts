@@ -38,6 +38,7 @@ const PUBLISHED_ROW: Project = {
   thumb_kind: null,
   image_after_id: null,
   post_id: null,
+  sort_order: 0,
 };
 
 /** Sample draft row used as the pre-fetch result on draft-edit paths. */
@@ -57,6 +58,7 @@ const DRAFT_ROW: Project = {
   thumb_kind: null,
   image_after_id: null,
   post_id: null,
+  sort_order: 0,
 };
 
 /**
@@ -244,6 +246,7 @@ describe('createProjectInternal', () => {
       thumb_kind: null,
       image_after_id: null,
       post_id: null,
+      sort_order: 0,
     };
     const { client, calls } = makeCreateStub({ data: insertedRow, error: null });
 
@@ -309,6 +312,7 @@ describe('createProjectInternal', () => {
       thumb_kind: 'disc',
       image_after_id: null,
       post_id: null,
+      sort_order: 0,
     };
     const { client, calls } = makeCreateStub({
       data: insertedRow,
@@ -360,6 +364,7 @@ describe('createProjectInternal', () => {
       thumb_kind: null,
       image_after_id: null,
       post_id: POST_ID,
+      sort_order: 0,
     };
     const { client, calls } = makeCreateStub({ data: insertedRow, error: null });
 

@@ -32,7 +32,8 @@ export {
  */
 const PROJECT_COLUMNS =
   'id, title, slug, description, status, image_id, created_at, updated_at, ' +
-  'github_url, live_url, post_url, progress_percent, thumb_kind, image_after_id';
+  'github_url, live_url, post_url, progress_percent, thumb_kind, image_after_id, ' +
+  'sort_order';
 
 /** Column projection for stat queries. */
 const STAT_COLUMNS = 'id, category, label, value, unit, created_at';
@@ -51,7 +52,8 @@ const PROJECT_MEDIA_COLUMNS =
   'id, project_id, image_id, image_after_id, caption, order_index, created_at';
 
 /**
- * Fetch all published projects, newest first.
+ * Fetch all published projects, ordered by manual `sort_order` ASC with
+ * `created_at` DESC as a deterministic tiebreaker (T44).
  *
  * @param client Optional injected client (for tests). Defaults to a
  *               request-scoped server client.
@@ -65,6 +67,7 @@ export async function getPublishedProjects(client?: SupabaseClient): Promise<Pro
     .from('projects')
     .select(PROJECT_COLUMNS)
     .eq('status', PUBLISHED)
+    .order('sort_order', { ascending: true })
     .order('created_at', { ascending: false });
   if (error) {
     logDbError(operation, error);

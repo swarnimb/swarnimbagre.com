@@ -59,6 +59,13 @@ export interface Project {
    * `public.posts` (T45.A). When null, the project is not linked to a post.
    */
   post_id: string | null;
+  /**
+   * Manual display rank, ascending (0-based). Added in migration 012 (T44).
+   * NOT NULL with a non-negative CHECK; an append-on-insert trigger fills it
+   * for new rows. List reads order by this ASC, with `created_at` DESC as a
+   * deterministic tiebreaker.
+   */
+  sort_order: number;
 }
 
 /** A written post. One row in `public.posts`. */
@@ -71,6 +78,13 @@ export interface Post {
   image_id: string | null;
   created_at: string;
   updated_at: string;
+  /**
+   * Manual display rank, ascending (0-based). Added in migration 012 (T44).
+   * NOT NULL with a non-negative CHECK; an append-on-insert trigger fills it
+   * for new rows. List reads order by this ASC, with `created_at` DESC as a
+   * deterministic tiebreaker.
+   */
+  sort_order: number;
 }
 
 /** A single stat value rendered on the hobby-stats surface. */

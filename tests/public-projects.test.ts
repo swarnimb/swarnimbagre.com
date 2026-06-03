@@ -54,6 +54,7 @@ function makeRow(overrides: Partial<Project> = {}): Project {
     thumb_kind: null,
     image_after_id: null,
     post_id: null,
+    sort_order: 0,
     ...overrides,
   };
 }

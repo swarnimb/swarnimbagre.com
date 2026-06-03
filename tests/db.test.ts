@@ -30,6 +30,29 @@ function makeStub(result: { data: unknown; error: unknown }): SupabaseClient {
   return { from: () => chain } as unknown as SupabaseClient;
 }
 
+/**
+ * Recording variant of {@link makeStub}: captures every `.order(column, opts)`
+ * call so the list-read tests can assert the exact ordering wiring (T44 —
+ * `sort_order` ASC then `created_at` DESC) rather than just the echoed data.
+ */
+function makeOrderRecordingStub(result: { data: unknown; error: unknown }): {
+  client: SupabaseClient;
+  orderCalls: unknown[][];
+} {
+  const orderCalls: unknown[][] = [];
+  const chain: Record<string, unknown> = {};
+  chain.select = () => chain;
+  chain.eq = () => chain;
+  chain.order = (...args: unknown[]) => {
+    orderCalls.push(args);
+    return chain;
+  };
+  chain.maybeSingle = () => Promise.resolve(result);
+  chain.then = (onFulfilled: (v: typeof result) => unknown) =>
+    Promise.resolve(result).then(onFulfilled);
+  return { client: { from: () => chain } as unknown as SupabaseClient, orderCalls };
+}
+
 /** Sample DB error shape returned by PostgREST. */
 const DB_ERROR = { code: 'PGRST500', message: 'database boom' };
 
@@ -50,6 +73,7 @@ const SAMPLE_PROJECT: Project = {
   thumb_kind: null,
   image_after_id: null,
   post_id: null,
+  sort_order: 0,
 };
 
 /** Sample post row that satisfies the Post type. */
@@ -62,6 +86,7 @@ const SAMPLE_POST: Post = {
   image_id: null,
   created_at: '2026-02-01T00:00:00.000Z',
   updated_at: '2026-02-02T00:00:00.000Z',
+  sort_order: 0,
 };
 
 /** Sample stat rows spanning two categories, for grouping tests. */
@@ -116,6 +141,18 @@ describe('getPublishedProjects', () => {
     expect(result).toEqual([]);
   });
 
+  it('orders by sort_order asc then created_at desc (T44)', async () => {
+    const { client, orderCalls } = makeOrderRecordingStub({
+      data: [SAMPLE_PROJECT],
+      error: null,
+    });
+    await getPublishedProjects(client);
+    expect(orderCalls).toEqual([
+      ['sort_order', { ascending: true }],
+      ['created_at', { ascending: false }],
+    ]);
+  });
+
   it('throws a ServiceError tagged with the operation when the database fails', async () => {
     const stub = makeStub({ data: null, error: DB_ERROR });
     await expect(getPublishedProjects(stub)).rejects.toBeInstanceOf(ServiceError);
@@ -130,6 +167,18 @@ describe('getPublishedPosts', () => {
     const stub = makeStub({ data: [SAMPLE_POST], error: null });
     const result = await getPublishedPosts(stub);
     expect(result).toEqual([SAMPLE_POST]);
+  });
+
+  it('orders by sort_order asc then created_at desc (T44)', async () => {
+    const { client, orderCalls } = makeOrderRecordingStub({
+      data: [SAMPLE_POST],
+      error: null,
+    });
+    await getPublishedPosts(client);
+    expect(orderCalls).toEqual([
+      ['sort_order', { ascending: true }],
+      ['created_at', { ascending: false }],
+    ]);
   });
 
   it('throws a ServiceError tagged with the operation when the database fails', async () => {

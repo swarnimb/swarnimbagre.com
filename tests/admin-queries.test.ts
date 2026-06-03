@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
+  getAllPosts,
   getAllProjects,
   getAllStats,
   getProjectById,
   listPostsForPicker,
   type PostPickerRow,
+  type PostRow,
   type ProjectRow,
 } from '@/lib/admin-queries';
 import { ServiceError } from '@/lib/errors';
@@ -65,6 +67,7 @@ const DRAFT_ROW: ProjectRow = {
   image_id: null,
   created_at: '2026-04-01T00:00:00.000Z',
   updated_at: '2026-04-01T00:00:00.000Z',
+  sort_order: 0,
 };
 
 /** Sample published row that satisfies ProjectRow. */
@@ -76,6 +79,7 @@ const PUBLISHED_ROW: ProjectRow = {
   image_id: null,
   created_at: '2026-01-01T00:00:00.000Z',
   updated_at: '2026-01-02T00:00:00.000Z',
+  sort_order: 1,
 };
 
 /** Silence `console.error` noise emitted by `logDbError` on error-path tests. */
@@ -136,6 +140,22 @@ describe('getAllProjects', () => {
     expect(calls.find((c) => c.method === 'eq')).toBeUndefined();
   });
 
+  it('orders by sort_order asc then created_at desc (T44)', async () => {
+    const { client, calls } = makeStub({
+      data: [DRAFT_ROW, PUBLISHED_ROW],
+      error: null,
+      count: 2,
+    });
+
+    await getAllProjects('all', 1, 50, client);
+
+    const orderCalls = calls.filter((c) => c.method === 'order').map((c) => c.args);
+    expect(orderCalls).toEqual([
+      ['sort_order', { ascending: true }],
+      ['created_at', { ascending: false }],
+    ]);
+  });
+
   it('returns only drafts when filter is "draft" (asserts .eq("status", "draft") was called)', async () => {
     const { client, calls } = makeStub({
       data: [DRAFT_ROW],
@@ -163,6 +183,72 @@ describe('getAllProjects', () => {
   });
 });
 
+describe('getAllPosts', () => {
+  /** Sample draft row that satisfies PostRow. */
+  const DRAFT_POST_ROW: PostRow = {
+    id: 'po-draft',
+    title: 'Untitled draft',
+    slug: 'untitled-draft',
+    status: 'draft',
+    image_id: null,
+    created_at: '2026-04-01T00:00:00.000Z',
+    updated_at: '2026-04-01T00:00:00.000Z',
+    sort_order: 0,
+  };
+  /** Sample published row that satisfies PostRow. */
+  const PUBLISHED_POST_ROW: PostRow = {
+    id: 'po-pub',
+    title: 'On building in the open',
+    slug: 'building-in-the-open',
+    status: 'published',
+    image_id: null,
+    created_at: '2026-02-01T00:00:00.000Z',
+    updated_at: '2026-02-02T00:00:00.000Z',
+    sort_order: 1,
+  };
+
+  it('returns drafts and published when filter is "all"', async () => {
+    const { client, calls } = makeStub({
+      data: [DRAFT_POST_ROW, PUBLISHED_POST_ROW],
+      error: null,
+      count: 2,
+    });
+
+    const result = await getAllPosts('all', 1, 50, client);
+
+    expect(result.rows).toEqual([DRAFT_POST_ROW, PUBLISHED_POST_ROW]);
+    expect(result.total).toBe(2);
+    // No status filter applied when filter === 'all'.
+    expect(calls.find((c) => c.method === 'eq')).toBeUndefined();
+  });
+
+  it('orders by sort_order asc then created_at desc (T44)', async () => {
+    const { client, calls } = makeStub({
+      data: [DRAFT_POST_ROW, PUBLISHED_POST_ROW],
+      error: null,
+      count: 2,
+    });
+
+    await getAllPosts('all', 1, 50, client);
+
+    const orderCalls = calls.filter((c) => c.method === 'order').map((c) => c.args);
+    expect(orderCalls).toEqual([
+      ['sort_order', { ascending: true }],
+      ['created_at', { ascending: false }],
+    ]);
+  });
+
+  it('throws a ServiceError tagged with the operation when the database fails', async () => {
+    const { client } = makeStub({ data: null, error: DB_ERROR, count: null });
+
+    await expect(getAllPosts('all', 1, 50, client)).rejects.toBeInstanceOf(ServiceError);
+    const { client: client2 } = makeStub({ data: null, error: DB_ERROR, count: null });
+    await expect(getAllPosts('all', 1, 50, client2)).rejects.toMatchObject({
+      operation: 'getAllPosts',
+    });
+  });
+});
+
 describe('getProjectById', () => {
   /** Sample full project row returned by the detail SELECT. */
   const FULL_ROW: Project = {
@@ -181,6 +267,7 @@ describe('getProjectById', () => {
     thumb_kind: null,
     image_after_id: null,
     post_id: null,
+    sort_order: 0,
   };
 
   it('returns the row when one matches the id', async () => {

@@ -1012,20 +1012,21 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 - All four list reads change to `.order('sort_order', { ascending: true }).order('created_at', { ascending: false })` — `created_at` desc as a deterministic tiebreaker.
 
 **Acceptance criteria:**
-- [ ] `Project` and `Post` include `sort_order: number`.
-- [ ] Public `/projects` and `/writing` render published rows in `sort_order` ascending (verify by reorder → reload).
-- [ ] Admin `/admin/projects` and `/admin/posts` render in `sort_order` ascending.
-- [ ] `created_at` desc retained as tiebreaker on all four reads.
-- [ ] Public loads still route through `lib/safe-load.ts` (CONSTRAINT-14) — unchanged.
-- [ ] Existing query tests updated to expect `sort_order` ordering.
+- [x] `Project` and `Post` include `sort_order: number`. → added in `lib/types.ts` (+ local admin `ProjectRow`/`PostRow` interfaces for type-honesty).
+- [x] Public `/projects` and `/writing` render published rows in `sort_order` ascending (verify by reorder → reload). → read path now orders by `sort_order` asc; assert-on-`.order()` unit tests cover it. Full visual reorder→reload confirmation lands at T44.D (admin DnD) e2e.
+- [x] Admin `/admin/projects` and `/admin/posts` render in `sort_order` ascending. → `getAllProjects`/`getAllPosts` updated.
+- [x] `created_at` desc retained as tiebreaker on all four reads. → `.order('sort_order', asc).order('created_at', desc)` on all four.
+- [x] Public loads still route through `lib/safe-load.ts` (CONSTRAINT-14) — unchanged. → only `.order()` + projections touched.
+- [x] Existing query tests updated to expect `sort_order` ordering. → `tests/db.test.ts` + `tests/admin-queries.test.ts`; `sort_order` added to projections (`PROJECT_COLUMNS`/`POST_COLUMNS`/`PROJECT_LIST_COLUMNS`/`POST_LIST_COLUMNS`).
 
 **Tests required:**
-- `getPublishedProjects orders by sort_order asc then created_at desc` → happy.
-- `getAllPosts orders by sort_order asc` → happy.
-- mirror for the other two reads.
+- [x] `getPublishedProjects orders by sort_order asc then created_at desc` → happy.
+- [x] `getAllPosts orders by sort_order asc` → happy.
+- [x] mirror for the other two reads (`getPublishedPosts`, `getAllProjects`). → suite 441→447, `tsc --noEmit` clean.
 
 **Depends on:** T44.A.
 **Specialist:** `@dev`.
+**Closed:** Session 45 (2026-06-03). Four reads repointed to `sort_order` asc + `created_at` desc tiebreaker; `sort_order` added to types + all four projections. 447/447.
 
 ---
 

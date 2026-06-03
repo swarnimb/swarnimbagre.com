@@ -16,10 +16,11 @@ import type { Post } from './types';
 
 /** Column projection for post list and detail queries. */
 const POST_COLUMNS =
-  'id, title, slug, content, status, image_id, created_at, updated_at';
+  'id, title, slug, content, status, image_id, created_at, updated_at, sort_order';
 
 /**
- * Fetch all published posts, newest first.
+ * Fetch all published posts, ordered by manual `sort_order` ASC with
+ * `created_at` DESC as a deterministic tiebreaker (T44).
  *
  * @param client Optional injected client (for tests).
  * @returns Array of posts, empty array if none.
@@ -32,6 +33,7 @@ export async function getPublishedPosts(client?: SupabaseClient): Promise<Post[]
     .from('posts')
     .select(POST_COLUMNS)
     .eq('status', PUBLISHED)
+    .order('sort_order', { ascending: true })
     .order('created_at', { ascending: false });
   if (error) {
     logDbError(operation, error);
