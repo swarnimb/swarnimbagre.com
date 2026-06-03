@@ -5,6 +5,7 @@ import {
   getPublishedPosts,
   getProjectBySlug,
   getPostBySlug,
+  getPublishedPostById,
   getStatsByCategory,
   getProjectMediaByProject,
 } from '@/lib/db';
@@ -48,6 +49,7 @@ const SAMPLE_PROJECT: Project = {
   progress_percent: null,
   thumb_kind: null,
   image_after_id: null,
+  post_id: null,
 };
 
 /** Sample post row that satisfies the Post type. */
@@ -218,6 +220,51 @@ describe('getPostBySlug', () => {
     await expect(
       getPostBySlug(null as unknown as string, stub),
     ).rejects.toMatchObject({ operation: 'getPostBySlug' });
+  });
+});
+
+describe('getPublishedPostById', () => {
+  // SECURITY (T45.C, Override 3): this loader is the boundary that prevents a
+  // draft post linked via `Project.post_id` from leaking onto the public
+  // project detail page. The `status='published'` filter lives in the query,
+  // so a draft row never matches and PostgREST returns `data: null`. These
+  // tests assert the loader resolves to `null` for every non-published input
+  // and only returns a post for a published id.
+
+  it('returns the post for a published id', async () => {
+    const stub = makeStub({ data: SAMPLE_POST, error: null });
+    const result = await getPublishedPostById('po1', stub);
+    expect(result).toEqual(SAMPLE_POST);
+  });
+
+  it('returns null for a DRAFT post (filtered out by status=published, no row returned)', async () => {
+    // With the `.eq('status', 'published')` filter applied, a draft row does
+    // not match the query and PostgREST resolves with `data: null`.
+    const stub = makeStub({ data: null, error: null });
+    const result = await getPublishedPostById('draft-post-id', stub);
+    expect(result).toBeNull();
+  });
+
+  it('returns null for a MISSING id (no matching row)', async () => {
+    const stub = makeStub({ data: null, error: null });
+    const result = await getPublishedPostById('does-not-exist', stub);
+    expect(result).toBeNull();
+  });
+
+  it('returns null for a null id without touching the database', async () => {
+    const from = vi.fn();
+    const stub = { from } as unknown as SupabaseClient;
+    const result = await getPublishedPostById(null, stub);
+    expect(result).toBeNull();
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('throws a ServiceError tagged with the operation when the database fails', async () => {
+    const stub = makeStub({ data: null, error: DB_ERROR });
+    await expect(getPublishedPostById('po1', stub)).rejects.toBeInstanceOf(ServiceError);
+    await expect(getPublishedPostById('po1', stub)).rejects.toMatchObject({
+      operation: 'getPublishedPostById',
+    });
   });
 });
 

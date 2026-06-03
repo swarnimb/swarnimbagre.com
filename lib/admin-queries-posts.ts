@@ -139,3 +139,47 @@ export async function getPostById(
   }
   return (data ?? null) as Post | null;
 }
+
+/**
+ * Row shape returned by {@link listPostsForPicker} — only the columns the
+ * "Linked writeup" project picker needs (id for the FK value, title for the
+ * dropdown label). Deliberately narrower than {@link PostRow} so the
+ * projection does not lie about which fields are present.
+ */
+export interface PostPickerRow {
+  id: string;
+  title: string;
+}
+
+/**
+ * Fetch published posts for the project "Linked writeup" picker (T45.B),
+ * ordered by `title` ascending. Drafts are excluded — a project can only be
+ * linked to a post a reader could actually reach.
+ *
+ * RLS (`posts_admin_all`) permits the admin SELECT regardless of status; the
+ * `status='published'` filter here is a domain rule for the picker, not a
+ * visibility constraint. Failures bubble as a {@link ServiceError} — the
+ * admin surface wants loud failures (CONSTRAINT-14's `safeLoad` discipline is
+ * for public pages, not admin).
+ *
+ * @param client Optional injected Supabase client (DI seam for tests).
+ *               Defaults to a request-scoped admin server client.
+ * @returns Array of `{ id, title }`, published-only, title-ascending.
+ * @throws  {@link ServiceError} on any Supabase error.
+ */
+export async function listPostsForPicker(
+  client?: SupabaseClient,
+): Promise<PostPickerRow[]> {
+  const operation = 'listPostsForPicker';
+  const supabase = client ?? (await createServerClient());
+  const { data, error } = await supabase
+    .from('posts')
+    .select('id, title')
+    .eq('status', 'published')
+    .order('title', { ascending: true });
+  if (error) {
+    logQueryError(operation, error);
+    throw new ServiceError(`${operation} failed`, { cause: error, operation });
+  }
+  return (data ?? []) as PostPickerRow[];
+}

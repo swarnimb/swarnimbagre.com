@@ -43,6 +43,7 @@ This file is the plain-language record of every architectural decision. The audi
 | 29 | Override 2 — embla-carousel-react opens public-site JS-library posture with byte budget (T43.B) | [§1.2](architecture.md#12-frontend-libraries) + `design-decisions.md` Override 2 |
 | 30 | Atomic save — Postgres RPC over application-layer rollback (T43.E) | [§6.6.9](architecture.md#669-atomic-save-surface--postgres-rpc-pattern) + `supabase/migrations/010a_save_project_media_rpc.sql` |
 | 31 | CONSTRAINT-22 codified + Override 2 surface boundary recorded — public-site JS-library posture closed (T43.I) | [§4.9](architecture.md#49-carousel-surface--override-2) + `constraints.md` CONSTRAINT-22 + `design-decisions.md` Override 2 |
+| 32 | Project↔post link — embedded writeup FK (`projects.post_id`, T45) | [§2.1](architecture.md#21-projects) + `design-decisions.md` Override 3 + `prd.md` §3.8 |
 
 ---
 
@@ -659,6 +660,26 @@ wall-clock proves the wrapper ran end-to-end).
 **What this closes off:** Adding public-site JS libraries "to see if it works" without a documented surface and a measured route-chunk delta. Reversing means accepting drift from CONSTRAINT-05's verbatim-bundle posture without a paper trail. T43 itself is closed — 9/9 sub-tasks done; the carousel renders everywhere `ProjectCard` renders; before/after pairs continue to work inside individual slides; admin can save reorderings atomically via the `save_project_media` RPC; no project currently has media rows assigned, so the live site is visually unchanged until real content is added (T40 covers that). The next public-site JS library invocation must restart the Override + budget process from scratch — there is no "blanket permission" mechanism.
 
 **Implemented in:** T43.I (2026-05-23). Files: `docs/design-decisions.md` (Override 2 finalized — Surface boundary expanded from 7 to 12 entries, phantom `MobileProjectMediaCarousel.tsx` removed, `view`-prop signature recorded), `docs/constraints.md` (CONSTRAINT-22 added, CONSTRAINT-05 amended with Override 2 cross-link, summary table extended), `docs/architecture.md` (new §2.5 `project_media` + §4.9 Carousel surface — Override 2), `docs/founder-brief.md` (Index row #31 + this entry), `docs/content-model-expansion.md` (T43-furthered-by line at top), `docs/plan-phase-4-launch.md` (T43.I marked done; T43 `Status` block + T43.I `Closed` block), `manifest.md` (Phase 4 status — T43 done, T40 next).
+
+---
+
+## 32. Project↔post link — embedded writeup FK (`projects.post_id`, T45)
+
+**Date:** 2026-06-03
+**Architecture link:** [`architecture.md` §2.1](architecture.md#21-projects) + `design-decisions.md` Override 3 + `prd.md` §3.8
+
+**Decided:** A project may attach one existing published post as its writeup via a new nullable `projects.post_id` FK → `posts(id)` (ON DELETE SET NULL). The linked post's body renders on the project detail page below the card; the `/projects` title becomes a link only when a writeup exists or the project has 2+ media items.
+
+**What this means for your product:** Project pages can carry real long-form content without duplicating the posts system — you write one post, attach it to a project, and it appears both in `/writing` and under the project. A bare project (one image, no writeup) no longer offers a dead-end click. The link is a plain reference, so deleting the post just unlinks it (the project survives).
+
+**Check before approving:**
+- Only PUBLISHED linked posts render publicly — a draft attached via `post_id` shows nothing (verified in-query + RLS).
+- The FK is nullable and independent of `post_url` (the `¶ notes` outbound button) — they coexist.
+- Migration took number `011` (landed before T44, which re-numbers to `012`).
+
+**What this closes off:** A project-only body field (rejected — would duplicate the posts system) and deleting the project detail route (rejected — loses permalinks + the carousel-detail view). Project long-form content now flows through the posts system, not a parallel store.
+
+**Implementation note:** `lib/db.ts` was split at this task (CQ-02) into `db-posts.ts` + `db-internal.ts`, mirroring the admin-queries split; `getPublishedPostById` is the published-only loader that enforces the no-draft-leak boundary.
 
 ---
 

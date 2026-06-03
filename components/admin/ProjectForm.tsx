@@ -42,6 +42,9 @@ export interface ProjectFormProps {
   /** Loaded media rows for `ProjectMediaField` (T43.F). Empty array on
    *  create or when the project has no media yet. */
   initialMedia?: AdminProjectMediaRow[];
+  /** Published posts for the "Linked writeup" picker (T45.B). Empty array
+   *  when no posts are published yet. */
+  posts?: { id: string; title: string }[];
   /** Optional injected actions — tests override these to avoid Server Action wiring. */
   createAction?: typeof createProject;
   updateAction?: typeof updateProject;
@@ -70,6 +73,7 @@ function fieldError(
 export default function ProjectForm({
   project,
   initialMedia = [],
+  posts = [],
   createAction = createProject,
   updateAction = updateProject,
 }: ProjectFormProps): React.ReactElement {
@@ -153,7 +157,7 @@ export default function ProjectForm({
         </div>
 
         <ProjectFormLinks project={project} state={state} />
-        <ProjectFormDisplay project={project} state={state} />
+        <ProjectFormDisplay project={project} state={state} posts={posts} />
 
         <div className="space-y-2">
           <Label htmlFor="project-status">Status</Label>

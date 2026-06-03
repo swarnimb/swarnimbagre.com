@@ -1,7 +1,25 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import ProjectForm from '@/components/admin/ProjectForm';
 import type { Project } from '@/lib/types';
+
+/**
+ * Radix Select (used by the "Linked writeup" picker) calls these DOM methods
+ * that jsdom does not implement. Polyfill them locally so opening the dropdown
+ * does not throw. Scoped to this file — the shared `tests/setup.ts` is left
+ * untouched so the full-suite run the operator triggers is unaffected.
+ */
+beforeAll(() => {
+  if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = () => false;
+  }
+  if (!Element.prototype.releasePointerCapture) {
+    Element.prototype.releasePointerCapture = () => {};
+  }
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => {};
+  }
+});
 
 /**
  * T21 acceptance — UI: `ProjectForm shows error inline on mutation failure`.
@@ -42,6 +60,7 @@ const PUBLISHED_PROJECT: Project = {
   progress_percent: null,
   thumb_kind: null,
   image_after_id: null,
+  post_id: null,
 };
 
 const DRAFT_PROJECT: Project = {
@@ -59,6 +78,20 @@ const DRAFT_PROJECT: Project = {
   progress_percent: null,
   thumb_kind: null,
   image_after_id: null,
+  post_id: null,
+};
+
+/** Published posts offered by the "Linked writeup" picker (T45.B). */
+const PICKER_POSTS = [
+  { id: 'post-a', title: 'Aardvarks' },
+  { id: 'post-b', title: 'Beavers' },
+];
+
+/** Draft project already linked to `post-b` — exercises edit-mode prefill. */
+const LINKED_PROJECT: Project = {
+  ...DRAFT_PROJECT,
+  id: 'p-linked',
+  post_id: 'post-b',
 };
 
 afterEach(() => {
@@ -159,5 +192,40 @@ describe('ProjectForm — slug-lock UX on published edit', () => {
     );
 
     expect(screen.queryByLabelText('Slug')).not.toBeInTheDocument();
+  });
+});
+
+describe('ProjectForm — linked-writeup picker (T45.B)', () => {
+  it('renders the linked-writeup options (plus an Unset choice) and prefills the current post_id on edit', async () => {
+    const createAction = vi.fn();
+    const updateAction = vi.fn();
+
+    render(
+      <ProjectForm
+        project={LINKED_PROJECT}
+        posts={PICKER_POSTS}
+        createAction={createAction}
+        updateAction={updateAction}
+      />,
+    );
+
+    // Prefill: the hidden input that participates in FormData carries the
+    // existing post_id, and the trigger shows that post's title.
+    const hidden = document.querySelector(
+      'input[name="post_id"]',
+    ) as HTMLInputElement;
+    expect(hidden.value).toBe('post-b');
+    const trigger = screen.getByLabelText('Linked writeup');
+    expect(trigger).toHaveTextContent('Beavers');
+
+    // Open the dropdown and assert it renders the passed posts + an Unset option.
+    fireEvent.click(trigger);
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', { name: 'Unset' }),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByRole('option', { name: 'Aardvarks' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Beavers' })).toBeInTheDocument();
   });
 });

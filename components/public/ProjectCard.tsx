@@ -102,16 +102,24 @@ export function ProjectCard({
               minWidth: 0,
             }}
           >
-            <a
-              href="#"
-              className="link"
-              onClick={(e) => {
-                e.preventDefault();
-                onClick && onClick();
-              }}
-            >
-              {title}
-            </a>
+            {onClick ? (
+              <a
+                href="#"
+                className="link"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onClick();
+                }}
+              >
+                {title}
+              </a>
+            ) : (
+              // Override 3 (T45.D): with no navigation handler the title is an
+              // inert label — no `.link` affordance, no anchor, no gold
+              // underline. The card frame already sets `cursor: default` when
+              // `onClick` is absent.
+              title
+            )}
           </h3>
           {progressPercent !== null && progressPercent !== undefined && (
             <span style={{ marginLeft: 'auto', flex: '0 0 auto', display: 'inline-flex', alignItems: 'center' }}>

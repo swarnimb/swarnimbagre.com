@@ -48,6 +48,30 @@ function findRing(container: HTMLElement): HTMLElement | null {
   return container.querySelector('[role="img"][aria-label^="progress "]');
 }
 
+describe('MobileProjectCard — title-link gating (Override 3, T45.D)', () => {
+  it('renders an inert title (no link, cursor default) when no onClick', () => {
+    const { container } = render(
+      <MobileProjectCard title="putt-or-not" blurb="b" />,
+    );
+    // The title heading exists but carries no anchor / link affordance.
+    const heading = screen.getByRole('heading', { name: 'putt-or-not' });
+    expect(heading).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'putt-or-not' })).toBeNull();
+    expect(heading.querySelector('a')).toBeNull();
+    // The card frame is non-interactive.
+    const article = container.querySelector('article') as HTMLElement;
+    expect(article.style.cursor).toBe('default');
+  });
+
+  it('marks the card frame interactive (cursor pointer) when onClick is provided', () => {
+    const { container } = render(
+      <MobileProjectCard title="putt-or-not" blurb="b" onClick={() => {}} />,
+    );
+    const article = container.querySelector('article') as HTMLElement;
+    expect(article.style.cursor).toBe('pointer');
+  });
+});
+
 describe('MobileProjectCard — link rendering by URL presence', () => {
   it('renders all three TypoIcons when github, live, and post URLs are present', () => {
     render(

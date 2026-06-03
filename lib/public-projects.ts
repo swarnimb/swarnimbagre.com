@@ -27,6 +27,12 @@ export interface PublicProject {
   githubUrl: string | null;
   liveUrl: string | null;
   postUrl: string | null;
+  /**
+   * FK to an attached writing post (`post_id`), or null when the project is
+   * not linked to a post. Used by the `/projects` list to decide whether a
+   * card's title links to its detail page (Override 3, T45.D).
+   */
+  postId: string | null;
   imageUrl: string | null;
   imageAfterUrl: string | null;
   /**
@@ -80,6 +86,7 @@ async function toPublicProject(row: Project): Promise<PublicProject> {
     githubUrl: row.github_url,
     liveUrl: row.live_url,
     postUrl: row.post_url,
+    postId: row.post_id,
     imageUrl,
     imageAfterUrl,
     media,

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { getPostBySlug } from '@/lib/db';
+import { formatDate } from '@/lib/format-date';
 import { safeLoad } from '@/lib/safe-load';
 import type { Post } from '@/lib/types';
 import { Page } from '@/components/public/Page';
@@ -129,14 +130,6 @@ function renderBody(content: string) {
       <MarkdownContent md={content} />
     </div>
   );
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const month = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
-  const year = d.getUTCFullYear();
-  return `${month} ${year}`;
 }
 
 function deriveDescription(content: string): string {

@@ -615,6 +615,10 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await page.getByLabel('Post URL').fill(T42_POST_URL);
       await page.getByLabel('Progress').fill(T42_PROGRESS_PERCENT);
       await selectFormOption(page, 'Thumbnail', T42_THUMB_KIND_LABEL);
+      // T45.D Override 3: attach the published post created earlier so this
+      // project's detail page has a body the list card does not — which makes
+      // the `/projects` list title an active link (the "enriched" state).
+      await selectFormOption(page, 'Linked writeup', POST_TITLE);
       await selectFormStatus(page, 'Published');
       await page.getByRole('button', { name: /^save$/i }).click();
       await page.waitForURL(/\/admin\/projects(\?[^/]*)?$/, { timeout: SHORT_WAIT_MS });
@@ -665,6 +669,34 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       const article = page.locator('article', { has: heading });
       await assertProgressRingDone(article.first());
       await assertT42LinkRow(article.first(), t42PublicAssertions);
+    });
+
+    // T45.D Override 3 — title-link gating on the public /projects list.
+    //   - Enriched card (T42 project: has an attached post)  → title IS a link.
+    //   - Bare card (PROJECT_TITLE_EDITED: published, no post, no media) →
+    //     title is an inert label (no anchor).
+    // The bare card never carries TypoIcon links either, so scoping the
+    // title-link assertion to the article's <h3> keeps it unambiguous.
+    await runStep(failures, 'T45.D desktop: /projects title-link gating (enriched vs bare)', async () => {
+      await page.goto('/projects');
+
+      // Enriched: T42 card title resolves as a link with the project title.
+      const enrichedHeading = page.getByRole('heading', { level: 3, name: t42TitleRe });
+      await expect(enrichedHeading.first()).toBeVisible();
+      const enrichedArticle = page.locator('article', { has: enrichedHeading }).first();
+      await expect(
+        enrichedArticle.getByRole('link', { name: T42_PROJECT_TITLE }),
+      ).toBeVisible();
+
+      // Bare: PROJECT_TITLE_EDITED card title is present as a heading but is
+      // NOT a link (no anchor inside the <h3>).
+      const bareRe = new RegExp(PROJECT_TITLE_EDITED);
+      const bareHeading = page.getByRole('heading', { level: 3, name: bareRe });
+      await expect(bareHeading.first()).toBeVisible();
+      const bareArticle = page.locator('article', { has: bareHeading }).first();
+      await expect(
+        bareArticle.getByRole('link', { name: bareRe }),
+      ).toHaveCount(0);
     });
 
     await runStep(failures, 'T42 desktop: /projects/[slug] renders detail with ring + 3 links', async () => {

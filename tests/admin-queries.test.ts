@@ -4,6 +4,8 @@ import {
   getAllProjects,
   getAllStats,
   getProjectById,
+  listPostsForPicker,
+  type PostPickerRow,
   type ProjectRow,
 } from '@/lib/admin-queries';
 import { ServiceError } from '@/lib/errors';
@@ -178,6 +180,7 @@ describe('getProjectById', () => {
     progress_percent: null,
     thumb_kind: null,
     image_after_id: null,
+    post_id: null,
   };
 
   it('returns the row when one matches the id', async () => {
@@ -270,6 +273,50 @@ describe('getAllStats', () => {
     });
     await expect(getAllStats(1, 50, client2)).rejects.toMatchObject({
       operation: 'getAllStats',
+    });
+  });
+});
+
+describe('listPostsForPicker', () => {
+  /** Published rows the picker should surface, title-ascending. */
+  const PUBLISHED_PICKER_ROWS: PostPickerRow[] = [
+    { id: 'post-a', title: 'Aardvarks' },
+    { id: 'post-b', title: 'Beavers' },
+  ];
+
+  it('returns published posts only (excludes drafts), shaped {id,title} ordered by title (TS-T45B happy)', async () => {
+    // The DB applies the status filter + ordering; the stub returns what a
+    // published-only, title-ascending query would yield, and the test asserts
+    // the function wired `.eq('status','published')` and `.order('title', asc)`.
+    const { client, calls } = makeStub({
+      data: PUBLISHED_PICKER_ROWS,
+      error: null,
+      count: null,
+    });
+
+    const result = await listPostsForPicker(client);
+
+    expect(result).toEqual(PUBLISHED_PICKER_ROWS);
+    // Result shape is exactly {id, title} — no draft rows, no extra columns.
+    expect(result.every((r) => Object.keys(r).sort().join() === 'id,title')).toBe(true);
+    // Drafts are excluded via a server-side status filter.
+    const eqCall = calls.find((c) => c.method === 'eq');
+    expect(eqCall?.args).toEqual(['status', 'published']);
+    // Ordered by title ascending.
+    const orderCall = calls.find((c) => c.method === 'order');
+    expect(orderCall?.args).toEqual(['title', { ascending: true }]);
+  });
+
+  it('throws a ServiceError tagged with the operation when the database fails (TS-T45B error)', async () => {
+    const { client } = makeStub({ data: null, error: DB_ERROR, count: null });
+    await expect(listPostsForPicker(client)).rejects.toBeInstanceOf(ServiceError);
+    const { client: client2 } = makeStub({
+      data: null,
+      error: DB_ERROR,
+      count: null,
+    });
+    await expect(listPostsForPicker(client2)).rejects.toMatchObject({
+      operation: 'listPostsForPicker',
     });
   });
 });

@@ -1,7 +1,26 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServerClient } from './supabase';
 import { ServiceError } from './errors';
-import type { Project, Post, Stat, ImageRecord, ProjectMedia } from './types';
+import { PUBLISHED, assertSlug, logDbError } from './db-internal';
+import type { Project, Stat, ImageRecord, ProjectMedia } from './types';
+
+/**
+ * Public read-query layer.
+ *
+ * The post read loaders (`getPublishedPosts`, `getPostBySlug`,
+ * `getPublishedPostById`) were split out into `lib/db-posts.ts` under CQ-02
+ * (services < 300 lines) and are re-exported below so existing callers
+ * importing them from `@/lib/db` keep working unchanged. Shared helpers and
+ * constants (`PUBLISHED`, `assertSlug`, `logDbError`) live in
+ * `lib/db-internal.ts`, imported by both this module and `db-posts.ts` to
+ * avoid a circular import.
+ */
+
+export {
+  getPublishedPosts,
+  getPostBySlug,
+  getPublishedPostById,
+} from './db-posts';
 
 /**
  * Column projection for project list and detail queries.
@@ -14,10 +33,6 @@ import type { Project, Post, Stat, ImageRecord, ProjectMedia } from './types';
 const PROJECT_COLUMNS =
   'id, title, slug, description, status, image_id, created_at, updated_at, ' +
   'github_url, live_url, post_url, progress_percent, thumb_kind, image_after_id';
-
-/** Column projection for post list and detail queries. */
-const POST_COLUMNS =
-  'id, title, slug, content, status, image_id, created_at, updated_at';
 
 /** Column projection for stat queries. */
 const STAT_COLUMNS = 'id, category, label, value, unit, created_at';
@@ -34,40 +49,6 @@ const IMAGE_COLUMNS = 'id, bucket_path, alt_text, parent_id, parent_type, create
  */
 const PROJECT_MEDIA_COLUMNS =
   'id, project_id, image_id, image_after_id, caption, order_index, created_at';
-
-/** Status literal used to filter public reads. */
-const PUBLISHED = 'published';
-
-/**
- * Validate a slug parameter at the data-layer boundary.
- *
- * @param slug      The candidate slug to check.
- * @param operation Caller name, used in the thrown ServiceError.
- * @throws ServiceError if slug is not a non-empty string.
- */
-function assertSlug(slug: unknown, operation: string): asserts slug is string {
-  if (typeof slug !== 'string' || slug.length === 0) {
-    throw new ServiceError('invalid slug argument', {
-      operation,
-      cause: new Error(`slug must be a non-empty string, got: ${typeof slug}`),
-    });
-  }
-}
-
-/**
- * Log a Supabase error without leaking row data or PII.
- *
- * @param operation Caller name.
- * @param error     The Supabase error object (or any thrown value).
- */
-function logDbError(operation: string, error: { code?: string; message?: string } | null): void {
-  console.error(`[db] ${operation} failed`, {
-    operation,
-    errorCode: error?.code ?? null,
-    errorMessage: error?.message ?? null,
-    stack: new Error().stack,
-  });
-}
 
 /**
  * Fetch all published projects, newest first.
@@ -96,28 +77,6 @@ export async function getPublishedProjects(client?: SupabaseClient): Promise<Pro
 }
 
 /**
- * Fetch all published posts, newest first.
- *
- * @param client Optional injected client (for tests).
- * @returns Array of posts, empty array if none.
- * @throws  ServiceError on any database error.
- */
-export async function getPublishedPosts(client?: SupabaseClient): Promise<Post[]> {
-  const operation = 'getPublishedPosts';
-  const supabase = client ?? (await createServerClient());
-  const { data, error } = await supabase
-    .from('posts')
-    .select(POST_COLUMNS)
-    .eq('status', PUBLISHED)
-    .order('created_at', { ascending: false });
-  if (error) {
-    logDbError(operation, error);
-    throw new ServiceError(`${operation} failed`, { cause: error, operation });
-  }
-  return (data ?? []) as Post[];
-}
-
-/**
  * Fetch a single published project by slug.
  *
  * @param slug   URL slug. Must be a non-empty string.
@@ -143,34 +102,6 @@ export async function getProjectBySlug(
     throw new ServiceError(`${operation} failed`, { cause: error, operation });
   }
   return (data ?? null) as Project | null;
-}
-
-/**
- * Fetch a single published post by slug.
- *
- * @param slug   URL slug. Must be a non-empty string.
- * @param client Optional injected client (for tests).
- * @returns The matching post, or `null` if not found.
- * @throws  ServiceError on invalid input or database error.
- */
-export async function getPostBySlug(
-  slug: string,
-  client?: SupabaseClient,
-): Promise<Post | null> {
-  const operation = 'getPostBySlug';
-  assertSlug(slug, operation);
-  const supabase = client ?? (await createServerClient());
-  const { data, error } = await supabase
-    .from('posts')
-    .select(POST_COLUMNS)
-    .eq('status', PUBLISHED)
-    .eq('slug', slug)
-    .maybeSingle();
-  if (error) {
-    logDbError(operation, error);
-    throw new ServiceError(`${operation} failed`, { cause: error, operation });
-  }
-  return (data ?? null) as Post | null;
 }
 
 /**

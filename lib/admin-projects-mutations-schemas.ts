@@ -99,6 +99,7 @@ export const projectCreateSchema = z.object({
     .max(PROGRESS_PERCENT_MAX)
     .nullable(),
   thumb_kind: thumbKindSchema.nullable(),
+  post_id: z.string().uuid('post_id must be a uuid').nullable(),
 }).strict();
 
 /** Inferred input shape for the create boundary. */
@@ -133,6 +134,7 @@ export const projectUpdateSchema = z.object({
     .string()
     .uuid('image_after_id must be a uuid')
     .nullable(),
+  post_id: z.string().uuid('post_id must be a uuid').nullable(),
 }).strict();
 
 /** Inferred input shape for the update boundary. */

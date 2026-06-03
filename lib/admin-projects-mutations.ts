@@ -52,6 +52,7 @@ const ALLOWED_FIELD_KEYS: ReadonlySet<ProjectMutationFieldName> = new Set([
   'progress_percent',
   'thumb_kind',
   'image_after_id',
+  'post_id',
 ]);
 
 /** Type guard: narrow an unknown zod-path key into the allowed-fields union. */
@@ -131,6 +132,7 @@ function readProjectCreateFormData(formData: FormData): unknown {
     post_url: readNullableTrimmed(formData, 'post_url'),
     progress_percent: readPercentField(formData),
     thumb_kind: readNullableTrimmed(formData, 'thumb_kind'),
+    post_id: readNullableTrimmed(formData, 'post_id'),
   };
 }
 
@@ -154,6 +156,7 @@ function readProjectUpdateFormData(formData: FormData): unknown {
     progress_percent: readPercentField(formData),
     thumb_kind: readNullableTrimmed(formData, 'thumb_kind'),
     image_after_id: readNullableTrimmed(formData, 'image_after_id'),
+    post_id: readNullableTrimmed(formData, 'post_id'),
   };
 }
 

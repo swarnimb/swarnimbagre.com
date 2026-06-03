@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import AdminNav from '@/components/admin/AdminNav';
 import ProjectForm from '@/components/admin/ProjectForm';
 import DeleteProjectButton from '@/components/admin/DeleteProjectButton';
-import { getProjectById } from '@/lib/admin-queries';
+import { getProjectById, listPostsForPicker } from '@/lib/admin-queries';
 import { loadAdminProjectMedia } from '@/lib/admin-project-media-preview';
 
 /**
@@ -10,8 +10,10 @@ import { loadAdminProjectMedia } from '@/lib/admin-project-media-preview';
  *
  * Server component. Awaits the dynamic `params`, fetches the row via
  * {@link getProjectById}, loads pre-resolved media rows via
- * {@link loadAdminProjectMedia} (T43.F), and renders {@link ProjectForm}
- * prefilled with both. A missing project row dispatches Next 15's
+ * {@link loadAdminProjectMedia} (T43.F), fetches the published posts for the
+ * "Linked writeup" picker via {@link listPostsForPicker} (T45.B), and renders
+ * {@link ProjectForm} prefilled with all three. A missing project row
+ * dispatches Next 15's
  * `notFound()` — `getProjectById` returns `null` for the PGRST116
  * ("no rows") case, distinct from a true DB error (which still throws and
  * surfaces in the Next error overlay, matching the admin-side intentional
@@ -39,10 +41,11 @@ export default async function Page({
     notFound();
   }
   const initialMedia = await loadAdminProjectMedia(project.id);
+  const posts = await listPostsForPicker();
   return (
     <>
       <AdminNav />
-      <ProjectForm project={project} initialMedia={initialMedia} />
+      <ProjectForm project={project} initialMedia={initialMedia} posts={posts} />
       <section className="px-6 pb-10">
         <DeleteProjectButton id={project.id} name={project.title} afterDelete="redirect" />
       </section>

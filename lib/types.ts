@@ -54,6 +54,11 @@ export interface Project {
    * deprecation window as the legacy `image_id` field above.
    */
   image_after_id: string | null;
+  /**
+   * Optional link from a project to a written post. Nullable uuid FK into
+   * `public.posts` (T45.A). When null, the project is not linked to a post.
+   */
+  post_id: string | null;
 }
 
 /** A written post. One row in `public.posts`. */

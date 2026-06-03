@@ -55,21 +55,27 @@ export function Projects({ items = [] }: ProjectsProps = {}) {
         gap: 24,
         marginTop: 24,
       }}>
-        {items.map((p) => (
-          <ProjectCard
-            key={p.id}
-            title={p.title}
-            blurb={p.description}
-            progressPercent={p.progressPercent}
-            githubUrl={p.githubUrl}
-            liveUrl={p.liveUrl}
-            postUrl={p.postUrl}
-            imageUrl={p.imageUrl}
-            imageAfterUrl={p.imageAfterUrl}
-            media={p.media}
-            onClick={() => router.push(`/projects/${p.slug}`)}
-          />
-        ))}
+        {items.map((p) => {
+          // Override 3 (T45.D): the title links to the detail page only when
+          // the detail page has something the card does not — an attached post
+          // OR more than one media item. Otherwise the title is inert.
+          const hasDetail = p.postId != null || p.media.length > 1;
+          return (
+            <ProjectCard
+              key={p.id}
+              title={p.title}
+              blurb={p.description}
+              progressPercent={p.progressPercent}
+              githubUrl={p.githubUrl}
+              liveUrl={p.liveUrl}
+              postUrl={p.postUrl}
+              imageUrl={p.imageUrl}
+              imageAfterUrl={p.imageAfterUrl}
+              media={p.media}
+              onClick={hasDetail ? () => router.push(`/projects/${p.slug}`) : undefined}
+            />
+          );
+        })}
       </div>
 
       <div style={{ flex: 1 }} />

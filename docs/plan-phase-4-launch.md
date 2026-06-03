@@ -284,9 +284,9 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 - [~] ~~OpenClaw is producing real (non-test) stat rows at the expected cadence.~~ — superseded S41: blocked on T29 + T31 (OpenClaw operator gate deferred — see `plan-phase-3-ingestion.md` status). Re-verify when T29/T31 land.
 - [x] 2–3 real projects added via admin so `/projects` is not empty. → **S43 2026-05-28:** 6 placeholder projects published via admin (ParSaveables, Claude Code Magic, swarnimbagre.com, Totes Sales CRM, AmIBroke, CardMaxxer) — title + dry blurb + GitHub link (+ live URL on ParSaveables / AmIBroke / swarnimbagre.com). Thumbnails + carousel media deferred to a later content pass. Slugs auto-derived and now LOCKED (CONSTRAINT-12): `parsaveables`, `claude-code-magic`, `swarnimbagre-com`, `totes-sales-crm`, `amibroke`, `cardmaxxer`. `/projects` no longer empty.
 - [x] 1–2 real posts added via admin so `/writing` is not empty. → **S43 2026-05-28:** placeholder post(s) published via admin; `/writing` no longer empty. Post bodies (`content` markdown) to be fleshed out later. Voice check on builder-written post copy tracked under the voice-check criterion below (still open).
-- [ ] Voice check on all live copy: no SaaS phrases, no emoji, no LinkedIn-motivational tone (CONSTRAINT-13).
+- [ ] Voice check on all live copy: no SaaS phrases, no emoji, no LinkedIn-motivational tone (CONSTRAINT-13). → **DEFERRED (S44):** intentionally not the next task — runs on FINAL content, after T44 + builder content authoring. Next active task is T44; see session-handoff. Plan remains authoritative; this deferral is recorded so @session-start drift detection reads it as intentional.
 - [x] Any bug found is logged in `docs/session-log.md` with severity and a follow-up task description. → **S42 2026-05-25:** discipline established. Two bugs surfaced during T40 work — (1) `404 GET /favicon.png` (LOW, cosmetic; follow-up = T41 deferred wiring); (2) 32 orphan rows in `public.images` (LOW, non-user-visible DB/storage waste; follow-up = session task #7). Both logged with explicit severity + follow-up reference, consolidated in the `docs/session-log.md` [2026-05-25 09:45] Bug log table. Forward-looking: any new bug surfaced in remaining T40 work appends to that table.
-- [ ] `docs/launch-checklist.md` post-launch section is checked off.
+- [ ] `docs/launch-checklist.md` post-launch section is checked off. → **DEFERRED (S44):** closes T40 after crit 9; waits on final content (item 2 stays OPENCLAW-GATED).
 - [x] Auto-Logging entry written to `docs/session-log.md` documenting the launch (DS-03). → **S42 2026-05-25:** consolidated launch retrospective entry written at `docs/session-log.md` [2026-05-25 09:50]. Documents T39 launch event (2026-05-19, Session 27 close — site live on apex canonical) + Phase-4 post-launch work executed S28 → S42 (T40 / T42 / T43) + current post-launch state (site live, fixture-clean, awaiting real content, 0 ambient traffic, no errors in retrievable launch-week window). DS-03's structural requirement ("the launch is documented") is satisfied via this single canonical retrospective entry rather than via retroactive day-of-launch reconstruction (day-of-launch is already captured in `manifest.md` + S27 close-out trail + `docs/founder-brief.md` entries). Will be consolidated into `docs/session-handoff.md` at the same `@end-session` that processes this entry.
 
 **Tests required:** [operational verification — covered by checklist]
@@ -969,15 +969,15 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 ### T44.A — Schema: `sort_order` column + reorder RPCs
 
 **Files:**
-- `supabase/migrations/011_sort_order.sql` (create)
-- `supabase/migrations/011a_save_sort_order_rpc.sql` (create)
+- `supabase/migrations/012_sort_order.sql` (create — re-numbered from `011`; T45.A took `011` by landing first, S44 2026-05-28)
+- `supabase/migrations/012a_save_sort_order_rpc.sql` (create)
 
 **Functions / SQL to implement:**
-- `011`: `alter table public.projects` + `public.posts` add `sort_order integer`; backfill `row_number() over (order by created_at desc) - 1` per table; then set `not null` + `check (sort_order >= 0)` (mirror `project_media_order_index_nonneg`, migration 010). Add a `(status, sort_order)` btree index per table (mirror `*_status_created_at_idx`). Add a BEFORE INSERT trigger per table that sets `sort_order = coalesce((select max(sort_order) + 1 from <table>), 0)` when not supplied (append-to-end).
-- `011a`: `save_project_order(p_rows jsonb)` and `save_post_order(p_rows jsonb)` — `update public.<table> t set sort_order = (r.ord - 1) from jsonb_array_elements(p_rows) with ordinality as r(value, ord) where t.id = (r.value->>'id')::uuid;`. `language plpgsql security invoker set search_path = ''`. Guard: raise loudly when `p_rows` is null or not a jsonb array. `revoke execute ... from public; revoke ... from anon; grant execute ... to authenticated;` (mirror the 010a grant triplet).
+- `012`: `alter table public.projects` + `public.posts` add `sort_order integer`; backfill `row_number() over (order by created_at desc) - 1` per table; then set `not null` + `check (sort_order >= 0)` (mirror `project_media_order_index_nonneg`, migration 010). Add a `(status, sort_order)` btree index per table (mirror `*_status_created_at_idx`). Add a BEFORE INSERT trigger per table that sets `sort_order = coalesce((select max(sort_order) + 1 from <table>), 0)` when not supplied (append-to-end).
+- `012a`: `save_project_order(p_rows jsonb)` and `save_post_order(p_rows jsonb)` — `update public.<table> t set sort_order = (r.ord - 1) from jsonb_array_elements(p_rows) with ordinality as r(value, ord) where t.id = (r.value->>'id')::uuid;`. `language plpgsql security invoker set search_path = ''`. Guard: raise loudly when `p_rows` is null or not a jsonb array. `revoke execute ... from public; revoke ... from anon; grant execute ... to authenticated;` (mirror the 010a grant triplet).
 
 **Acceptance criteria:**
-- [ ] Migration 011 applies cleanly to dev + production; guarded/idempotent (`add column if not exists`).
+- [ ] Migration 012 applies cleanly to dev + production; guarded/idempotent (`add column if not exists`).
 - [ ] `sort_order` is `not null` with `check (sort_order >= 0)` on both `projects` and `posts`.
 - [ ] Backfill preserves the current newest-first order (newest row = `sort_order` 0).
 - [ ] `(status, sort_order)` index exists on both tables.
@@ -988,7 +988,7 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 - [ ] `@cto` decision recorded on `updated_at`: the reorder UPDATE fires the `*_set_updated_at` trigger — accept the bump (updated_at is not displayed; admin shows `created_at`) or suppress it.
 
 **Tests required:**
-- `migration 011 backfill ranks existing rows newest-first` → happy.
+- `migration 012 backfill ranks existing rows newest-first` → happy.
 - `save_project_order persists array order into sort_order` → happy.
 - `save_project_order raises on non-array p_rows` → error.
 - `save_post_order` mirror of the two above.
@@ -1109,7 +1109,7 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 ### T45.A — Schema + types: `post_id` FK
 
 **Files:**
-- `supabase/migrations/012_project_post_link.sql` (create — or the next free number if T44's `011`/`011a` have not landed)
+- `supabase/migrations/011_project_post_link.sql` (created — T45 landed before T44, so this took `011`; T44 re-numbers to `012`/`012a`)
 - `lib/types.ts` (modify — add `post_id: string | null` to `Project`)
 - `lib/admin-projects-mutations-schemas.ts` (modify — add `post_id` to create + update schemas: uuid-or-empty → null)
 - `lib/admin-projects-mutations.ts` + `lib/admin-projects-mutations-internal.ts` (modify — read + persist `post_id`)
@@ -1119,17 +1119,17 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 - Zod: `post_id` nullable uuid; empty string coerces to null (like the image FKs).
 
 **Acceptance criteria:**
-- [ ] Migration applies cleanly to dev + production; idempotent (drop-then-add FK).
-- [ ] `post_id` is nullable, FK to `posts(id)` with `on delete set null` (matches `image_after_id`).
-- [ ] No new RLS policy — the column-agnostic `projects_*` policies cover it (verify).
-- [ ] `Project` type carries `post_id: string | null`.
-- [ ] `createProject` / `updateProject` accept and persist `post_id`; zod coerces empty → null and rejects non-uuid.
+- [x] Migration applies cleanly to dev + production; idempotent (drop-then-add FK). → **S44 2026-05-28:** migration `011_project_post_link.sql` applied via Supabase MCP (`success:true`); idempotent drop-then-add.
+- [x] `post_id` is nullable, FK to `posts(id)` with `on delete set null` (matches `image_after_id`). → verified live: `post_id` uuid nullable; `projects_post_id_fkey → posts(id)` delete_rule SET NULL.
+- [x] No new RLS policy — the column-agnostic `projects_*` policies cover it (verify). → verified via `pg_policies`: `projects_public_select` (anon, status='published') + `projects_admin_all` are row-level; new column auto-covered.
+- [x] `Project` type carries `post_id: string | null`. → added in `lib/types.ts` next to `image_after_id`.
+- [x] `createProject` / `updateProject` accept and persist `post_id`; zod coerces empty → null and rejects non-uuid. → schemas (create+update), FormData readers (empty→null via `readNullableTrimmed`), and insert/update payloads all wired; `ProjectMutationFieldName` union extended.
 
 **Tests required:**
-- `zod accepts null/empty post_id and rejects non-uuid` → happy + error.
-- `createProject persists post_id` → happy.
+- [x] `zod accepts null/empty post_id and rejects non-uuid` → happy + error.
+- [x] `createProject persists post_id` → happy. → both added; full Vitest suite 413/413 pass, `tsc --noEmit` clean, production build OK.
 
-**Depends on:** T39. (Migration number depends on T44 landing first.)
+**Depends on:** T39. (T45 landed before T44 — this took migration `011`; T44 re-numbers to `012`/`012a`.)
 **Specialist:** `@supabase` (migration), `@cto` (FK choice, pre-apply).
 
 ---
@@ -1144,15 +1144,15 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 - `app/(admin)/admin/projects/new/page.tsx` + `app/(admin)/admin/projects/[id]/page.tsx` (modify — fetch `listPostsForPicker()` and pass `posts` to `ProjectForm`)
 
 **Acceptance criteria:**
-- [ ] `listPostsForPicker` returns published posts as `{ id, title }`, ordered by title.
-- [ ] `ProjectForm` renders a "Linked writeup" dropdown (published posts + "Unset"); selection saves to `post_id` via the hidden-input pattern (empty → null).
-- [ ] Both the `new` and `[id]` admin pages fetch and pass `posts`.
-- [ ] Operator label "Linked writeup" is CONSTRAINT-13 clean (dry, no emoji, no SaaS phrases).
-- [ ] CQ-02: if `ProjectFormDisplay` exceeds 200 lines, split.
+- [x] `listPostsForPicker` returns published posts as `{ id, title }`, ordered by title. → **S44 2026-05-28:** added in `lib/admin-queries-posts.ts` (`.eq('status','published').order('title',asc)`), re-exported from `lib/admin-queries.ts`.
+- [x] `ProjectForm` renders a "Linked writeup" dropdown (published posts + "Unset"); selection saves to `post_id` via the hidden-input pattern (empty → null). → shadcn Select + hidden `name="post_id"` input, "Unset" first (sentinel → '' → null), preselects current `post_id` on edit.
+- [x] Both the `new` and `[id]` admin pages fetch and pass `posts`. → both pages now `await listPostsForPicker()` and pass `posts` to `ProjectForm`.
+- [x] Operator label "Linked writeup" is CONSTRAINT-13 clean (dry, no emoji, no SaaS phrases). → label "Linked writeup", empty option "Unset"; no Fraunces/JetBrains Mono introduced (admin shadcn defaults).
+- [x] CQ-02: if `ProjectFormDisplay` exceeds 200 lines, split. → file is 151 lines after the change; no split needed.
 
 **Tests required:**
-- `listPostsForPicker returns published posts only` → happy.
-- `ProjectForm renders the linked-writeup options and prefills on edit` → happy.
+- [x] `listPostsForPicker returns published posts only` → happy. → + error test (ServiceError tagged `listPostsForPicker`).
+- [x] `ProjectForm renders the linked-writeup options and prefills on edit` → happy. → full Vitest suite 416/416 pass, `tsc --noEmit` clean, production build OK.
 
 **Depends on:** T45.A.
 **Specialist:** `@ui-swarnimbagre` (admin shadcn mode).
@@ -1170,15 +1170,15 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 - Desktop: hairline + post-date meta + body below `ProjectCard`. Mobile: same below `MobileProjectCard`.
 
 **Acceptance criteria:**
-- [ ] When `post_id` → a published post, the detail page renders the post body below the card (desktop + mobile), styled per Override 3 (720px, `font-serif`, hairline + date meta, no repeated `<h1>`).
-- [ ] When `post_id` is null OR the post is a draft, no body renders — no error (missing/draft is a clean empty, not a failure).
-- [ ] Public loads route through `lib/safe-load.ts` (CONSTRAINT-14); the post fetch is its own `safeLoad`.
-- [ ] `@security`: only `published` posts render — no draft body leak via `post_id`.
+- [x] When `post_id` → a published post, the detail page renders the post body below the card (desktop + mobile), styled per Override 3 (720px, `font-serif`, hairline + date meta, no repeated `<h1>`). → **S44 2026-05-28:** `renderLinkedPostBody` in `app/projects/[slug]/page.tsx`; body wrapper identical to `/writing` (720/marginTop 24/`--fg`/`--font-serif`/`MarkdownContent`); meta `var(--meta-sm)`/`--fg-muted`/0.14em; hairline `1px solid var(--hairline)` 32px; rendered below both `ProjectCard` + `MobileProjectCard`.
+- [x] When `post_id` is null OR the post is a draft, no body renders — no error (missing/draft is a clean empty, not a failure). → loader returns null → `renderLinkedPostBody(null)` returns null.
+- [x] Public loads route through `lib/safe-load.ts` (CONSTRAINT-14); the post fetch is its own `safeLoad`. → 4th `safeLoad` added to the existing `Promise.all` (`page:projects/[slug]:linked-post`).
+- [x] `@security`: only `published` posts render — no draft body leak via `post_id`. → **main-thread verified:** `getPublishedPostById` (`lib/db.ts`) gates `.eq('status','published')` IN the query (not caller); null id short-circuits before any DB hit; second gate is RLS `posts_public_select` (anon → published only). 5 unit tests assert null for draft/missing/null-id.
 
 **Tests required:**
-- e2e: project with a published linked post shows the body on `/projects/<slug>`.
-- e2e: project with null `post_id` shows no body, no error.
-- unit: the linked-post loader returns null for a draft/missing post.
+- [x] e2e: project with a published linked post shows the body on `/projects/<slug>`. → `tests/e2e/projects-detail-writeup.spec.ts` (env-slug, self-skips; parses/lists clean — Playwright runner, not Vitest).
+- [x] e2e: project with null `post_id` shows no body, no error. → same spec (asserts no body + no pageerror).
+- [x] unit: the linked-post loader returns null for a draft/missing post. → `tests/db.test.ts` `getPublishedPostById` block (5 tests; full Vitest suite 421/421, `tsc` clean, build OK).
 
 **Depends on:** T45.A.
 **Specialist:** `@ui-swarnimbagre` (public bundle mode), `@security` (draft-leak check).
@@ -1195,16 +1195,16 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 - `tests/e2e/admin-smoke.spec.ts`, `tests/e2e/public-carousel.spec.ts`, `tests/ProjectCard.test.tsx`, `tests/MobileProjectCard.test.tsx`, `tests/public-projects.test.ts` (modify — gated-link cases + `postId` mapping)
 
 **Acceptance criteria:**
-- [ ] `PublicProject` carries `postId`; the mapper sets it from the row.
-- [ ] A project with no linked post and at most one media item has a non-clickable title (no detail navigation) on both desktop + mobile lists.
-- [ ] A project with a linked post OR more than one media item links its title to `/projects/<slug>`.
-- [ ] `ProjectCard` / `MobileProjectCard` render cleanly with no `onClick` (inert title, `cursor: default`).
-- [ ] Tests updated for the gated state + `postId` mapping; `@code-review` PASS.
+- [x] `PublicProject` carries `postId`; the mapper sets it from the row. → **S44 2026-05-28:** `postId: string | null` added to `PublicProject`; `toPublicProject` sets `postId: row.post_id`.
+- [x] A project with no linked post and at most one media item has a non-clickable title (no detail navigation) on both desktop + mobile lists. → gate `p.postId != null || p.media.length > 1`; else `onClick={undefined}` in both `Projects.tsx` pages.
+- [x] A project with a linked post OR more than one media item links its title to `/projects/<slug>`. → same gate (true branch wires `router.push`).
+- [x] `ProjectCard` / `MobileProjectCard` render cleanly with no `onClick` (inert title, `cursor: default`). → `MobileProjectCard` already inert; `ProjectCard` FIXED — it previously always wrapped the title in `<a href="#" class="link">`; now the anchor only renders when `onClick` is present (bare text otherwise).
+- [x] Tests updated for the gated state + `postId` mapping; `@code-review` PASS. → **`@code-review` PASS:** 0 blockers, security draft-leak gate confirmed; 2 findings (CQ-02 `lib/db.ts` over 300 lines + `formatDate` dup) both RESOLVED — `db.ts` split into `db-posts.ts` + `db-internal.ts` (204/102/44 lines), `formatDate` extracted to `lib/format-date.ts`. tsc clean, full suite 427/427.
 
 **Tests required:**
-- `ProjectCard renders an inert title when no onClick` → happy.
-- `public-projects mapper sets postId` → happy.
-- e2e: a bare project card title is not a link; an enriched one is.
+- [x] `ProjectCard renders an inert title when no onClick` → happy. → + active-link case; mirror on `MobileProjectCard`.
+- [x] `public-projects mapper sets postId` → happy. → + null-post case.
+- [x] e2e: a bare project card title is not a link; an enriched one is. → `admin-smoke.spec.ts` (enriched T42 vs bare project); `media.length>1` branch covered by unit only (e2e gap noted — no multi-media published project seeded).
 
 **Depends on:** T45.A, T45.C.
 **Specialist:** `@code-review`, `@designer` (confirm Override 3 layout in render).

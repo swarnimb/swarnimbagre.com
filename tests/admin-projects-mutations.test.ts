@@ -37,6 +37,7 @@ const PUBLISHED_ROW: Project = {
   progress_percent: null,
   thumb_kind: null,
   image_after_id: null,
+  post_id: null,
 };
 
 /** Sample draft row used as the pre-fetch result on draft-edit paths. */
@@ -55,6 +56,7 @@ const DRAFT_ROW: Project = {
   progress_percent: null,
   thumb_kind: null,
   image_after_id: null,
+  post_id: null,
 };
 
 /**
@@ -69,6 +71,10 @@ const NULL_T42_FIELDS = {
   post_url: null,
   progress_percent: null,
   thumb_kind: null,
+  // T45.A — `post_id` rides alongside the T42 content-model fields on both the
+  // create- and update-side payloads. Defaulted to null here so each case only
+  // declares it when it specifically exercises the post link.
+  post_id: null,
 } as const;
 
 /**
@@ -237,6 +243,7 @@ describe('createProjectInternal', () => {
       progress_percent: null,
       thumb_kind: null,
       image_after_id: null,
+      post_id: null,
     };
     const { client, calls } = makeCreateStub({ data: insertedRow, error: null });
 
@@ -301,6 +308,7 @@ describe('createProjectInternal', () => {
       progress_percent: 75,
       thumb_kind: 'disc',
       image_after_id: null,
+      post_id: null,
     };
     const { client, calls } = makeCreateStub({
       data: insertedRow,
@@ -317,6 +325,7 @@ describe('createProjectInternal', () => {
         post_url: '/writing/foo',
         progress_percent: 75,
         thumb_kind: 'disc',
+        post_id: null,
       },
       client,
     );
@@ -329,6 +338,46 @@ describe('createProjectInternal', () => {
     expect(payload.post_url).toBe('/writing/foo');
     expect(payload.progress_percent).toBe(75);
     expect(payload.thumb_kind).toBe('disc');
+  });
+
+  // T45.A — `post_id` (nullable uuid FK into `posts`) rides on the create-side
+  // INSERT payload, mirroring how the T42 content-model fields are persisted.
+  it('createProject persists post_id', async () => {
+    const POST_ID = '00000000-0000-4000-8000-00000000d00d';
+    const insertedRow: Project = {
+      id: 'p-linked',
+      title: 'Linked Thing',
+      slug: 'linked-thing',
+      description: 'links to a post',
+      status: 'draft',
+      image_id: null,
+      created_at: '2026-05-28T00:00:00.000Z',
+      updated_at: '2026-05-28T00:00:00.000Z',
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: null,
+      image_after_id: null,
+      post_id: POST_ID,
+    };
+    const { client, calls } = makeCreateStub({ data: insertedRow, error: null });
+
+    await createProjectInternal(
+      {
+        title: 'Linked Thing',
+        description: 'links to a post',
+        status: 'draft',
+        ...NULL_T42_FIELDS,
+        post_id: POST_ID,
+      },
+      client,
+    );
+
+    const insertCall = calls.find((c) => c.method === 'insert');
+    expect(insertCall).toBeDefined();
+    const payload = insertCall?.args[0] as Record<string, unknown>;
+    expect(payload.post_id).toBe(POST_ID);
   });
 });
 
@@ -578,6 +627,7 @@ describe('updateProjectInternal', () => {
         progress_percent: 75,
         thumb_kind: 'disc',
         image_after_id: IMAGE_AFTER_ID,
+        post_id: null,
       },
       client,
     );
@@ -624,6 +674,7 @@ describe('updateProjectInternal', () => {
         progress_percent: null,
         thumb_kind: null,
         image_after_id: NEW_AFTER_ID,
+        post_id: null,
       },
       client,
     );
@@ -684,6 +735,7 @@ describe('updateProjectInternal', () => {
         progress_percent: null,
         thumb_kind: null,
         image_after_id: SAME_AFTER_ID,
+        post_id: null,
       },
       client,
     );

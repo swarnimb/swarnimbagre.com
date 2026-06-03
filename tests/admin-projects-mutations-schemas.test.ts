@@ -40,6 +40,7 @@ describe('projectCreateSchema', () => {
       post_url: null,
       progress_percent: null,
       thumb_kind: null,
+      post_id: null,
     };
     expect(() => projectCreateSchema.parse(input)).not.toThrow();
   });
@@ -54,6 +55,7 @@ describe('projectCreateSchema', () => {
       post_url: '/writing/foo',
       progress_percent: 50,
       thumb_kind: 'disc' as const,
+      post_id: null,
     };
     expect(() => projectCreateSchema.parse(input)).not.toThrow();
   });
@@ -110,6 +112,7 @@ describe('projectCreateSchema', () => {
       post_url: '/writing/foo',
       progress_percent: null,
       thumb_kind: null,
+      post_id: null,
     };
     expect(() => projectCreateSchema.parse(input)).not.toThrow();
   });
@@ -124,6 +127,7 @@ describe('projectCreateSchema', () => {
       post_url: 'https://example.com/foo',
       progress_percent: null,
       thumb_kind: null,
+      post_id: null,
     };
     expect(() => projectCreateSchema.parse(input)).not.toThrow();
   });
@@ -196,6 +200,7 @@ describe('projectCreateSchema', () => {
       live_url: null,
       post_url: null,
       thumb_kind: null,
+      post_id: null,
     };
     for (const pct of [0, 50, 100, null]) {
       expect(() =>
@@ -227,6 +232,7 @@ describe('projectCreateSchema', () => {
       live_url: null,
       post_url: null,
       progress_percent: null,
+      post_id: null,
     };
     for (const kind of THUMB_KIND_VALUES) {
       expect(() =>
@@ -269,6 +275,7 @@ describe('projectUpdateSchema', () => {
       progress_percent: null,
       thumb_kind: null,
       image_after_id: null,
+      post_id: null,
     };
     expect(() => projectUpdateSchema.parse(input)).not.toThrow();
   });
@@ -285,6 +292,7 @@ describe('projectUpdateSchema', () => {
       progress_percent: null,
       thumb_kind: null,
       image_after_id: VALID_UUID_B,
+      post_id: null,
     };
     expect(() => projectUpdateSchema.parse(input)).not.toThrow();
   });
@@ -301,6 +309,7 @@ describe('projectUpdateSchema', () => {
       progress_percent: null,
       thumb_kind: null,
       image_after_id: 'not-a-uuid',
+      post_id: null,
     };
     try {
       projectUpdateSchema.parse(input);
@@ -313,6 +322,52 @@ describe('projectUpdateSchema', () => {
           (i) =>
             i.path.join('.') === 'image_after_id' &&
             i.message === 'image_after_id must be a uuid',
+        ),
+      ).toBe(true);
+    }
+  });
+
+  // T45.A — `post_id` is a nullable uuid FK into `posts`, mirroring the
+  // `image_after_id` empty->null + uuid pattern. Empty-string-to-null
+  // coercion happens in the FormData reader (SEC-02); the schema only ever
+  // sees the post-coercion shape, so the happy case here asserts `null` is
+  // accepted and the error case asserts a non-uuid string is rejected.
+  it('zod accepts null/empty post_id and rejects non-uuid', () => {
+    const base = {
+      title: 'Thing',
+      description: 'desc',
+      status: 'draft' as const,
+      image_id: null,
+      github_url: null,
+      live_url: null,
+      post_url: null,
+      progress_percent: null,
+      thumb_kind: null,
+      image_after_id: null,
+    };
+
+    // Happy path: `null` (the post-coercion shape an empty form field becomes)
+    // is accepted, and a valid uuid is accepted.
+    expect(() =>
+      projectUpdateSchema.parse({ ...base, post_id: null }),
+    ).not.toThrow();
+    expect(() =>
+      projectUpdateSchema.parse({ ...base, post_id: VALID_UUID_A }),
+    ).not.toThrow();
+
+    // Error path: a non-empty, non-uuid string is rejected with the
+    // field-tagged message.
+    try {
+      projectUpdateSchema.parse({ ...base, post_id: 'not-a-uuid' });
+      throw new Error('expected ZodError to be thrown');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ZodError);
+      const issues = (err as ZodError).issues;
+      expect(
+        issues.some(
+          (i) =>
+            i.path.join('.') === 'post_id' &&
+            i.message === 'post_id must be a uuid',
         ),
       ).toBe(true);
     }
@@ -335,6 +390,7 @@ describe('projectUpdateSchema', () => {
       progress_percent: null,
       thumb_kind: null,
       image_after_id: null,
+      post_id: null,
     };
     expect(() => projectUpdateSchema.parse(input)).toThrow(ZodError);
   });
@@ -351,6 +407,7 @@ describe('projectUpdateSchema', () => {
       progress_percent: 101,
       thumb_kind: null,
       image_after_id: null,
+      post_id: null,
     };
     expect(() => projectUpdateSchema.parse(input)).toThrow(ZodError);
   });
@@ -367,6 +424,7 @@ describe('projectUpdateSchema', () => {
       progress_percent: null,
       thumb_kind: 'unknownmotif',
       image_after_id: null,
+      post_id: null,
     };
     expect(() => projectUpdateSchema.parse(input)).toThrow(ZodError);
   });

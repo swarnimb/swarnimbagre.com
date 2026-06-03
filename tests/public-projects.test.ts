@@ -53,6 +53,7 @@ function makeRow(overrides: Partial<Project> = {}): Project {
     progress_percent: null,
     thumb_kind: null,
     image_after_id: null,
+    post_id: null,
     ...overrides,
   };
 }
@@ -97,6 +98,22 @@ describe('loadPublicProjects — happy path', () => {
       imageUrl: null,
       imageAfterUrl: null,
     });
+  });
+
+  it('sets postId from the row post_id (Override 3, T45.D)', async () => {
+    vi.mocked(getPublishedProjects).mockResolvedValueOnce([
+      makeRow({ post_id: 'post-7' }),
+    ]);
+
+    const result = await loadPublicProjects();
+    expect(result[0].postId).toBe('post-7');
+  });
+
+  it('sets postId to null when the row has no attached post', async () => {
+    vi.mocked(getPublishedProjects).mockResolvedValueOnce([makeRow()]);
+
+    const result = await loadPublicProjects();
+    expect(result[0].postId).toBeNull();
   });
 
   it('resolves image_id to a signed URL when present', async () => {

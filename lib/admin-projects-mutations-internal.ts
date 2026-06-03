@@ -132,6 +132,7 @@ export async function createProjectInternal(
     post_url: parsed.post_url,
     progress_percent: parsed.progress_percent,
     thumb_kind: parsed.thumb_kind,
+    post_id: parsed.post_id,
   };
   const { data, error } = await supabase
     .from('projects')
@@ -191,6 +192,7 @@ function buildProjectUpdatePayload(
     progress_percent: parsed.progress_percent,
     thumb_kind: parsed.thumb_kind,
     image_after_id: parsed.image_after_id,
+    post_id: parsed.post_id,
   };
   if (!isPublished) {
     payload.slug = deriveSlugOrThrow(parsed.title, UPDATE_PROJECT_OPERATION);

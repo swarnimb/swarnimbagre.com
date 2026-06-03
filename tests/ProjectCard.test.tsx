@@ -56,6 +56,33 @@ describe('ProjectCard — smoke render', () => {
   });
 });
 
+describe('ProjectCard — title-link gating (Override 3, T45.D)', () => {
+  it('renders the title as a gold-underline link when onClick is provided', () => {
+    render(
+      <ProjectCard title="putt-or-not" blurb="b" onClick={() => {}} />,
+    );
+    const titleLink = screen.getByRole('link', { name: 'putt-or-not' });
+    expect(titleLink).toBeInTheDocument();
+    expect(titleLink).toHaveClass('link');
+  });
+
+  it('renders an inert title (no link, cursor default) when no onClick', () => {
+    const { container } = render(
+      <ProjectCard title="putt-or-not" blurb="b" />,
+    );
+    // The title heading exists...
+    const heading = screen.getByRole('heading', { name: 'putt-or-not' });
+    expect(heading).toBeInTheDocument();
+    // ...but it is not wrapped in an anchor / `.link` affordance.
+    expect(screen.queryByRole('link', { name: 'putt-or-not' })).toBeNull();
+    expect(heading.querySelector('a')).toBeNull();
+    expect(container.querySelector('.link')).toBeNull();
+    // The card frame is non-interactive.
+    const article = container.querySelector('article') as HTMLElement;
+    expect(article.style.cursor).toBe('default');
+  });
+});
+
 describe('ProjectCard — link rendering by URL presence', () => {
   it('renders all three TypoIcons when github, live, and post URLs are present', () => {
     render(

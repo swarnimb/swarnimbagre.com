@@ -45,7 +45,8 @@ export type ProjectMutationFieldName =
   | 'post_url'
   | 'progress_percent'
   | 'thumb_kind'
-  | 'image_after_id';
+  | 'image_after_id'
+  | 'post_id';
 
 export interface ProjectMutationState {
   /** `'idle'` is the initial state used by `useActionState`. */

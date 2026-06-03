@@ -56,6 +56,7 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 | `progress_percent` | `integer` | NULL, CHECK `(progress_percent between 0 and 100)` — drives the ProgressRing; null → ring not rendered (migration 009) |
 | `thumb_kind` | `text` | NULL — selects an SVG motif from `lib/thumb-kinds.ts`. No DB-side enum / CHECK; the vocabulary lives in code so new motifs can be added without a migration (migration 009) |
 | `image_after_id` | `uuid` | NULL, FK → `images.id` ON DELETE SET NULL — "after" image for the BeforeAfterMedia slider; when null, the card renders a single `<img>` from `image_id` (migration 009) |
+| `post_id` | `uuid` | NULL, FK → `posts.id` ON DELETE SET NULL — links a project to a published post whose body renders on the detail page (Override 3); independent of `post_url` (migration 011) |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` |
 | `updated_at` | `timestamptz` | NOT NULL, default `now()`, trigger on update |
 
@@ -66,6 +67,8 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 **RLS on the new columns (migration 009).** No new policies required. The existing `projects_public_select` (anon, FOR SELECT, USING `status = 'published'`) and `projects_admin_all` (authenticated, FOR ALL) policies from migration 002 grant access at the row level, not column level — every new column is automatically covered. Verified against `pg_policies` post-apply.
 
 **Override 1 (project-card surface, 2026-05-19).** Six columns above are consumed by a redesigned project-card surface that intentionally deviates from the source bundle on the project-card surface only — see `design-decisions.md` "Override 1: Project card redesign" for the surface boundary and `founder-brief.md` decision #28 for the architectural rationale. CONSTRAINT-05's verbatim-bundle rule still applies everywhere outside the named Override 1 surface list.
+
+**Override 3 (project detail embed, T45, 2026-06-03).** `post_id` attaches one published post; its body renders on `/projects/<slug>` below the card, and the `/projects` title-link is gated on `post_id`-set-or-2+-media. No new RLS policy — the existing row-level `projects_*` policies cover the column; only a published linked post renders, enforced in-query by `getPublishedPostById` (`lib/db-posts.ts`). See `design-decisions.md` Override 3 + `founder-brief.md` decision #32.
 
 ### 2.2 `posts`
 

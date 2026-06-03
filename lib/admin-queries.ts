@@ -21,8 +21,8 @@
 export { getAllProjects, getProjectById } from './admin-queries-projects';
 export type { ProjectFilter, ProjectRow } from './admin-queries-projects';
 
-export { getAllPosts, getPostById } from './admin-queries-posts';
-export type { PostFilter, PostRow } from './admin-queries-posts';
+export { getAllPosts, getPostById, listPostsForPicker } from './admin-queries-posts';
+export type { PostFilter, PostRow, PostPickerRow } from './admin-queries-posts';
 
 export { getAllStats } from './admin-queries-stats';
 
