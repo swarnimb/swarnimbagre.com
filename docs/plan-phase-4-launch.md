@@ -1096,7 +1096,7 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 
 ## T45 — Embedded project writeup (linked post on the detail page)
 
-**Status:** Planned 2026-05-28 (Session 43) via `@designer` (Override 3) + `@cpo` (PRD §3.8) + `@create-plan`. Source: `docs/prd.md` §3.8 + `docs/design-decisions.md` Override 3. Queued behind T44 (which is behind T40). Reuses the `/writing` post-body rendering on the project detail page; does NOT add a project-only body field.
+**Status:** Done 2026-05-28 (Session 44) — built ahead of T44 per builder-approved resequence (T45 defines the project-detail structure before content authoring). All four sub-tasks `[x]`. Planned 2026-05-28 (Session 43) via `@designer` (Override 3) + `@cpo` (PRD §3.8) + `@create-plan`. Source: `docs/prd.md` §3.8 + `docs/design-decisions.md` Override 3. Reuses the `/writing` post-body rendering on the project detail page; does NOT add a project-only body field.
 
 **Decisions locked at planning (Session 43):**
 - A project attaches ONE existing post via a new `projects.post_id` FK (nullable, `on delete set null`); the post is a normal post that also appears in `/writing`.
