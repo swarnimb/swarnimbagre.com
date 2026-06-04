@@ -29,6 +29,10 @@ import { execSync } from 'node:child_process';
 //                                              + T43.F mount in the admin
 //                                              edit-project page; manifest-
 //                                              reachable as of T43.F close)
+// `saveProjectOrder` / `savePostOrder` (T44.C — `lib/admin-reorder-mutations.ts`)
+// are intentionally NOT listed yet: they stay out of the manifest until the
+// T44.D reorder UI makes them reachable. They are added here in lock-step at
+// T44.D, mirroring how `saveProjectMedia` landed at T43.F.
 const SERVER_ACTION_ALLOWLIST = new Set<string>([
   'signInWithMagicLink',
   'signOut',

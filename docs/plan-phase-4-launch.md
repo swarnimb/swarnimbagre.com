@@ -1037,7 +1037,7 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 - `lib/admin-reorder-mutations-schemas.ts` (create — zod: `{ rows: z.array(z.object({ id: z.string().uuid() }).strict()) }`)
 - `lib/admin-reorder-mutations-internal.ts` (create — throwing dispatch; resolves resource → RPC name; `supabase.rpc(...)`; wraps errors in `ServiceError`)
 - `lib/admin-reorder-mutations.ts` (create — `'use server'` wrappers `saveProjectOrder` + `savePostOrder`)
-- `tests/server-actions-manifest.test.ts` (modify — register the two new action IDs, SEC-09)
+- `tests/server-actions-manifest.test.ts` (modify — register the two new action IDs, SEC-09). **NOTE (S46):** registration moved to **T44.D**, mirroring how `saveProjectMedia` landed at T43.F — Next.js tree-shakes unreachable Server Actions out of the build manifest, so adding the IDs before the T44.D UI wires them would red the manifest test. The allowlist edit was reverted at T44.C; a deferral comment was left in the test file.
 
 **Functions to implement:**
 - `saveProjectOrder(_prev: ReorderMutationState, formData: FormData): Promise<ReorderMutationState>`
@@ -1045,20 +1045,22 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 - internal `saveOrderInternal(resource: 'projects' | 'posts', raw: unknown, client?): Promise<void>` — parse schema, call the resource's RPC.
 
 **Acceptance criteria:**
-- [ ] Each action reads an ordered `rows` array (`[{ id }]`) from FormData and calls the matching RPC (`save_project_order` / `save_post_order`).
-- [ ] Uniform `{ status, fieldErrors?, formError? }` envelope; never throws to the wire; `padToFloor` timing floor (Channel 3 pattern).
-- [ ] Zod rejects non-uuid ids and malformed payloads (EH: loud at the boundary).
-- [ ] Both new action IDs registered in `server-actions-manifest` (SEC-09) — manifest test green.
-- [ ] Longest function < 50 lines; each file < 300 lines (CQ-01 / CQ-04).
-- [ ] `@security` audit: writes are server-side only; RPC `security invoker` keeps RLS as the boundary; no new public surface.
+- [x] Each action reads an ordered `rows` array (`[{ id }]`) from FormData and calls the matching RPC (`save_project_order` / `save_post_order`).
+- [x] Uniform `{ status, fieldErrors?, formError? }` envelope; never throws to the wire; `padToFloor` timing floor (Channel 3 pattern).
+- [x] Zod rejects non-uuid ids and malformed payloads (EH: loud at the boundary).
+- [~] Both new action IDs registered in `server-actions-manifest` (SEC-09) — manifest test green. → **DEFERRED to T44.D (S46):** Next.js reachability gating — the actions are not route-reachable until the T44.D UI mounts them, so the manifest stays at 13 and the allowlist must too. Same pattern as `saveProjectMedia` (T43.E action → T43.F allowlist). Reverted to 13 entries; deferral noted in the test file.
+- [x] Longest function < 50 lines; each file < 300 lines (CQ-01 / CQ-04). Longest fn `saveOrderInternal` ~17 lines; largest file `admin-reorder-mutations.ts` 146 lines.
+- [x] `@security` audit: writes are server-side only; RPC `security invoker` keeps RLS as the boundary; no new public surface. — **CLEAR** (audit, S46; 0 Critical / 0 High / 0 Medium / 0 Low).
 
 **Tests required:**
-- `saveProjectOrder persists order on a valid payload` → happy.
-- `saveProjectOrder returns an error envelope on a non-uuid id` → error.
-- `savePostOrder` mirror.
+- [x] `saveProjectOrder persists order on a valid payload` → happy.
+- [x] `saveProjectOrder returns an error envelope on a non-uuid id` → error.
+- [x] `savePostOrder` mirror.
 
 **Depends on:** T44.A.
 **Specialist:** `@security`.
+
+**Closed:** Session 46 (2026-06-03). Files created: `lib/admin-reorder-mutations-{types,schemas,internal}.ts` + `lib/admin-reorder-mutations.ts` + `tests/admin-reorder-mutations.test.ts` (8 tests). Vitest 454/454 (excl. build-gated manifest test). One criterion deferred to T44.D (manifest registration). `@security` CLEAR.
 
 ---
 
