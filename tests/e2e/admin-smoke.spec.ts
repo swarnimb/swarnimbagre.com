@@ -858,6 +858,60 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await expect(page.getByLabel(/^caption$/i).nth(1)).toHaveValue(T43F_CAPTION_SINGLE);
     });
 
+    // -------------------------------------------------------------------
+    // T44.D end-to-end — admin list drag-reorder round-trip.
+    //
+    // The /admin/projects list now renders a reorderable table body
+    // (`ResourceListReorder`): each row is `draggable` with HTML5 DnD, an
+    // explicit "Save order" button commits the order via `saveProjectOrder`.
+    // Same DragEvent + shared DataTransfer dispatch technique as the T43.F
+    // media step — Playwright's mouse-based `.dragTo()` does NOT fire HTML5
+    // DragEvent listeners.
+    //
+    // Capture the first two row titles, drag row 1 onto row 2, Save order,
+    // assert the toast, reload, and assert the two titles swapped position.
+    // -------------------------------------------------------------------
+    await runStep(failures, 'T44.D: projects list drag-reorder + save round-trip', async () => {
+      await page.goto('/admin/projects');
+      const bodyRows = page.locator('tbody tr');
+      // The smoke flow seeds several projects; need at least two to reorder.
+      const rowCount = await bodyRows.count();
+      expect(rowCount, 'need >= 2 project rows to exercise reorder').toBeGreaterThanOrEqual(2);
+
+      // Title is the second cell (cell 0 is the drag handle).
+      const titleOf = async (i: number): Promise<string> =>
+        ((await bodyRows.nth(i).locator('td').nth(1).textContent()) ?? '').trim();
+      const firstTitle = await titleOf(0);
+      const secondTitle = await titleOf(1);
+      expect(firstTitle, 'first row title captured').not.toBe('');
+      expect(secondTitle, 'second row title differs from first').not.toBe(firstTitle);
+
+      // Drag row 1 onto row 2 via dispatched DragEvents on the draggable rows.
+      await bodyRows.evaluateAll((nodes) => {
+        const src = nodes[0] as HTMLElement;
+        const tgt = nodes[1] as HTMLElement;
+        if (!src || !tgt) throw new Error('reorder rows missing');
+        const dt = new DataTransfer();
+        src.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        tgt.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        tgt.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+        src.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer: dt }));
+      });
+      // After the drag, the originally-second title now occupies row 1.
+      await expect(bodyRows.nth(0).locator('td').nth(1)).toHaveText(secondTitle);
+      await expect(bodyRows.nth(1).locator('td').nth(1)).toHaveText(firstTitle);
+
+      // Commit the new order.
+      await page.getByRole('button', { name: /^save order$/i }).click();
+      await expect(page.getByText(/^order saved\.$/i)).toBeVisible({ timeout: SHORT_WAIT_MS });
+
+      // Reload — the server now sorts by the persisted order; the swap holds.
+      await page.reload();
+      const reloadedRows = page.locator('tbody tr');
+      await expect(reloadedRows.nth(0).locator('td').nth(1)).toHaveText(secondTitle);
+      await expect(reloadedRows.nth(1).locator('td').nth(1)).toHaveText(firstTitle);
+    });
+
     // Cleanup — best effort; swallows individual delete failures.
     await runStep(failures, 'cleanup: delete test post', async () => {
       await page.goto('/admin/posts');

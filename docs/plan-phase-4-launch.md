@@ -1078,13 +1078,13 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 - "Save order" dispatches the resource action with `JSON.stringify` of `[{ id }]` in current display order.
 
 **Acceptance criteria:**
-- [ ] Rows in `/admin/projects` and `/admin/posts` are drag-reorderable via HTML5 native DnD (no new dependency).
-- [ ] Drop reorders optimistically; "Save order" persists + shows a `sonner` success toast; reload preserves the order.
-- [ ] No auto-save on drop — explicit save (PRD §3.7; mirrors 3.5).
-- [ ] Operator labels are CONSTRAINT-13 clean (dry, no SaaS phrases, no emoji; `⠿` typographic handle only).
-- [ ] Touch-drag not implemented (desktop-only, single operator — stated, not a gap).
-- [ ] Components ≤ 200 lines (CQ-02) — split if exceeded.
-- [ ] `@ui-swarnimbagre` admin (shadcn) mode + `@code-review` PASS.
+- [x] Rows in `/admin/projects` and `/admin/posts` are drag-reorderable via HTML5 native DnD (no new dependency).
+- [x] Drop reorders optimistically; "Save order" persists + shows a `sonner` success toast; reload preserves the order.
+- [x] No auto-save on drop — explicit save (PRD §3.7; mirrors 3.5).
+- [x] Operator labels are CONSTRAINT-13 clean (dry, no SaaS phrases, no emoji; `⠿` typographic handle only).
+- [x] Touch-drag not implemented (desktop-only, single operator — stated, not a gap).
+- [x] Components ≤ 200 lines (CQ-02) — split if exceeded.
+- [x] `@ui-swarnimbagre` admin (shadcn) mode + `@code-review` PASS.
 
 **Tests required:**
 - `reorderRows reorders the client list on drop` → happy (largely covered by reuse).
@@ -1093,6 +1093,10 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 
 **Depends on:** T44.B, T44.C.
 **Specialist:** `@ui-swarnimbagre`, `@code-review`.
+
+**Closed:** Session 47 (2026-06-03). ResourceList table block split into new `components/admin/ResourceListReorder.tsx` (172 lines) per the CQ-02 cap — `ResourceList.tsx` dropped to 190 lines (was 208). `reorderRows` imported directly from `lib/admin-project-media-form-state.ts` (no `lib/reorder.ts` lift needed). Drag/toast/`useActionState` pattern mirrors `ProjectMediaField`; handle glyph `⠿` (U+283F) byte-identical to `ProjectMediaRow`. Optimistic order resyncs via `key={filter-page}` remount (no resync effect). SEC-09 allowlist 13 → 15 (`saveProjectOrder` + `savePostOrder`) landed in lock-step, deferral comment revised. Pure `serializeOrder` helper added + unit-tested alongside `reorderRows`; e2e drag→Save→reload step added (Playwright not executed this session — needs a live Supabase fixture). Gates: tsc clean, Vitest 457/457 (57 files, incl. build-gated manifest test at 15 entries), `next build` exit 0. `@code-review` PASS (0 issues). Not yet committed. **Known non-blocker:** drag-reorder operates on the current display order; if reordered while the list is filtered or paginated, "Save order" sends only the visible subset — a no-op risk for the single operator with ~6 projects, flag a follow-up guard if data volume grows.
+
+**T44 fully closed** — A–D across Sessions 45 → 47; migration ledger `[007, 009, 010, 010a, 011, 012, 012a]`; admin project/post drag-reorder live end to end.
 
 ---
 

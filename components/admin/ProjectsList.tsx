@@ -2,6 +2,7 @@
 
 import ResourceList from '@/components/admin/ResourceList';
 import DeleteProjectButton from '@/components/admin/DeleteProjectButton';
+import { saveProjectOrder } from '@/lib/admin-reorder-mutations';
 import type { ProjectRow, ProjectFilter } from '@/lib/admin-queries';
 
 /** Empty-state copy. CONSTRAINT-13: terse, no decoration, no SaaS phrasing. */
@@ -53,6 +54,7 @@ export default function ProjectsList({
       emptyState={EMPTY_STATE}
       editSegment="projects"
       newLabel="New project"
+      saveOrderAction={saveProjectOrder}
       renderDeleteButton={(row) => (
         <DeleteProjectButton
           id={row.id}

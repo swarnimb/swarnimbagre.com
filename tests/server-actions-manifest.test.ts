@@ -13,7 +13,7 @@ import { execSync } from 'node:child_process';
 
 // Single source of truth for the SEC-09 allowlist. Adding a new Server Action
 // requires updating BOTH the `'use server'` module(s) AND this constant in
-// lock-step. The allowlist is thirteen IDs spread across six modules. Next.js
+// lock-step. The allowlist is fifteen IDs spread across seven modules. Next.js
 // only includes Server Actions in the manifest when they are reachable from
 // an app/** route, so an action stays out of the manifest until a page
 // renders a component (or directly calls the action).
@@ -29,10 +29,14 @@ import { execSync } from 'node:child_process';
 //                                              + T43.F mount in the admin
 //                                              edit-project page; manifest-
 //                                              reachable as of T43.F close)
-// `saveProjectOrder` / `savePostOrder` (T44.C — `lib/admin-reorder-mutations.ts`)
-// are intentionally NOT listed yet: they stay out of the manifest until the
-// T44.D reorder UI makes them reachable. They are added here in lock-step at
-// T44.D, mirroring how `saveProjectMedia` landed at T43.F.
+//   - `lib/admin-reorder-mutations.ts`       — `saveProjectOrder`, `savePostOrder`
+//                                              (T44.C authored; manifest-
+//                                              reachable as of T44.D, when the
+//                                              admin reorder UI in
+//                                              `ResourceListReorder` wired them
+//                                              into the projects/posts lists —
+//                                              mirrors how `saveProjectMedia`
+//                                              landed at T43.F)
 const SERVER_ACTION_ALLOWLIST = new Set<string>([
   'signInWithMagicLink',
   'signOut',
@@ -47,6 +51,8 @@ const SERVER_ACTION_ALLOWLIST = new Set<string>([
   'uploadImage',
   'deleteOrphanImages',
   'saveProjectMedia',
+  'saveProjectOrder',
+  'savePostOrder',
 ]);
 
 const MANIFEST_PATH = resolve(

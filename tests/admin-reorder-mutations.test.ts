@@ -8,6 +8,8 @@ import {
   savePostOrder,
 } from '@/lib/admin-reorder-mutations';
 import { REORDER_MUTATION_INITIAL_STATE } from '@/lib/admin-reorder-mutations-types';
+import { reorderRows } from '@/lib/admin-project-media-form-state';
+import { serializeOrder } from '@/components/admin/ResourceListReorder';
 
 /**
  * T44.C acceptance — admin REORDER save surface.
@@ -147,5 +149,31 @@ describe('saveProjectOrder / savePostOrder (wrapper, non-DB paths)', () => {
     expect(state.status).toBe('error');
     // Malformed JSON leaves `rows` undefined -> top-level zod rejection.
     expect(state.fieldErrors).toBeDefined();
+  });
+});
+
+/**
+ * T44.D acceptance — the client-side reorder UI primitives. The drag handler
+ * commits local order via `reorderRows`; the Save-order form serializes that
+ * order through `serializeOrder` into the single hidden `rows` wire field the
+ * Server Actions above read. Both are pure — exercised here without rendering.
+ */
+describe('ResourceListReorder client primitives (T44.D)', () => {
+  it('serializeOrder returns ordered {id} JSON', () => {
+    const rows = [
+      { id: 'a', title: 'Alpha' },
+      { id: 'b', title: 'Beta' },
+    ];
+    expect(serializeOrder(rows)).toBe('[{"id":"a"},{"id":"b"}]');
+  });
+
+  it('reorderRows reorders the client list on drop', () => {
+    const rows = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    // Drag row 0 (`a`) and drop onto index 2 — `a` lands after `c`.
+    expect(reorderRows(rows, 0, 2)).toEqual([
+      { id: 'b' },
+      { id: 'c' },
+      { id: 'a' },
+    ]);
   });
 });

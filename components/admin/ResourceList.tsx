@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Pagination, PaginationContent, PaginationItem, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 // prettier-ignore
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-// prettier-ignore
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import ResourceListReorder from '@/components/admin/ResourceListReorder';
+// StatusBadge + formatCreated are defined here and re-used by ResourceListReorder (CQ-07).
 import { useResourceListNav } from '@/components/admin/use-resource-list-nav';
+import type { ReorderMutationState } from '@/lib/admin-reorder-mutations-types';
 
 /** Filter literals accepted by every admin list. `ProjectFilter` and
  * `PostFilter` are structurally identical to this and satisfy it directly. */
@@ -26,12 +27,12 @@ export interface ResourceListRow {
 }
 
 /** Format an ISO timestamp into a compact YYYY-MM-DD string for the Created column. */
-function formatCreated(iso: string): string {
+export function formatCreated(iso: string): string {
   return iso.slice(0, 10);
 }
 
 /** Status cell. `published` → `default` (accent), `draft` → `secondary` (muted). */
-function StatusBadge({
+export function StatusBadge({
   status,
 }: { status: ResourceListRow['status'] }): React.ReactElement {
   if (status === 'published') {
@@ -74,6 +75,12 @@ export interface ResourceListProps<
   /** Render prop for the per-row delete control. Given the row's id and
    * title, returns the resource-specific delete button. */
   renderDeleteButton: (row: { id: string; title: string }) => React.ReactNode;
+  /** Reorder Server Action — `saveProjectOrder` or `savePostOrder`. Threaded
+   * to {@link ResourceListReorder}, which owns the drag-reorder table body. */
+  saveOrderAction: (
+    prev: ReorderMutationState,
+    formData: FormData,
+  ) => Promise<ReorderMutationState>;
 }
 
 /**
@@ -99,6 +106,7 @@ export default function ResourceList<
   editSegment,
   newLabel,
   renderDeleteButton,
+  saveOrderAction,
 }: ResourceListProps<TRow, TFilter>): React.ReactElement {
   const { buildHref, pushParams, onFilterChange } =
     useResourceListNav<TFilter>();
@@ -132,39 +140,13 @@ export default function ResourceList<
         <p className="text-sm text-muted-foreground">{emptyState}</p>
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="font-medium">{row.title}</TableCell>
-                  <TableCell className="text-muted-foreground">{row.slug}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={row.status} />
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatCreated(row.created_at)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="inline-flex items-center gap-2">
-                      <Button asChild variant="outline" size="sm">
-                        <Link href={`/admin/${editSegment}/${row.id}`}>Edit</Link>
-                      </Button>
-                      {renderDeleteButton({ id: row.id, title: row.title })}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ResourceListReorder
+            key={`${filter}-${page}`}
+            rows={rows}
+            editSegment={editSegment}
+            renderDeleteButton={renderDeleteButton}
+            saveOrderAction={saveOrderAction}
+          />
 
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">

@@ -2,6 +2,7 @@
 
 import ResourceList from '@/components/admin/ResourceList';
 import DeletePostButton from '@/components/admin/DeletePostButton';
+import { savePostOrder } from '@/lib/admin-reorder-mutations';
 import type { PostRow, PostFilter } from '@/lib/admin-queries';
 
 /** Empty-state copy. CONSTRAINT-13: terse, no decoration, no SaaS phrasing. */
@@ -53,6 +54,7 @@ export default function PostsList({
       emptyState={EMPTY_STATE}
       editSegment="posts"
       newLabel="New post"
+      saveOrderAction={savePostOrder}
       renderDeleteButton={(row) => (
         <DeletePostButton
           id={row.id}
