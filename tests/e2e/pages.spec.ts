@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const pages = [
-  { path: '/',         marker: "No cookies, no analytics, no idea what I'm doing." },
+  { path: '/',         marker: "No cookies, no analytics, pure vibes." },
   { path: '/projects', marker: 'projects' },
   { path: '/writing',  marker: 'writing' },
   { path: '/other',    marker: 'everything else' },

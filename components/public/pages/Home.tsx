@@ -154,7 +154,7 @@ export function Home({ projects = [] }: HomeProps = {}) {
           fontFamily: "var(--font-mono)",
         }}
       >
-        No cookies, no analytics, no idea what I'm doing.
+        No cookies, no analytics, pure vibes.
       </footer>
 
       {/* Tweaks panel — only renders when host activates edit mode.

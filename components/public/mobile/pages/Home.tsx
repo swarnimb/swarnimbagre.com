@@ -155,7 +155,7 @@ export function Home() {
       </section>
 
       <div style={{ flex: 1 }} />
-      <MobileFooter line="No cookies, no analytics, no idea what I'm doing." />
+      <MobileFooter line="No cookies, no analytics, pure vibes." />
 
       {/* Tweaks panel — only renders when host activates edit mode.
           Gated by NEXT_PUBLIC_TWEAKS; statically inlined by Next.js at build

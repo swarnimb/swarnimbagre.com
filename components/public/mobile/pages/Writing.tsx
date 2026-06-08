@@ -104,7 +104,7 @@ export function Writing({ items = DEFAULT_POSTS }: WritingProps = {}) {
       </ul>
 
       <div style={{ flex: 1 }} />
-      <MobileFooter line="Last edited at an embarrassing hour." />
+      <MobileFooter line="Thinking out loud, with a publish button." />
     </MobilePage>
   );
 }

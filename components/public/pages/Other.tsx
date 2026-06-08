@@ -182,7 +182,7 @@ export function Other({ stats = DEFAULT_STATS }: OtherProps = {}) {
       </div>
 
       <div style={{ flex: 1 }} />
-      <Footer line="Built mostly during things I should not have been doing." />
+      <Footer line="Numbers I track just to prove I spent time on this." />
     </Page>
   );
 }

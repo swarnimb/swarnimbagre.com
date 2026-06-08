@@ -64,7 +64,7 @@ export function Projects({ items = [] }: ProjectsProps = {}) {
       </div>
 
       <div style={{ flex: 1 }} />
-      <MobileFooter line="Made between disc golf rounds." />
+      <MobileFooter line="Each project took longer than it should have." />
     </MobilePage>
   );
 }

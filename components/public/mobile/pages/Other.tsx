@@ -150,7 +150,7 @@ export function Other({ stats = DEFAULT_STATS }: OtherProps = {}) {
       </div>
 
       <div style={{ flex: 1 }} />
-      <MobileFooter line="Built mostly during things I should not have been doing." />
+      <MobileFooter line="Numbers I track just to prove I spent time on this." />
     </MobilePage>
   );
 }

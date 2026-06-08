@@ -145,7 +145,7 @@ export function Writing({ items = DEFAULT_POSTS }: WritingProps = {}) {
       </ul>
 
       <div style={{ flex: 1 }} />
-      <Footer line="Last edited at an embarrassing hour." />
+      <Footer line="Thinking out loud, with a publish button." />
     </Page>
   );
 }
