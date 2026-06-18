@@ -100,7 +100,7 @@ export function ProjectThumb({ kind = "dots", size = 56 }: ProjectThumbProps) {
       <>
         <path d="M13 19 L22 28 L13 37" fill="none" stroke={stroke} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
         <line x1="26" y1="36" x2="36" y2="36" stroke={stroke} strokeWidth="1.6" strokeLinecap="round"/>
-        <path d="M37 14 L37 22 M33 18 L41 18" stroke={accent} strokeWidth="1.2" strokeLinecap="round"/>
+        <path d="M39 12 L39 18 M36 15 L42 15" stroke={accent} strokeWidth="1.2" strokeLinecap="round"/>
       </>
     ),
     // generic dotted square — fallback
