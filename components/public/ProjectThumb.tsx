@@ -2,7 +2,7 @@
 
 import type { JSX } from 'react';
 
-type ProjectThumbKind = "disc" | "coin" | "nodes" | "bars" | "racquet" | "dots" | string;
+type ProjectThumbKind = "disc" | "coin" | "nodes" | "bars" | "racquet" | "card" | "contacts" | "site" | "prompt" | "dots" | string;
 
 interface ProjectThumbProps {
   kind?: ProjectThumbKind;
@@ -62,6 +62,45 @@ export function ProjectThumb({ kind = "dots", size = 56 }: ProjectThumbProps) {
         <line x1="29" y1="32" x2="44" y2="46" stroke={stroke} strokeWidth="1.4" strokeLinecap="round"/>
         <line x1="12" y1="14" x2="28" y2="30" stroke={faint} strokeWidth="0.8"/>
         <line x1="22" y1="10" x2="22" y2="34" stroke={faint} strokeWidth="0.8" transform="rotate(-25 20 22)"/>
+      </>
+    ),
+    // CardMaxxer — card outline + magstripe, accent perk dot
+    card: (
+      <>
+        <rect x="8" y="16" width="34" height="22" rx="2.5" fill="none" stroke={stroke} strokeWidth="1.2"/>
+        <line x1="10" y1="22" x2="40" y2="22" stroke={stroke} strokeWidth="2.5"/>
+        <circle cx="35" cy="32" r="1.8" fill={accent}/>
+      </>
+    ),
+    // SalesRep CRM — contact node linked to a record list, accent follow-up
+    contacts: (
+      <>
+        <circle cx="15" cy="17" r="5" fill="none" stroke={stroke} strokeWidth="1.2"/>
+        <path d="M7 31 Q15 23 23 31" fill="none" stroke={stroke} strokeWidth="1.2" strokeLinecap="round"/>
+        <line x1="30" y1="16" x2="43" y2="16" stroke={stroke} strokeWidth="1.2" strokeLinecap="round"/>
+        <line x1="30" y1="24" x2="43" y2="24" stroke={faint} strokeWidth="1.2" strokeLinecap="round"/>
+        <line x1="30" y1="32" x2="38" y2="32" stroke={faint} strokeWidth="1.2" strokeLinecap="round"/>
+        <circle cx="42" cy="32" r="2" fill={accent}/>
+      </>
+    ),
+    // swarnimbagre.com — browser frame + accent cursor caret
+    site: (
+      <>
+        <rect x="8" y="12" width="34" height="26" rx="2.5" fill="none" stroke={stroke} strokeWidth="1.2"/>
+        <line x1="8" y1="19" x2="42" y2="19" stroke={stroke} strokeWidth="1.2"/>
+        <circle cx="12.5" cy="15.5" r="1" fill={faint}/>
+        <circle cx="16.5" cy="15.5" r="1" fill={faint}/>
+        <line x1="14" y1="26" x2="30" y2="26" stroke={faint} strokeWidth="1.2" strokeLinecap="round"/>
+        <line x1="14" y1="31" x2="24" y2="31" stroke={faint} strokeWidth="1.2" strokeLinecap="round"/>
+        <line x1="28" y1="31" x2="28" y2="34" stroke={accent} strokeWidth="1.4" strokeLinecap="round"/>
+      </>
+    ),
+    // Claude Code Magic — CLI prompt + cursor, accent spark
+    prompt: (
+      <>
+        <path d="M13 19 L22 28 L13 37" fill="none" stroke={stroke} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+        <line x1="26" y1="36" x2="36" y2="36" stroke={stroke} strokeWidth="1.6" strokeLinecap="round"/>
+        <path d="M37 14 L37 22 M33 18 L41 18" stroke={accent} strokeWidth="1.2" strokeLinecap="round"/>
       </>
     ),
     // generic dotted square — fallback

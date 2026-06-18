@@ -26,6 +26,10 @@ export const THUMB_KIND_VALUES = [
   'nodes',
   'bars',
   'racquet',
+  'card',
+  'contacts',
+  'site',
+  'prompt',
   'dots',
 ] as const;
 
@@ -46,6 +50,10 @@ export const THUMB_KIND_OPTIONS: ReadonlyArray<{
   { value: 'nodes', label: 'Nodes' },
   { value: 'bars', label: 'Bars' },
   { value: 'racquet', label: 'Racquet' },
+  { value: 'card', label: 'Card' },
+  { value: 'contacts', label: 'Contacts' },
+  { value: 'site', label: 'Site' },
+  { value: 'prompt', label: 'Prompt' },
   { value: 'dots', label: 'Dots' },
 ];
 
