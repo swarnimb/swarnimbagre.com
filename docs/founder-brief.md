@@ -44,6 +44,7 @@ This file is the plain-language record of every architectural decision. The audi
 | 30 | Atomic save — Postgres RPC over application-layer rollback (T43.E) | [§6.6.9](architecture.md#669-atomic-save-surface--postgres-rpc-pattern) + `supabase/migrations/010a_save_project_media_rpc.sql` |
 | 31 | CONSTRAINT-22 codified + Override 2 surface boundary recorded — public-site JS-library posture closed (T43.I) | [§4.9](architecture.md#49-carousel-surface--override-2) + `constraints.md` CONSTRAINT-22 + `design-decisions.md` Override 2 |
 | 32 | Project↔post link — embedded writeup FK (`projects.post_id`, T45) | [§2.1](architecture.md#21-projects) + `design-decisions.md` Override 3 + `prd.md` §3.8 |
+| 33 | Admin manual reorder — `sort_order` column + atomic RPC (T44) | [§2.1](architecture.md#21-projects) + §2.2 + `supabase/migrations/012_sort_order.sql` + `012a_save_sort_order_rpc.sql` |
 
 ---
 
@@ -680,6 +681,26 @@ wall-clock proves the wrapper ran end-to-end).
 **What this closes off:** A project-only body field (rejected — would duplicate the posts system) and deleting the project detail route (rejected — loses permalinks + the carousel-detail view). Project long-form content now flows through the posts system, not a parallel store.
 
 **Implementation note:** `lib/db.ts` was split at this task (CQ-02) into `db-posts.ts` + `db-internal.ts`, mirroring the admin-queries split; `getPublishedPostById` is the published-only loader that enforces the no-draft-leak boundary.
+
+---
+
+## 33. Admin manual reorder — `sort_order` column + atomic RPC (T44)
+
+**Date:** 2026-06-03
+**Architecture link:** [`architecture.md` §2.1](architecture.md#21-projects) + §2.2 + `design-decisions.md` (admin) + `prd.md` admin section
+
+**Decided:** Both `projects` and `posts` get a `sort_order integer NOT NULL` column (CHECK `>= 0`) backing admin drag-reorder. Persistence runs through a `SECURITY INVOKER` Postgres RPC (`save_project_order` / `save_post_order`, migration 012a) that accepts an ordered array of row ids and writes 0-based positions in one transaction. New rows append to the end via a `BEFORE INSERT` trigger; the column was backfilled newest-first on apply so the live listing did not reshuffle on deploy. A reorder bumps `updated_at` (plain UPDATE through the existing trigger).
+
+**What this means for your product:** You control the order projects and posts appear in — drag to arrange, not just newest-first. The order is yours and sticks; adding a new project drops it at the end until you move it. No separate "featured" flag needed — ordering is the curation tool.
+
+**Check before approving:**
+- Reorder writes are admin-only (gated by existing `*_admin_all` RLS — no new policy).
+- Callers send display order only and never set `sort_order` directly; the RPC derives it from array position, so positions can't drift or collide.
+- The whole reorder is one transaction — a partial failure leaves the old order intact, never a half-renumbered list.
+
+**What this closes off:** A `created_at`-only public order (rejected — no manual curation) and an application-layer multi-UPDATE reorder (rejected — non-atomic, can leave gaps/dupes on partial failure). Ordering is now a first-class, admin-owned, atomically-persisted property.
+
+**Implementation note:** Server Actions `saveProjectOrder` / `savePostOrder` (four-file pattern); admin UI is `ResourceListReorder` with a "Save order" action (T44.C / T44.D).
 
 ---
 

@@ -57,10 +57,11 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 | `thumb_kind` | `text` | NULL — selects an SVG motif from `lib/thumb-kinds.ts`. No DB-side enum / CHECK; the vocabulary lives in code so new motifs can be added without a migration (migration 009) |
 | `image_after_id` | `uuid` | NULL, FK → `images.id` ON DELETE SET NULL — "after" image for the BeforeAfterMedia slider; when null, the card renders a single `<img>` from `image_id` (migration 009) |
 | `post_id` | `uuid` | NULL, FK → `posts.id` ON DELETE SET NULL — links a project to a published post whose body renders on the detail page (Override 3); independent of `post_url` (migration 011) |
+| `sort_order` | `integer` | NOT NULL, CHECK `(sort_order >= 0)` — explicit admin-controlled manual order, independent of `created_at`. Backfilled newest-first on apply so the public listing did not reshuffle on deploy. A `BEFORE INSERT` trigger appends new rows to the end (`max(sort_order)+1`) when no explicit value is supplied (migration 012) |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` |
 | `updated_at` | `timestamptz` | NOT NULL, default `now()`, trigger on update |
 
-**Indexes:** `(status, created_at DESC)` for the public listing query. UNIQUE on `slug`.
+**Indexes:** `(status, created_at DESC)` from migration 001; `(status, sort_order)` added in migration 012 to serve the manual-order public listing. UNIQUE on `slug`.
 
 **Slug-lock trigger:** a BEFORE UPDATE trigger raises an exception if `slug` changes while `status='published'` (DB-level enforcement of the slug-lock-after-publish rule).
 
@@ -69,6 +70,8 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 **Override 1 (project-card surface, 2026-05-19).** Six columns above are consumed by a redesigned project-card surface that intentionally deviates from the source bundle on the project-card surface only — see `design-decisions.md` "Override 1: Project card redesign" for the surface boundary and `founder-brief.md` decision #28 for the architectural rationale. CONSTRAINT-05's verbatim-bundle rule still applies everywhere outside the named Override 1 surface list.
 
 **Override 3 (project detail embed, T45, 2026-06-03).** `post_id` attaches one published post; its body renders on `/projects/<slug>` below the card, and the `/projects` title-link is gated on `post_id`-set-or-2+-media. No new RLS policy — the existing row-level `projects_*` policies cover the column; only a published linked post renders, enforced in-query by `getPublishedPostById` (`lib/db-posts.ts`). See `design-decisions.md` Override 3 + `founder-brief.md` decision #32.
+
+**Admin manual reorder (T44, 2026-06-03).** `sort_order` (above) backs admin drag-reorder for both `projects` and `posts`. Persistence goes through a `SECURITY INVOKER` RPC (`save_project_order` / `save_post_order`, migration 012a) that takes an ordered array of ids and writes 0-based positions back into `sort_order` in one transaction; callers supply display order only, never `sort_order` itself. Writes are gated by the existing `*_admin_all` (authenticated) policies — no new RLS. A reorder is a plain UPDATE, so the migration 001 `set_updated_at` trigger bumps `updated_at` (@cto decision, T44.A). Server Actions: `saveProjectOrder` / `savePostOrder`. See `founder-brief.md` decision #33.
 
 ### 2.2 `posts`
 
@@ -80,10 +83,11 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 | `content` | `text` | NOT NULL — raw Markdown |
 | `status` | `post_status` enum | NOT NULL, default `'draft'`. Values: `'draft'`, `'published'` |
 | `image_id` | `uuid` | NULL, FK → `images.id` ON DELETE SET NULL |
+| `sort_order` | `integer` | NOT NULL, CHECK `(sort_order >= 0)` — admin-controlled manual order; same backfill + append-on-insert trigger semantics as `projects.sort_order` (migration 012) |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` |
 | `updated_at` | `timestamptz` | NOT NULL, default `now()`, trigger on update |
 
-**Indexes:** `(status, created_at DESC)`. UNIQUE on `slug`. Same slug-lock trigger as `projects`.
+**Indexes:** `(status, created_at DESC)` from migration 001; `(status, sort_order)` added in migration 012. UNIQUE on `slug`. Same slug-lock trigger as `projects`. Manual reorder via `save_post_order` (migration 012a) — see the "Admin manual reorder" note under `projects`.
 
 ### 2.3 `stats`
 
