@@ -284,7 +284,7 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 - [~] ~~OpenClaw is producing real (non-test) stat rows at the expected cadence.~~ — superseded S41: blocked on T29 + T31 (OpenClaw operator gate deferred — see `plan-phase-3-ingestion.md` status). Re-verify when T29/T31 land.
 - [x] 2–3 real projects added via admin so `/projects` is not empty. → **S43 2026-05-28:** 6 placeholder projects published via admin (ParSaveables, Claude Code Magic, swarnimbagre.com, Totes Sales CRM, AmIBroke, CardMaxxer) — title + dry blurb + GitHub link (+ live URL on ParSaveables / AmIBroke / swarnimbagre.com). Thumbnails + carousel media deferred to a later content pass. Slugs auto-derived and now LOCKED (CONSTRAINT-12): `parsaveables`, `claude-code-magic`, `swarnimbagre-com`, `totes-sales-crm`, `amibroke`, `cardmaxxer`. `/projects` no longer empty.
 - [x] 1–2 real posts added via admin so `/writing` is not empty. → **S43 2026-05-28:** placeholder post(s) published via admin; `/writing` no longer empty. Post bodies (`content` markdown) to be fleshed out later. Voice check on builder-written post copy tracked under the voice-check criterion below (still open).
-- [ ] Voice check on all live copy: no SaaS phrases, no emoji, no LinkedIn-motivational tone (CONSTRAINT-13). → **DEFERRED (S44):** intentionally not the next task — runs on FINAL content, after T44 + builder content authoring. Next active task is T44; see session-handoff. Plan remains authoritative; this deferral is recorded so @session-start drift detection reads it as intentional. → **S50 (2026-06-17) scope narrowed:** the four S48 page-footer lines (incl. "No cookies, no analytics, pure vibes." on Home) are **reviewed and approved as intentional/compliant** by the builder — they are dry/self-deprecating by design. Remaining voice-check scope = builder-authored project blurbs + post bodies only. Do not re-flag the footer lines.
+- [ ] Voice check on all live copy: no SaaS phrases, no emoji, no LinkedIn-motivational tone (CONSTRAINT-13). → **DEFERRED (S44):** intentionally not the next task — runs on FINAL content, after T44 + builder content authoring. Next active task is T44; see session-handoff. Plan remains authoritative; this deferral is recorded so @session-start drift detection reads it as intentional. → **S50 (2026-06-17) scope narrowed:** the four S48 page-footer lines (incl. "No cookies, no analytics, pure vibes." on Home) are **reviewed and approved as intentional/compliant** by the builder — they are dry/self-deprecating by design. Remaining voice-check scope = builder-authored project blurbs + post bodies only. Do not re-flag the footer lines. → **T46 (2026-08-04) RE-SCOPED — this criterion grew.** The four S48 footer lines are moot: the redesign has no footer on any page, so there is nothing left to re-flag. In their place T46 introduced a batch of NEW machine-authored copy that has never had a voice pass: the home bio and question bubble, the three rotating chat deflections, the Projects/Writing/Other ledes, the Writing closing line, the "Find me here:" label, and four empty states ("no preview yet", "links coming soon", "nothing counted yet", "A new build, details on the way."). **Scope is now: builder-authored project blurbs + post bodies, PLUS all T46 UI copy.** The chat deflection lines in particular were drafted as placeholders and the builder explicitly deferred final wording ("we can decide this content later, the structure would be same irrespective of the content").
 - [x] Any bug found is logged in `docs/session-log.md` with severity and a follow-up task description. → **S42 2026-05-25:** discipline established. Two bugs surfaced during T40 work — (1) `404 GET /favicon.png` (LOW, cosmetic; follow-up = T41 deferred wiring); (2) 32 orphan rows in `public.images` (LOW, non-user-visible DB/storage waste; follow-up = session task #7). Both logged with explicit severity + follow-up reference, consolidated in the `docs/session-log.md` [2026-05-25 09:45] Bug log table. Forward-looking: any new bug surfaced in remaining T40 work appends to that table.
 - [ ] `docs/launch-checklist.md` post-launch section is checked off. → **DEFERRED (S44):** closes T40 after crit 9; waits on final content (item 2 stays OPENCLAW-GATED).
 - [x] Auto-Logging entry written to `docs/session-log.md` documenting the launch (DS-03). → **S42 2026-05-25:** consolidated launch retrospective entry written at `docs/session-log.md` [2026-05-25 09:50]. Documents T39 launch event (2026-05-19, Session 27 close — site live on apex canonical) + Phase-4 post-launch work executed S28 → S42 (T40 / T42 / T43) + current post-launch state (site live, fixture-clean, awaiting real content, 0 ambient traffic, no errors in retrievable launch-week window). DS-03's structural requirement ("the launch is documented") is satisfied via this single canonical retrospective entry rather than via retroactive day-of-launch reconstruction (day-of-launch is already captured in `manifest.md` + S27 close-out trail + `docs/founder-brief.md` entries). Will be consolidated into `docs/session-handoff.md` at the same `@end-session` that processes this entry.
@@ -1216,6 +1216,45 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 
 **Depends on:** T45.A, T45.C.
 **Specialist:** `@code-review`, `@designer` (confirm Override 3 layout in render).
+
+---
+
+## T46 — Full public-site redesign [x]
+
+**Closed 2026-08-04, Session 51.** Built end to end in one run, all six phases.
+
+**Trigger:** real user feedback. The builder showed the live site to several people who were confused by it and disliked the look. The original dark bundle was replaced wholesale rather than iterated on.
+
+**Source:** Claude Design export, archived in-repo at `docs/design-source/redesign-2026-08/` (`swarnim-bagre-site.bundled.html` + `template.extracted.html`). CONSTRAINT-05 re-baselined onto it; Overrides 1, 2 and 3 retired.
+
+**Nine decisions locked with the builder (Q1-Q9):**
+1. Home chat stays FAKE, with rotating canned deflections pushing to contact. No model, no API route.
+2. `/writing/[slug]` kept; `/projects/[slug]` deleted. The card's "Writeup" action links to the T45 `post_id`.
+3. `/other` ships all 7 tiles, hand-maintained.
+4. Single responsive tree. `components/public/mobile/` and the middleware device split both deleted.
+5. Admin stays dark. CONSTRAINT-16's four brand tokens become admin-owned constants.
+6. `subtitle` + `tags` added to projects.
+7. **Photos only.** The S49 SVG thumb motifs are retired, which makes screenshots a hard launch gate.
+8. Space Mono self-hosted (the export bundles it but never references it; treated as an export bug).
+9. Bio rewritten, first person.
+
+Plus: no footer anywhere, blinking cursor removed, email corrected to `bagreswarnim@gmail.com`, three branded reach-out marks under "Find me here:" on Home only, em-dash sweep across UI copy.
+
+- [x] Migrations `013_project_card_fields` + `014_other_page_model` applied to prod and empirically verified. Ledger `[007, 009, 010, 010a, 011, 012, 012a, 013, 014]`. 7/7 constraint cases correct; RLS on `notes` verified by ROW COUNT, not by exception (a first test wrongly read `anon_delete` as allowed, because a DELETE matching zero rows succeeds silently). Advisor delta: exactly 1 new WARN, the standard `rls_policy_always_true`, accepted under CONSTRAINT-09.
+- [x] Token layer + fonts replaced. Palette inverted dark to light (`#1C1712` to `#F4F1EA`, gold `#C9A84C` to green `#1F3D2F`); Fraunces + JetBrains Mono to Instrument Serif + Space Grotesk + Space Mono, self-hosted via `next/font` on `<html>`.
+- [x] Four pages plus `/writing/[slug]` rebuilt and visually verified in a real browser at 1440px and 390px. `/other`'s tile grid verified by seeding throwaway rows, screenshotting, then deleting them.
+- [x] 47 files deleted, including 22 orphaned public components, the mobile tree, `lib/thumb-kinds.ts` and the newly orphaned `lib/nav-targets.ts`.
+- [x] `embla-carousel-react` uninstalled; carousel hand-rolled in `ProjectFrame.tsx`. Public site back to zero runtime JS dependencies, so CONSTRAINT-22 now has no consumers.
+- [x] Admin: `subtitle`/`tags` on the project form (thumb picker removed), `aside`/`sort_order` on stats, full `notes` CRUD at `/admin/notes`, and an `updateStat` edit path so the hand-maintained tiles can be corrected in place. SEC-09 allowlist **15 to 19**, verified by the build-gated manifest test.
+- [x] Docs re-baselined: CONSTRAINT-05 + 03/15/16/22, `design-decisions.md`, `CLAUDE.md`, `architecture.md` (new §2.6 + §4.10), `founder-brief.md` #34.
+
+**Tests required:**
+- [x] Vitest **50 files / 381 tests / 0 failures** (down from 457; 11 test files targeted deleted components). `tsc` clean. `next build` exit 0, 18 routes.
+- [~] Playwright **NOT executed** — needs a live Supabase fixture and an authenticated session unavailable this session. `admin-smoke.spec.ts` was rewritten for the new markup and the stats card stack, and `pages.spec.ts` / `admin-font.spec.ts` re-pointed; all type-correct but unrun. `ua-desktop.spec.ts` / `ua-mobile.spec.ts` deleted (they asserted the device split). **Run these before deploying.**
+
+**Known gap, deliberate:** nothing publicly exercises the multi-slide carousel, because the only project with media rows is a draft and never reaches `/projects`.
+
+**Blocked on builder content:** 6 sets of project screenshots (every card currently reads "no preview yet") and 7 rows for `/other` (4 stats + 3 notes; both tables at 0).
 
 ---
 

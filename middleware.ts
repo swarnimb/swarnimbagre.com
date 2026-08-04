@@ -2,11 +2,6 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { MIN_DURATION_MS } from './lib/auth-constants';
 
-const MOBILE_UA_TOKENS = /Mobi|Android|iPhone|iPad|iPod/i;
-const DEVICE_VARIANT_HEADER = 'x-device-variant';
-const MOBILE_VARIANT = 'mobile';
-const DESKTOP_VARIANT = 'desktop';
-
 const ADMIN_PATH_PREFIX = '/admin';
 /**
  * Subpaths under /admin that must NOT be gated. Match is STRICT EQUALITY (per
@@ -26,16 +21,6 @@ const ADMIN_LOGIN_PATH = '/admin/login';
 const REDIRECT_OUTCOME_NO_SESSION = 'admin gate: no session';
 const REDIRECT_OUTCOME_EXPIRED = 'admin gate: session expired';
 const REDIRECT_OUTCOME_ERROR = 'admin gate: unexpected error';
-
-/**
- * Token-based UA heuristic. Mozilla recommends `Mobi` as the canonical
- * mobile-browser token; the others cover platform names that historically
- * predate or omit it (older iPad UAs, embedded browsers, etc.).
- */
-export function isMobileUserAgent(ua: string): boolean {
-  if (!ua) return false;
-  return MOBILE_UA_TOKENS.test(ua);
-}
 
 /**
  * Returns true when the path falls inside the gated `/admin/*` namespace
@@ -132,34 +117,31 @@ async function runAdminGate(request: NextRequest): Promise<NextResponse> {
 }
 
 /**
- * Reads the request User-Agent, classifies it as mobile or desktop, and
- * forwards a mutated request to downstream pages with `x-device-variant`
- * set. Preserves the T10 contract for public routes.
- */
-function applyDeviceVariant(request: NextRequest): NextResponse {
-  const ua = request.headers.get('user-agent') ?? '';
-  const variant = isMobileUserAgent(ua) ? MOBILE_VARIANT : DESKTOP_VARIANT;
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set(DEVICE_VARIANT_HEADER, variant);
-  return NextResponse.next({ request: { headers: requestHeaders } });
-}
-
-/**
- * Top-level middleware entry. Branches on path: gated `/admin/*` paths run
- * the session gate; everything else gets the T10 device-variant header.
+ * Top-level middleware entry.
+ *
+ * T46 removed the T10 device-variant branch. The public site is now a single
+ * responsive tree with one breakpoint, so there is no server-side desktop /
+ * mobile split to compute and no `x-device-variant` header to forward. The
+ * matcher below was narrowed to `/admin/*` accordingly: middleware no longer
+ * runs at all on public requests, which is both the correct behaviour and one
+ * fewer edge invocation per page view.
+ *
+ * Public paths that somehow reach this function (they should not, given the
+ * matcher) fall through untouched.
  */
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const pathname = request.nextUrl.pathname;
   if (isGatedAdminPath(pathname)) {
     return runAdminGate(request);
   }
-  return applyDeviceVariant(request);
+  return NextResponse.next();
 }
 
 export const config = {
   matcher: [
-    // Public routes (T10) + admin routes (T18). Skip api, Next.js internals,
-    // and static assets.
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    // Admin routes only (T18). T46 dropped the public-route match: nothing in
+    // middleware applies to the public site any more. `:path*` matches the
+    // bare `/admin` segment as well as everything beneath it.
+    '/admin/:path*',
   ],
 };

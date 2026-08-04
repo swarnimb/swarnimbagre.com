@@ -4,6 +4,7 @@ import { ZodError } from 'zod';
 import {
   deleteStatInternal,
   insertStatInternal,
+  updateStatInternal,
 } from './admin-stats-mutations-internal';
 import type { StatMutationState } from './admin-stats-mutations-types';
 import { GENERIC_FORM_ERROR } from './auth-constants';
@@ -35,10 +36,10 @@ import { padToFloor } from './timing';
 
 /**
  * Convert a `ZodError` into the per-field state shape for the stat form.
- * Only the fields the stat form owns (`category`, `label`, `value`, `unit`)
- * are surfaced; any other key in the error tree is ignored. Same Channel 1
- * (UI text) discipline as the project / post equivalents — no leak beyond
- * the form's declared fields.
+ * Only the fields the stat form owns (`category`, `label`, `value`, `unit`,
+ * `aside`, `sort_order`) are surfaced; any other key in the error tree is
+ * ignored. Same Channel 1 (UI text) discipline as the project / post
+ * equivalents — no leak beyond the form's declared fields.
  */
 function statZodErrorToFieldErrors(
   err: ZodError,
@@ -50,7 +51,9 @@ function statZodErrorToFieldErrors(
       key === 'category' ||
       key === 'label' ||
       key === 'value' ||
-      key === 'unit'
+      key === 'unit' ||
+      key === 'aside' ||
+      key === 'sort_order'
     ) {
       // Keep the first message per field; later issues for the same field are
       // less informative for the user (zod emits them in order).
@@ -61,11 +64,30 @@ function statZodErrorToFieldErrors(
 }
 
 /**
+ * Read `sort_order` from FormData. Missing or empty resolves to `0`, matching
+ * both the column default and the schema default. A parseable numeric string
+ * resolves to a `number`. Anything else passes through as the raw trimmed
+ * string so the zod number schema rejects it with a deterministic message
+ * rather than the field being silently zeroed. Mirrors `readPercentField` in
+ * `lib/admin-projects-mutations.ts`.
+ */
+function readSortOrderField(formData: FormData): unknown {
+  const raw = formData.get('sort_order');
+  if (typeof raw !== 'string') return 0;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return 0;
+  const parsed = Number(trimmed);
+  return Number.isNaN(parsed) ? trimmed : parsed;
+}
+
+/**
  * Read FormData into the raw stat insert payload. The cast is intentional:
  * unknown raw values flow through to the zod parser at the boundary, which
- * is the authoritative validator. Empty-string `unit` submissions are
- * preprocessed to `undefined` inside the zod schema; the wrapper does not
- * normalise here.
+ * is the authoritative validator. Empty-string `unit` and `aside`
+ * submissions are preprocessed to `undefined` inside the zod schema; the
+ * wrapper does not normalise those here. `sort_order` is the exception: it
+ * arrives as a string from FormData and the schema is a strict number
+ * parser, so the string-to-number step happens here.
  */
 function readStatFormData(formData: FormData): unknown {
   return {
@@ -73,6 +95,8 @@ function readStatFormData(formData: FormData): unknown {
     label: formData.get('label'),
     value: formData.get('value'),
     unit: formData.get('unit'),
+    aside: formData.get('aside'),
+    sort_order: readSortOrderField(formData),
   };
 }
 
@@ -110,6 +134,43 @@ export async function insertStat(
   const start = performance.now();
   try {
     await insertStatInternal(readStatFormData(formData));
+    return { status: 'ok' };
+  } catch (err) {
+    if (err instanceof ZodError) {
+      return { status: 'error', fieldErrors: statZodErrorToFieldErrors(err) };
+    }
+    return { status: 'error', formError: GENERIC_FORM_ERROR };
+  } finally {
+    await padToFloor(start);
+  }
+}
+
+/**
+ * Server Action: update an existing stat row.
+ *
+ * Added at T46 so the seven hand-maintained Other-page tiles can be corrected
+ * in place. Previously a typo in a stat meant deleting the row and retyping
+ * every field, which was an acceptable trade for append-only telemetry and a
+ * bad one for long-lived hand-written content.
+ *
+ * Same six-channel uniformity discipline as {@link insertStat}. The row id
+ * travels in the FormData as a hidden `id` field rather than as a bound
+ * argument, so the action keeps the two-parameter `useActionState` signature
+ * the rest of the admin forms use.
+ *
+ * @param _prevState Previous `useActionState` state. Ignored.
+ * @param formData   Raw form data, including the hidden `id` field.
+ * @returns The new state envelope. Always resolves; never throws.
+ */
+export async function updateStat(
+  _prevState: StatMutationState,
+  formData: FormData,
+): Promise<StatMutationState> {
+  const start = performance.now();
+  try {
+    const rawId = formData.get('id');
+    const id = typeof rawId === 'string' ? rawId : '';
+    await updateStatInternal(id, readStatFormData(formData));
     return { status: 'ok' };
   } catch (err) {
     if (err instanceof ZodError) {

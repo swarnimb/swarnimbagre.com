@@ -105,6 +105,8 @@ describe('insertStatInternal — TS-04 inserts the row + normalizes optional uni
       value: '7.5',
       unit: null,
       created_at: '2026-05-13T00:00:00.000Z',
+      aside: null,
+      sort_order: 0,
     };
     const { client, calls } = makeCreateStub({ data: insertedRow, error: null });
 
@@ -135,6 +137,8 @@ describe('insertStatInternal — TS-04 inserts the row + normalizes optional uni
       value: '7.5',
       unit: 'h',
       created_at: '2026-05-13T00:00:00.000Z',
+      aside: null,
+      sort_order: 0,
     };
     const { client, calls } = makeCreateStub({ data: insertedRow, error: null });
 
@@ -156,6 +160,8 @@ describe('insertStatInternal — TS-04 inserts the row + normalizes optional uni
       value: '7.5',
       unit: null,
       created_at: '2026-05-13T00:00:00.000Z',
+      aside: null,
+      sort_order: 0,
     };
     const { client, calls } = makeCreateStub({ data: insertedRow, error: null });
 

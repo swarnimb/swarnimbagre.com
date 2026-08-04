@@ -1,191 +1,127 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { ProjectCard } from '@/components/public/ProjectCard';
-import type { PublicProjectMediaItem } from '@/lib/types';
+import type { PublicProject } from '@/lib/public-projects';
 
-// Stub the carousel so these tests do not pull in embla. The path resolves to
-// the same module `ProjectMedia.tsx` imports via `./ProjectMediaCarousel`.
-vi.mock('@/components/public/ProjectMediaCarousel', () => ({
-  ProjectMediaCarousel: (props: { media: unknown[]; view: string; ariaLabel: string }) => (
-    <div
-      data-testid="project-media-carousel"
-      data-view={props.view}
-      data-count={props.media.length}
-    />
-  ),
-}));
+/**
+ * T46 acceptance: the redesigned `/projects` card.
+ *
+ * The card was rebuilt against the redesign: a media frame over a body of
+ * title, subtitle, description, tags and actions. Its whole prop surface is
+ * now `{ project, writeupHref }`, so these tests build a `PublicProject` and
+ * assert what the body renders for each shape the schema allows, including
+ * the almost-empty row, which the design draws deliberately.
+ *
+ * The frame itself needs media rows to render anything interactive, so it
+ * stays out of these cases; `toSlides` is covered in `tests/ProjectFrame.test.ts`.
+ */
 
 afterEach(() => {
   cleanup();
 });
 
-/** Number of `<circle>` elements ProgressRing renders without the done glow. */
-const RING_CIRCLES_WITHOUT_GLOW = 2;
+/** Placeholder the card falls back to when a row has no title. */
+const EMPTY_TITLE = 'Untitled project';
 
-/** Number of `<circle>` elements ProgressRing renders with the done glow. */
-const RING_CIRCLES_WITH_GLOW = 3;
+/** Placeholder the card falls back to when a row has no subtitle. */
+const EMPTY_SUBTITLE = 'A new build, details on the way.';
 
-/**
- * The progress ring's wrapping `<span>` is the only element on the card that
- * carries `role="img"` with an `aria-label` starting "progress ". Scope all
- * ring assertions through it so any nested SVGs do not skew circle counts.
- */
-function findRing(container: HTMLElement): HTMLElement | null {
-  return container.querySelector('[role="img"][aria-label^="progress "]');
-}
-
-/** Build a render-ready media item with sensible defaults for tests. */
-function mediaItem(overrides: Partial<PublicProjectMediaItem> = {}): PublicProjectMediaItem {
+/** Build a render-ready project with sensible defaults for tests. */
+function makeProject(overrides: Partial<PublicProject> = {}): PublicProject {
   return {
-    id: 'm1',
-    imageUrl: 'https://example.com/slide.jpg',
-    imageAlt: 'slide',
+    id: 'p1',
+    title: 'putt-or-not',
+    slug: 'putt-or-not',
+    description: 'Disc golf stats tracker.',
+    subtitle: 'Counts putts so you do not have to.',
+    tags: null,
+    thumbKind: null,
+    progressPercent: null,
+    githubUrl: null,
+    liveUrl: null,
+    postUrl: null,
+    postId: null,
+    imageUrl: null,
     imageAfterUrl: null,
-    imageAfterAlt: null,
-    caption: null,
-    orderIndex: 0,
+    media: [],
     ...overrides,
   };
 }
 
-describe('ProjectCard — smoke render', () => {
-  it('renders the title and blurb', () => {
-    render(<ProjectCard title="putt-or-not" blurb="Disc golf stats tracker." />);
+describe('ProjectCard: body text', () => {
+  it('renders the title, subtitle and description', () => {
+    render(<ProjectCard project={makeProject()} writeupHref={null} />);
     expect(screen.getByText('putt-or-not')).toBeInTheDocument();
+    expect(screen.getByText('Counts putts so you do not have to.')).toBeInTheDocument();
     expect(screen.getByText('Disc golf stats tracker.')).toBeInTheDocument();
   });
-});
 
-describe('ProjectCard — title-link gating (Override 3, T45.D)', () => {
-  it('renders the title as a gold-underline link when onClick is provided', () => {
+  it('falls back to placeholder title and subtitle when both are absent', () => {
     render(
-      <ProjectCard title="putt-or-not" blurb="b" onClick={() => {}} />,
+      <ProjectCard
+        project={makeProject({ title: '', subtitle: null })}
+        writeupHref={null}
+      />,
     );
-    const titleLink = screen.getByRole('link', { name: 'putt-or-not' });
-    expect(titleLink).toBeInTheDocument();
-    expect(titleLink).toHaveClass('link');
-  });
-
-  it('renders an inert title (no link, cursor default) when no onClick', () => {
-    const { container } = render(
-      <ProjectCard title="putt-or-not" blurb="b" />,
-    );
-    // The title heading exists...
-    const heading = screen.getByRole('heading', { name: 'putt-or-not' });
-    expect(heading).toBeInTheDocument();
-    // ...but it is not wrapped in an anchor / `.link` affordance.
-    expect(screen.queryByRole('link', { name: 'putt-or-not' })).toBeNull();
-    expect(heading.querySelector('a')).toBeNull();
-    expect(container.querySelector('.link')).toBeNull();
-    // The card frame is non-interactive.
-    const article = container.querySelector('article') as HTMLElement;
-    expect(article.style.cursor).toBe('default');
+    expect(screen.getByText(EMPTY_TITLE)).toBeInTheDocument();
+    expect(screen.getByText(EMPTY_SUBTITLE)).toBeInTheDocument();
   });
 });
 
-describe('ProjectCard — link rendering by URL presence', () => {
-  it('renders all three TypoIcons when github, live, and post URLs are present', () => {
-    render(
-      <ProjectCard
-        title="putt-or-not"
-        blurb="Disc golf stats tracker."
-        githubUrl="https://github.com/sb/putt"
-        liveUrl="https://putt.example"
-        postUrl="/writing/putt"
-      />,
-    );
-    expect(screen.getByTitle('code')).toBeInTheDocument();
-    expect(screen.getByTitle('site')).toBeInTheDocument();
-    expect(screen.getByTitle('notes')).toBeInTheDocument();
-  });
-
-  it('renders zero TypoIcons (and hides the link row) when no URLs are present', () => {
+describe('ProjectCard: tag pills', () => {
+  it('renders one pill per tag when tags are present', () => {
     const { container } = render(
-      <ProjectCard title="afford.lunch" blurb="A finance app." />,
-    );
-    expect(container.querySelectorAll('a[title]')).toHaveLength(0);
-  });
-
-  it('renders only the github icon when only githubUrl is present', () => {
-    render(
       <ProjectCard
-        title="drumlog"
-        blurb="Drum practice timer."
-        githubUrl="https://github.com/sb/drumlog"
+        project={makeProject({ tags: ['next', 'supabase'] })}
+        writeupHref={null}
       />,
     );
-    expect(screen.getByTitle('code')).toBeInTheDocument();
-    expect(screen.queryByTitle('site')).not.toBeInTheDocument();
-    expect(screen.queryByTitle('notes')).not.toBeInTheDocument();
+    expect(container.querySelectorAll('.sb-tag')).toHaveLength(2);
+    expect(screen.getByText('next')).toBeInTheDocument();
+    expect(screen.getByText('supabase')).toBeInTheDocument();
+  });
+
+  it('renders no tag row when tags are absent', () => {
+    const { container } = render(
+      <ProjectCard project={makeProject({ tags: null })} writeupHref={null} />,
+    );
+    expect(container.querySelector('.sb-tags')).toBeNull();
   });
 });
 
-describe('ProjectCard — progress ring gating', () => {
-  it('renders the ring (no glow) at progress=0', () => {
-    const { container } = render(
-      <ProjectCard title="t" blurb="b" progressPercent={0} />,
-    );
-    const ring = findRing(container);
-    expect(ring).not.toBeNull();
-    expect(ring!.querySelectorAll('circle')).toHaveLength(RING_CIRCLES_WITHOUT_GLOW);
-  });
-
-  it('renders the ring with done glow at progress=100', () => {
-    const { container } = render(
-      <ProjectCard title="t" blurb="b" progressPercent={100} />,
-    );
-    const ring = findRing(container);
-    expect(ring).not.toBeNull();
-    expect(ring!.querySelectorAll('circle')).toHaveLength(RING_CIRCLES_WITH_GLOW);
-  });
-
-  it('renders no ring at all when progress is null', () => {
-    const { container } = render(
-      <ProjectCard title="t" blurb="b" progressPercent={null} />,
-    );
-    expect(findRing(container)).toBeNull();
-  });
-});
-
-describe('ProjectCard — media branching', () => {
-  it('renders the legacy single still <img> and no carousel when media is omitted', () => {
-    const { container } = render(
-      <ProjectCard
-        title="putt-or-not"
-        blurb="b"
-        imageUrl="https://example.com/only.jpg"
-      />,
-    );
-    expect(screen.queryByTestId('project-media-carousel')).toBeNull();
-    const images = container.querySelectorAll('img');
-    expect(images).toHaveLength(1);
-    expect(images[0].getAttribute('src')).toBe('https://example.com/only.jpg');
-  });
-
-  it('renders the carousel stub with data-view="list" when media rows are present', () => {
+describe('ProjectCard: actions by URL presence', () => {
+  it('renders Demo, GitHub and Writeup when all three targets are present', () => {
     render(
       <ProjectCard
-        title="putt-or-not"
-        blurb="b"
-        media={[mediaItem({ id: 'a' }), mediaItem({ id: 'b' })]}
+        project={makeProject({
+          liveUrl: 'https://putt.example',
+          githubUrl: 'https://github.com/sb/putt',
+        })}
+        writeupHref="/writing/putt"
       />,
     );
-    const stub = screen.getByTestId('project-media-carousel');
-    expect(stub).toBeInTheDocument();
-    expect(stub.getAttribute('data-view')).toBe('list');
-    expect(stub.getAttribute('data-count')).toBe('2');
+    expect(screen.getByRole('link', { name: 'Demo' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'GitHub' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Writeup' })).toBeInTheDocument();
   });
 
-  it('falls through to the legacy path when media is an empty array', () => {
-    const { container } = render(
+  it('renders only GitHub when only githubUrl is present', () => {
+    render(
       <ProjectCard
-        title="putt-or-not"
-        blurb="b"
-        imageUrl="https://example.com/only.jpg"
-        media={[]}
+        project={makeProject({ githubUrl: 'https://github.com/sb/drumlog' })}
+        writeupHref={null}
       />,
     );
-    expect(screen.queryByTestId('project-media-carousel')).toBeNull();
-    expect(container.querySelectorAll('img')).toHaveLength(1);
+    expect(screen.getByRole('link', { name: 'GitHub' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Demo' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Writeup' })).toBeNull();
+  });
+
+  it('renders the placeholder line and no links when no target is present', () => {
+    const { container } = render(
+      <ProjectCard project={makeProject()} writeupHref={null} />,
+    );
+    expect(screen.getByText('links coming soon')).toBeInTheDocument();
+    expect(container.querySelectorAll('.sb-action')).toHaveLength(0);
   });
 });

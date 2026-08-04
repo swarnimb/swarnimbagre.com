@@ -13,10 +13,22 @@
  */
 
 import { z } from 'zod';
-import { THUMB_KIND_VALUES, type ThumbKind } from './thumb-kinds';
 
 /** Mirrors `projects.title` CHECK in migration 001 (`length <= 200`). */
 export const TITLE_MAX_LENGTH = 200;
+
+/** Mirrors the `projects_subtitle_length` CHECK in migration 013. */
+export const SUBTITLE_MAX_LENGTH = 120;
+
+/** Mirrors the cardinality bound in the `projects_tags_shape` CHECK (013). */
+export const TAGS_MAX_COUNT = 8;
+
+/**
+ * Per-tag ceiling. The DB CHECK can only bound the JOINED length of the array
+ * (200 chars), because a per-element predicate would need a subquery, which
+ * Postgres forbids inside CHECK. 24 is the practical single-pill width.
+ */
+export const TAG_MAX_LENGTH = 24;
 
 /**
  * Conservative practical URL ceiling for `github_url`, `live_url`,
@@ -69,20 +81,41 @@ const postUrlSchema = z
   );
 
 /**
- * `thumb_kind` fragment. The closed value set lives in `lib/thumb-kinds.ts`
- * as `THUMB_KIND_VALUES`. The cast widens the readonly tuple to the
- * mutable shape `z.enum` requires; the runtime check is unaffected.
+ * `subtitle` fragment (T46, migration 013). One short line under the card
+ * title. The 120-character ceiling mirrors the CHECK constraint exactly.
  */
-const thumbKindSchema = z.enum(
-  THUMB_KIND_VALUES as unknown as [ThumbKind, ...ThumbKind[]],
-);
+const subtitleSchema = z
+  .string()
+  .trim()
+  .min(1, 'subtitle cannot be empty')
+  .max(SUBTITLE_MAX_LENGTH, `must be at most ${SUBTITLE_MAX_LENGTH} characters`);
+
+/**
+ * `tags` fragment (T46, migration 013).
+ *
+ * The DB CHECK enforces cardinality, no null elements, no empty-string
+ * elements and a total length ceiling, but it cannot reject a
+ * whitespace-only tag: Postgres forbids subqueries inside CHECK, so there is
+ * no per-element predicate available there. That case is caught here instead,
+ * by trimming before the min(1) runs.
+ */
+const tagsSchema = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1, 'tags cannot contain blank entries')
+      .max(TAG_MAX_LENGTH, `each tag must be at most ${TAG_MAX_LENGTH} characters`),
+  )
+  .min(1, 'tags cannot be an empty list')
+  .max(TAGS_MAX_COUNT, `at most ${TAGS_MAX_COUNT} tags`);
 
 /**
  * Create-project boundary schema.
  *
  * Image FKs (`image_id`, `image_after_id`) are NOT in create — image
  * attachment happens post-insert via the edit flow. The five content-model
- * fields (URLs + progress + thumb_kind) are included so a publish-on-create
+ * fields (URLs + progress + subtitle + tags) are included so a publish-on-create
  * flow can land a complete row in one round-trip.
  */
 export const projectCreateSchema = z.object({
@@ -98,7 +131,8 @@ export const projectCreateSchema = z.object({
     .min(PROGRESS_PERCENT_MIN)
     .max(PROGRESS_PERCENT_MAX)
     .nullable(),
-  thumb_kind: thumbKindSchema.nullable(),
+  subtitle: subtitleSchema.nullable(),
+  tags: tagsSchema.nullable(),
   post_id: z.string().uuid('post_id must be a uuid').nullable(),
 }).strict();
 
@@ -129,7 +163,8 @@ export const projectUpdateSchema = z.object({
     .min(PROGRESS_PERCENT_MIN)
     .max(PROGRESS_PERCENT_MAX)
     .nullable(),
-  thumb_kind: thumbKindSchema.nullable(),
+  subtitle: subtitleSchema.nullable(),
+  tags: tagsSchema.nullable(),
   image_after_id: z
     .string()
     .uuid('image_after_id must be a uuid')

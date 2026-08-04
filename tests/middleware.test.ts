@@ -24,7 +24,7 @@ vi.mock('@supabase/ssr', () => ({
   createServerClient: (...args: unknown[]) => supabaseCreateServerClient(...args),
 }));
 
-const { middleware, isMobileUserAgent } = await import('@/middleware');
+const { middleware } = await import('@/middleware');
 
 /**
  * Configure the mocked `@supabase/ssr::createServerClient` for the next call.
@@ -139,8 +139,17 @@ describe('admin gate — functional (F1-F4)', () => {
 // --- Public-route preservation (T10 contract — do not regress) -------------
 
 describe('admin gate — public-route preservation (P1-P3)', () => {
-  /** P1 — public-route exemption: marketing root never gets pulled into the gate. */
-  it('P1: GET / with a mobile UA does NOT redirect to /admin/login', async () => {
+  /**
+   * P1 — public-route exemption: the marketing root never gets pulled into
+   * the gate.
+   *
+   * T46 removed the device-variant branch and narrowed the matcher to
+   * `/admin/*`, so in production this function is no longer invoked for `/`
+   * at all. The test is kept as a defence-in-depth assertion: if the matcher
+   * is ever widened again, a public path must still fall through untouched
+   * rather than hitting the session gate.
+   */
+  it('P1: GET / does NOT redirect to /admin/login', async () => {
     const ua =
       'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Mobi/15E148';
     const res = await middleware(
@@ -149,7 +158,6 @@ describe('admin gate — public-route preservation (P1-P3)', () => {
 
     expect(res.status).not.toBe(307);
     expect(res.headers.get('location')).toBeNull();
-    expect(isMobileUserAgent(ua)).toBe(true);
     expect(supabaseCreateServerClient).not.toHaveBeenCalled();
   });
 

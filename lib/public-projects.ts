@@ -22,6 +22,16 @@ export interface PublicProject {
   title: string;
   slug: string;
   description: string;
+  /** One-line subtitle under the card title (T46). Null falls back to a placeholder. */
+  subtitle: string | null;
+  /** Tag pills on the card (T46). Null or empty renders no tag row. */
+  tags: string[] | null;
+  /**
+   * @deprecated since T46 — the redesigned card renders photographic media
+   * only, so the SVG motif set (S49) is no longer drawn anywhere. The column
+   * is retained rather than dropped so historical values survive if the
+   * decision is revisited.
+   */
   thumbKind: string | null;
   progressPercent: number | null;
   githubUrl: string | null;
@@ -81,6 +91,8 @@ async function toPublicProject(row: Project): Promise<PublicProject> {
     title: row.title,
     slug: row.slug,
     description: row.description,
+    subtitle: row.subtitle,
+    tags: row.tags,
     thumbKind: row.thumb_kind,
     progressPercent: row.progress_percent,
     githubUrl: row.github_url,

@@ -6,11 +6,12 @@ import {
   getProjectBySlug,
   getPostBySlug,
   getPublishedPostById,
-  getStatsByCategory,
+  getOrderedStats,
+  getNotes,
   getProjectMediaByProject,
 } from '@/lib/db';
 import { ServiceError } from '@/lib/errors';
-import type { Project, Post, Stat, ProjectMedia } from '@/lib/types';
+import type { Project, Post, Stat, Note, ProjectMedia } from '@/lib/types';
 
 /**
  * Build a stub Supabase client whose chained query terminal resolves with the
@@ -74,6 +75,8 @@ const SAMPLE_PROJECT: Project = {
   image_after_id: null,
   post_id: null,
   sort_order: 0,
+  subtitle: null,
+  tags: null,
 };
 
 /** Sample post row that satisfies the Post type. */
@@ -89,7 +92,7 @@ const SAMPLE_POST: Post = {
   sort_order: 0,
 };
 
-/** Sample stat rows spanning two categories, for grouping tests. */
+/** Sample stat rows in the order the query is expected to return them. */
 const SAMPLE_STATS: Stat[] = [
   {
     id: 's1',
@@ -98,6 +101,8 @@ const SAMPLE_STATS: Stat[] = [
     value: '12',
     unit: null,
     created_at: '2026-03-10T00:00:00.000Z',
+    aside: 'Two of them twice.',
+    sort_order: 0,
   },
   {
     id: 's2',
@@ -106,6 +111,8 @@ const SAMPLE_STATS: Stat[] = [
     value: '210',
     unit: 'pages',
     created_at: '2026-03-09T00:00:00.000Z',
+    aside: null,
+    sort_order: 1,
   },
   {
     id: 's3',
@@ -114,6 +121,28 @@ const SAMPLE_STATS: Stat[] = [
     value: '24',
     unit: 'km',
     created_at: '2026-03-08T00:00:00.000Z',
+    aside: null,
+    sort_order: 2,
+  },
+];
+
+/** Sample note rows in the order the query is expected to return them. */
+const SAMPLE_NOTES: Note[] = [
+  {
+    id: 'n1',
+    kicker: 'Currently reading',
+    line: 'Something long and mostly unfinished.',
+    sort_order: 0,
+    created_at: '2026-06-02T00:00:00.000Z',
+    updated_at: '2026-06-02T00:00:00.000Z',
+  },
+  {
+    id: 'n2',
+    kicker: 'Currently watching',
+    line: 'The same three shows on rotation.',
+    sort_order: 1,
+    created_at: '2026-06-01T00:00:00.000Z',
+    updated_at: '2026-06-01T00:00:00.000Z',
   },
 ];
 
@@ -317,29 +346,77 @@ describe('getPublishedPostById', () => {
   });
 });
 
-describe('getStatsByCategory', () => {
-  it('groups stats by category preserving query order within each category', async () => {
+describe('getOrderedStats', () => {
+  // T46 replaced `getStatsByCategory` with this loader. The return shape is a
+  // flat array in query order, not a category-keyed map. The Other page
+  // renders a fixed tile sequence, which alphabetical grouping could not
+  // express.
+
+  it('returns rows in query order when the database returns data', async () => {
     const stub = makeStub({ data: SAMPLE_STATS, error: null });
-    const result = await getStatsByCategory(stub);
-    expect(Object.keys(result).sort()).toEqual(['reading', 'running']);
-    expect(result.reading).toHaveLength(2);
-    expect(result.reading[0].id).toBe('s1');
-    expect(result.reading[1].id).toBe('s2');
-    expect(result.running).toHaveLength(1);
-    expect(result.running[0].id).toBe('s3');
+    const result = await getOrderedStats(stub);
+    expect(result).toEqual(SAMPLE_STATS);
+    expect(result.map((row) => row.id)).toEqual(['s1', 's2', 's3']);
   });
 
-  it('returns an empty object when there are no stat rows', async () => {
+  it('returns an empty array when there are no stat rows', async () => {
     const stub = makeStub({ data: [], error: null });
-    const result = await getStatsByCategory(stub);
-    expect(result).toEqual({});
+    const result = await getOrderedStats(stub);
+    expect(result).toEqual([]);
+  });
+
+  it('orders by sort_order asc then created_at desc (T46)', async () => {
+    const { client, orderCalls } = makeOrderRecordingStub({
+      data: SAMPLE_STATS,
+      error: null,
+    });
+    await getOrderedStats(client);
+    expect(orderCalls).toEqual([
+      ['sort_order', { ascending: true }],
+      ['created_at', { ascending: false }],
+    ]);
   });
 
   it('throws a ServiceError tagged with the operation when the database fails', async () => {
     const stub = makeStub({ data: null, error: DB_ERROR });
-    await expect(getStatsByCategory(stub)).rejects.toBeInstanceOf(ServiceError);
-    await expect(getStatsByCategory(stub)).rejects.toMatchObject({
-      operation: 'getStatsByCategory',
+    await expect(getOrderedStats(stub)).rejects.toBeInstanceOf(ServiceError);
+    await expect(getOrderedStats(stub)).rejects.toMatchObject({
+      operation: 'getOrderedStats',
+    });
+  });
+});
+
+describe('getNotes', () => {
+  it('returns rows in query order when the database returns data', async () => {
+    const stub = makeStub({ data: SAMPLE_NOTES, error: null });
+    const result = await getNotes(stub);
+    expect(result).toEqual(SAMPLE_NOTES);
+    expect(result.map((row) => row.id)).toEqual(['n1', 'n2']);
+  });
+
+  it('returns an empty array when there are no note rows', async () => {
+    const stub = makeStub({ data: [], error: null });
+    const result = await getNotes(stub);
+    expect(result).toEqual([]);
+  });
+
+  it('orders by sort_order asc then created_at desc (T46)', async () => {
+    const { client, orderCalls } = makeOrderRecordingStub({
+      data: SAMPLE_NOTES,
+      error: null,
+    });
+    await getNotes(client);
+    expect(orderCalls).toEqual([
+      ['sort_order', { ascending: true }],
+      ['created_at', { ascending: false }],
+    ]);
+  });
+
+  it('throws a ServiceError tagged with the operation when the database fails', async () => {
+    const stub = makeStub({ data: null, error: DB_ERROR });
+    await expect(getNotes(stub)).rejects.toBeInstanceOf(ServiceError);
+    await expect(getNotes(stub)).rejects.toMatchObject({
+      operation: 'getNotes',
     });
   });
 });

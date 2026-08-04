@@ -1,0 +1,187 @@
+/* ============================================================
+   Public site — Writing list
+   T46 redesign (2026-08-04).
+
+   A bordered section of rows: date column, then title + excerpt.
+   Hover slides an arrow in and recolors the title to accent.
+
+   Unlike the export, each row links to /writing/[slug]. The design
+   pointed every row back at the list itself, which would have made
+   post bodies unreachable; keeping the detail route was the T46 Q2
+   decision.
+   ============================================================ */
+
+.lsection {
+  border-bottom: var(--border);
+}
+
+.lrow {
+  display: grid;
+  grid-template-columns: 132px 1fr;
+  gap: 24px;
+  align-items: baseline;
+  padding: 22px 0;
+  border-top: var(--border);
+}
+
+.lrow-date {
+  font: var(--meta-date);
+  font-family: var(--font-mono);
+  letter-spacing: var(--ls-date);
+  text-transform: uppercase;
+  color: var(--fg-muted);
+  padding-top: 5px;
+}
+
+.ltitle {
+  font: var(--list-title);
+  color: var(--fg-strong);
+  margin: 0;
+  transition: color var(--dur) var(--ease);
+}
+.lrow:hover .ltitle {
+  color: var(--accent);
+}
+
+.larrow {
+  font-size: 18px;
+  color: var(--accent);
+  margin-left: 9px;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+  display: inline-block;
+}
+.lrow:hover .larrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Single-line clamp: an excerpt is a teaser, not a summary. */
+.lexcerpt {
+  font: var(--body);
+  color: var(--fg-muted);
+  margin-top: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-wrap: pretty;
+}
+
+.lclosing {
+  font: var(--body);
+  color: var(--fg-muted);
+  max-width: var(--closing-width);
+  margin-top: var(--mt-closing);
+  text-wrap: pretty;
+}
+
+/* ------------------------------------------------------------
+   Post body
+   Scoped, because MarkdownContent injects raw HTML and would
+   otherwise inherit the global element styles: a markdown `##`
+   would render at the 76px page-title scale, and lists, quotes
+   and code would fall back to browser defaults.
+
+   The design export has no post-detail page, so this is authored
+   rather than ported. It stays inside the existing token set.
+   ------------------------------------------------------------ */
+.post-body {
+  font: 400 17px/1.65 var(--font-sans);
+  color: var(--fg);
+  text-wrap: pretty;
+}
+
+.post-body > * + * { margin-top: 1.1em; }
+
+.post-body h2 {
+  font: 400 26px/1.2 var(--font-serif);
+  color: var(--fg-strong);
+  margin-top: 1.8em;
+}
+
+.post-body h3 {
+  font: 400 21px/1.25 var(--font-serif);
+  color: var(--fg-strong);
+  margin-top: 1.5em;
+}
+
+.post-body a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.post-body a:hover { color: var(--fg-strong); }
+
+.post-body ul,
+.post-body ol { padding-left: 1.4em; }
+
+.post-body li + li { margin-top: 0.4em; }
+
+.post-body blockquote {
+  border-left: 2px solid var(--hairline);
+  padding-left: 1.1em;
+  color: var(--fg-muted);
+}
+
+.post-body code {
+  font: 400 0.88em/1.5 var(--font-mono);
+  background: var(--surface);
+  border: var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.post-body pre {
+  background: var(--surface);
+  border: var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+}
+/* Nested code inside a pre must not draw a second box. */
+.post-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.post-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.post-body hr {
+  border: 0;
+  border-top: var(--border);
+  margin: 2em 0;
+}
+
+/* ============================================================
+   Mobile
+   The date stacks above the title and the hover arrow is hidden:
+   there is no hover on touch, so an always-invisible element would
+   just be dead weight in the a11y tree.
+   ============================================================ */
+@media (max-width: 640px) {
+  .post-body { font-size: 16px; }
+  .post-body h2 { font-size: 23px; }
+  .post-body h3 { font-size: 19px; }
+
+  .lrow {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    padding: 18px 0;
+  }
+
+  .lrow-date {
+    padding-top: 0;
+  }
+
+  .larrow {
+    display: none;
+  }
+}

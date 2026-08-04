@@ -34,7 +34,8 @@
  * Union of field names that can carry a per-field zod validation error.
  * Extended in T42 to cover the six new content-model fields added in
  * migration 009 (`github_url`, `live_url`, `post_url`, `progress_percent`,
- * `thumb_kind`, `image_after_id`).
+ * `image_after_id`). T46 replaced `thumb_kind` with `subtitle` and `tags`
+ * (migration 013).
  */
 export type ProjectMutationFieldName =
   | 'title'
@@ -44,7 +45,8 @@ export type ProjectMutationFieldName =
   | 'live_url'
   | 'post_url'
   | 'progress_percent'
-  | 'thumb_kind'
+  | 'subtitle'
+  | 'tags'
   | 'image_after_id'
   | 'post_id';
 

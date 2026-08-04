@@ -6,8 +6,6 @@
  * directly without renaming. Keep in sync with migrations.
  */
 
-import type { ThumbKind } from './thumb-kinds';
-
 /** Lifecycle state of a project row. Mirrors the `project_status` enum. */
 export type ProjectStatus = 'draft' | 'published';
 
@@ -20,11 +18,11 @@ export type PostStatus = 'draft' | 'published';
  * Content-model fields below `updated_at` were added in migration 009
  * (T42, CONSTRAINT-05 Override 1). All six are nullable.
  *
- * `thumb_kind` is typed as `ThumbKind | null` to match the rest of the
- * codebase's narrowed-at-boundary convention. The DB column itself is
- * untyped `text` (see `lib/thumb-kinds.ts` for the rationale); if a
- * row holds a value outside `ThumbKind`, the public render layer falls
- * back to the `dots` motif and the type lies harmlessly.
+ * `thumb_kind` is a plain `string | null` as of T46. It was a narrowed
+ * `ThumbKind` union backing the S49 SVG motif set; the redesign renders
+ * photographic media only, so the motifs, their enum and the admin picker
+ * were all removed. The column is deliberately NOT dropped — historical
+ * values survive in case the decision is revisited — but nothing reads it.
  */
 export interface Project {
   id: string;
@@ -47,7 +45,7 @@ export interface Project {
   live_url: string | null;
   post_url: string | null;
   progress_percent: number | null;
-  thumb_kind: ThumbKind | null;
+  thumb_kind: string | null;
   /**
    * @deprecated since T43 (migration 010, 2026-05-20) — superseded by the
    * `image_after_id` column on `project_media` rows. Same rationale and
@@ -66,6 +64,19 @@ export interface Project {
    * deterministic tiebreaker.
    */
   sort_order: number;
+  /**
+   * One-line subtitle rendered under the card title (T46, migration 013).
+   * Nullable — the card falls back to a placeholder line when absent. Capped
+   * at 120 characters by a CHECK constraint.
+   */
+  subtitle: string | null;
+  /**
+   * Short labels rendered as pills on the card (T46, migration 013).
+   * Nullable; when present, 1-8 entries with no empty or null elements. The
+   * whitespace-only case is caught by the zod schema, not by the CHECK,
+   * because Postgres forbids subqueries inside CHECK constraints.
+   */
+  tags: string[] | null;
 }
 
 /** A written post. One row in `public.posts`. */
@@ -95,6 +106,33 @@ export interface Stat {
   value: string;
   unit: string | null;
   created_at: string;
+  /**
+   * Optional italic quip rendered under the label on the Other page
+   * (T46, migration 014). Capped at 160 characters by a CHECK.
+   */
+  aside: string | null;
+  /**
+   * Manual display rank, ascending (0-based). Added in migration 014 (T46).
+   * The Other page renders a fixed tile grid, so alphabetical-by-category
+   * ordering could not express "these four, in this sequence".
+   */
+  sort_order: number;
+}
+
+/**
+ * A text tile on the Other page — "Currently watching / reading / goal".
+ *
+ * A different shape from `Stat`: no number, unit or category, just a kicker
+ * and a line. Backed by `public.notes` (T46, migration 014) rather than being
+ * forced into `stats` with null columns.
+ */
+export interface Note {
+  id: string;
+  kicker: string;
+  line: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
 }
 
 /**

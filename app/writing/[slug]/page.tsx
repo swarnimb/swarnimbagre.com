@@ -1,33 +1,33 @@
 import type { Metadata } from 'next';
-import { headers } from 'next/headers';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getPostBySlug } from '@/lib/db';
-import { formatDate } from '@/lib/format-date';
 import { safeLoad } from '@/lib/safe-load';
 import type { Post } from '@/lib/types';
-import { Page } from '@/components/public/Page';
-import { Nav } from '@/components/public/Nav';
-import { Footer } from '@/components/public/Footer';
-import { MobilePage } from '@/components/public/mobile/MobilePage';
-import { MobileNav } from '@/components/public/mobile/MobileNav';
-import { MobileFooter } from '@/components/public/mobile/MobileFooter';
+import { SiteHeader } from '@/components/public/SiteHeader';
 import { MarkdownContent } from '@/components/public/MarkdownContent';
-import { NAV_PATHS } from '@/lib/nav-targets';
+import { formatPostDate } from '@/lib/post-summary';
 
 const SITE_ORIGIN = 'https://swarnimbagre.com';
 const DESCRIPTION_MAX = 160;
-const HEADER_PADDING_DESKTOP = '72px 0 32px';
-const HEADER_MAX = 720;
 const BODY_MAX = 720;
 const WRITING_INDEX_PATH = '/writing';
+
+export const dynamic = 'force-dynamic';
 
 interface DetailParams {
   params: Promise<{ slug: string }>;
 }
 
-export async function generateMetadata({ params }: DetailParams): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: DetailParams): Promise<Metadata> {
   const { slug } = await params;
-  const post = await safeLoad<Post | null>(() => getPostBySlug(slug), null, 'metadata:writing/[slug]');
+  const post = await safeLoad<Post | null>(
+    () => getPostBySlug(slug),
+    null,
+    'metadata:writing/[slug]',
+  );
   if (!post) {
     return { title: 'Post not found — Swarnim Bagre' };
   }
@@ -38,96 +38,53 @@ export async function generateMetadata({ params }: DetailParams): Promise<Metada
   };
 }
 
+/**
+ * `/writing/[slug]` — the post body.
+ *
+ * T46 rebuilt this on the shared shell. The desktop/mobile fork is gone, as
+ * is the footer; the page is now header, back link, date, title, body.
+ *
+ * This route is the reason the T46 Q2 decision kept detail pages at all: it
+ * is where post bodies live, and it is the target of every project card's
+ * "Writeup" action.
+ */
 export default async function PostDetailPage({ params }: DetailParams) {
   const { slug } = await params;
-  const post = await safeLoad<Post | null>(() => getPostBySlug(slug), null, 'page:writing/[slug]');
+  const post = await safeLoad<Post | null>(
+    () => getPostBySlug(slug),
+    null,
+    'page:writing/[slug]',
+  );
   if (!post) notFound();
-  const h = await headers();
-  const variant = h.get('x-device-variant');
-  return variant === 'mobile' ? <MobileDetail post={post} /> : <DesktopDetail post={post} />;
-}
 
-function DesktopDetail({ post }: { post: Post }) {
   return (
-    <Page>
-      <Nav current="writing" hrefs={NAV_PATHS} />
-      <header style={{ padding: HEADER_PADDING_DESKTOP, maxWidth: HEADER_MAX }}>
-        <a href={WRITING_INDEX_PATH} className="link" style={{
-          font: 'var(--meta-sm)',
-          color: 'var(--fg-muted)',
-          letterSpacing: '0.14em',
-        }}>
-          ← writing
-        </a>
-        <div style={{
-          font: 'var(--meta-sm)',
-          color: 'var(--fg-muted)',
-          letterSpacing: '0.14em',
-          marginTop: 24,
-        }}>
-          {formatDate(post.created_at)}
+    <div className="container">
+      <SiteHeader />
+
+      <header style={{ maxWidth: BODY_MAX, marginBottom: 'var(--mb-title)' }}>
+        <Link
+          href={WRITING_INDEX_PATH}
+          className="lrow-date"
+          style={{ display: 'inline-block', padding: 0 }}
+        >
+          &larr; writing
+        </Link>
+
+        <div
+          className="lrow-date"
+          style={{ display: 'block', marginTop: 24, padding: 0 }}
+        >
+          {formatPostDate(post.created_at)}
         </div>
-        <h1 style={{
-          font: '400 44px/1.2 var(--font-serif)',
-          color: 'var(--fg-strong)',
-          letterSpacing: '-0.012em',
-          margin: '12px 0 0',
-        }}>
+
+        <h1 className="page-title" style={{ marginTop: 12, marginBottom: 0 }}>
           {post.title}
         </h1>
       </header>
-      {renderBody(post.content)}
-      <div style={{ flex: 1 }} />
-      <Footer line="Last edited at an embarrassing hour." />
-    </Page>
-  );
-}
 
-function MobileDetail({ post }: { post: Post }) {
-  return (
-    <MobilePage>
-      <MobileNav current="writing" hrefs={NAV_PATHS} />
-      <header style={{ padding: '20px 0 8px' }}>
-        <a href={WRITING_INDEX_PATH} className="link" style={{
-          font: 'var(--meta-sm)',
-          color: 'var(--fg-muted)',
-          letterSpacing: '0.16em',
-        }}>
-          ← writing
-        </a>
-        <div style={{
-          font: 'var(--meta-sm)',
-          color: 'var(--fg-faint)',
-          letterSpacing: '0.16em',
-          marginTop: 18,
-        }}>
-          {formatDate(post.created_at)}
-        </div>
-        <h1 style={{
-          font: '400 30px/1.25 var(--font-serif)',
-          color: 'var(--fg-strong)',
-          letterSpacing: '-0.012em',
-          margin: '10px 0 0',
-        }}>
-          {post.title}
-        </h1>
-      </header>
-      {renderBody(post.content)}
-      <div style={{ flex: 1 }} />
-      <MobileFooter line="Last edited at an embarrassing hour." />
-    </MobilePage>
-  );
-}
-
-function renderBody(content: string) {
-  return (
-    <div style={{
-      maxWidth: BODY_MAX,
-      marginTop: 24,
-      color: 'var(--fg)',
-      fontFamily: 'var(--font-serif)',
-    }}>
-      <MarkdownContent md={content} />
+      <div style={{ maxWidth: BODY_MAX }}>
+        <MarkdownContent md={post.content} className="post-body" />
+      </div>
     </div>
   );
 }
@@ -138,4 +95,3 @@ function deriveDescription(content: string): string {
   if (clean.length <= DESCRIPTION_MAX) return clean;
   return `${clean.slice(0, DESCRIPTION_MAX - 1).trimEnd()}…`;
 }
-

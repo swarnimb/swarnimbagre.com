@@ -1,287 +1,157 @@
-'use client'
+'use client';
 
-// Home — fits in roughly one desktop screen.
-// Hero is centered + horizontally stretched; controlled by Tweaks.
+import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
+import { FindMeHere } from '@/components/public/home/SocialIcons';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { resolveNavPath } from '@/lib/nav-targets';
-import { SOCIAL_LINKS } from '@/lib/social-links';
-import { Page } from '@/components/public/Page';
-import { Nav } from '@/components/public/Nav';
-import { SocialIcon } from '@/components/public/SocialIcon';
-import { ProjectRow } from '@/components/public/ProjectRow';
-import type { PublicProject } from '@/lib/public-projects';
-import {
-  TweaksPanel,
-  TweakSection,
-  TweakRadio,
-  TweakSlider,
-  TweakText,
-  TweakToggle,
-  useTweaks,
-} from '@/components/public/TweaksPanel';
+/**
+ * Home - the conversation page.
+ *
+ * The chat is deliberately fake. There is no model, no API route and no
+ * history: submitting swaps in a single canned exchange and nothing else.
+ * That is the joke, and the deflection copy admits it rather than pretending
+ * otherwise. Repeated submits rotate through DEFLECTIONS by index rather than
+ * at random, so the behaviour stays deterministic and testable.
+ *
+ * Copy note: everything here is first person, as is every other page's copy.
+ * The design export's third-person bio was the odd one out, not the rule.
+ */
 
-const HOME_TWEAK_DEFAULTS = {
-  "tagline":  "meet the perpetual amateur",
-  "headline": "By day I help build gaming things at Alienware. By night I tinker with AI things to scratch my own itches.",
-  "subhead":  "Everything here is a personal itch. None of it is a business — no revenue model, no growth strategy.",
-  "headlineSize": 38,
-  "subheadSize":  24,
-  "iconSize": 22,
-  "iconGap":  22,
-  "heroAlign": "center",
-  "heroMaxWidth": 980,
-  "showTagline": true,
-  "showSubhead": true,
-  "showSocials": true
-};
+const QUESTION = 'is this another portfolio site?';
 
-interface HomeProps {
-  /** DB-resolved projects to render in the scroller. Empty array hides the section. */
-  projects?: PublicProject[];
-}
+const EMPTY_SUBMIT_FALLBACK = 'tell me more';
 
-export function Home({ projects = [] }: HomeProps = {}) {
-  const router = useRouter();
-  const onNav = useCallback((target: string) => {
-    router.push(resolveNavPath(target));
-  }, [router]);
+const DEFLECTIONS = [
+  'I am not rich enough to put a real API endpoint on a personal site, so this box does nothing. The icons above actually work, though.',
+  'You think I would waste my tokens on this? The links above go to an actual human.',
+  'Nice try. There is no model behind this, just a few answers I typed in advance.',
+] as const;
 
-  const [t, setTweak] = useTweaks(HOME_TWEAK_DEFAULTS);
+const NAV_BUTTONS = [
+  { label: 'See the projects', href: '/projects', fill: true },
+  { label: 'Writing', href: '/writing', fill: false },
+  { label: 'Other', href: '/other', fill: false },
+] as const;
 
-  const socials = [
-    { kind: "email", href: SOCIAL_LINKS.email },
-    { kind: "x", href: SOCIAL_LINKS.x }, { kind: "linkedin", href: SOCIAL_LINKS.linkedin },
-    { kind: "reddit", href: SOCIAL_LINKS.reddit }, { kind: "substack", href: SOCIAL_LINKS.substack }, { kind: "youtube", href: SOCIAL_LINKS.youtube },
-  ];
-
-  // Alignment-driven flex props.
-  const isCenter = t.heroAlign === "center";
-  const sectionAlign = isCenter ? "center" : "flex-start";
-  const textAlign    = isCenter ? "center" : "left";
-  const socialJustify = isCenter ? "center" : "flex-start";
-
+function Avatar() {
   return (
-    <Page>
-      <Nav current="home" onNav={onNav} resolveHref={resolveNavPath} />
-
-      {/* Hero — full-width container, contents centered (or left). */}
-      <section
-        style={{
-          padding: "clamp(28px, 5vh, 64px) 0 clamp(20px, 3.5vh, 40px)",
-          width: "100%",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: sectionAlign,
-          textAlign,
-        }}
-      >
-        {false && (
-          <p
-            style={{
-              font: "var(--meta)",
-              color: "var(--fg-muted)",
-              margin: 0,
-              letterSpacing: "0.16em",
-              maxWidth: t.heroMaxWidth,
-            }}
-          >
-            ※ {t.tagline}
-          </p>
-        )}
-
-        <h1
-          style={{
-            font: `500 clamp(24px, 3.4vw, ${t.headlineSize}px)/1.22 var(--font-sans)`,
-            color: "var(--fg-strong)",
-            margin: 0,
-            maxWidth: t.heroMaxWidth,
-            letterSpacing: "-0.012em",
-            textWrap: "pretty",
-          }}
-        >
-          {t.headline}
-        </h1>
-
-        {t.showSubhead && (
-          <p
-            style={{
-              font: `400 italic clamp(18px, 2.1vw, ${t.subheadSize}px)/1.4 var(--font-serif)`,
-              color: "var(--fg-muted)",
-              margin: "14px 0 0",
-              maxWidth: Math.min(t.heroMaxWidth, 760),
-              textWrap: "pretty",
-              fontVariationSettings: '"SOFT" 100, "WONK" 1',
-            }}
-          >
-            {t.subhead}
-          </p>
-        )}
-
-        {t.showSocials && (
-          <div
-            style={{
-              display: "flex",
-              gap: t.iconGap,
-              alignItems: "center",
-              justifyContent: socialJustify,
-              marginTop: 23,
-              width: "100%",
-              maxWidth: t.heroMaxWidth,
-            }}
-          >
-            {socials.map((s) => (
-              <SocialIcon key={s.kind} kind={s.kind as 'email' | 'x' | 'linkedin' | 'reddit' | 'substack' | 'youtube'} href={s.href} size={t.iconSize} />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <ProjectsScroller projects={projects} onOpen={() => onNav("projects")} />
-
-      <div style={{ flex: 1 }} />
-
-      {/* Tight footer for home — sits close under the fade. */}
-      <footer
-        style={{
-          marginTop: 14,
-          paddingTop: 12,
-          borderTop: "1px solid var(--hairline)",
-          font: "var(--meta-sm)",
-          color: "var(--fg-muted)",
-          letterSpacing: 0,
-          fontFamily: "var(--font-mono)",
-        }}
-      >
-        No cookies, no analytics, pure vibes.
-      </footer>
-
-      {/* Tweaks panel — only renders when host activates edit mode.
-          Gated by NEXT_PUBLIC_TWEAKS; statically inlined by Next.js at build
-          time, so this becomes dead code in production where the var is unset. */}
-      {process.env.NEXT_PUBLIC_TWEAKS === '1' && (
-        <TweaksPanel title="Tweaks">
-          <TweakSection label="Hero layout" />
-          <TweakRadio  label="Alignment" value={t.heroAlign}
-                       options={["left", "center"]}
-                       onChange={(v) => setTweak("heroAlign", v)} />
-          <TweakSlider label="Max width" value={t.heroMaxWidth} min={620} max={1100} step={20} unit="px"
-                       onChange={(v) => setTweak("heroMaxWidth", v)} />
-
-          <TweakSection label="Copy" />
-          <TweakText   label="Tagline"   value={t.tagline}
-                       onChange={(v) => setTweak("tagline", v)} />
-          <TweakText   label="Headline"  value={t.headline} multiline
-                       onChange={(v) => setTweak("headline", v)} />
-          <TweakText   label="Sub-head"  value={t.subhead}  multiline
-                       onChange={(v) => setTweak("subhead", v)} />
-
-          <TweakSection label="Sizing" />
-          <TweakSlider label="Headline size" value={t.headlineSize} min={22} max={56} unit="px"
-                       onChange={(v) => setTweak("headlineSize", v)} />
-          <TweakSlider label="Sub-head size" value={t.subheadSize}  min={16} max={36} unit="px"
-                       onChange={(v) => setTweak("subheadSize", v)} />
-          <TweakSlider label="Icon size"     value={t.iconSize}     min={14} max={32} unit="px"
-                       onChange={(v) => setTweak("iconSize", v)} />
-          <TweakSlider label="Icon gap"      value={t.iconGap}      min={10} max={48} unit="px"
-                       onChange={(v) => setTweak("iconGap", v)} />
-
-          <TweakSection label="Show / hide" />
-          <TweakToggle label="Tagline" value={t.showTagline}
-                       onChange={(v) => setTweak("showTagline", v)} />
-          <TweakToggle label="Sub-head" value={t.showSubhead}
-                       onChange={(v) => setTweak("showSubhead", v)} />
-          <TweakToggle label="Socials"  value={t.showSocials}
-                       onChange={(v) => setTweak("showSocials", v)} />
-        </TweaksPanel>
-      )}
-    </Page>
+    <div className="h-avatar" aria-hidden="true">
+      S
+    </div>
   );
 }
 
-/* ProjectsScroller — vertically scrollable, ~3 rows visible, soft fade.  */
-function ProjectsScroller({ projects, onOpen }: { projects: PublicProject[]; onOpen: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [atEnd, setAtEnd] = useState(false);
+function SendGlyph() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M12 19V5" />
+      <path d="m5 12 7-7 7 7" />
+    </svg>
+  );
+}
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const onScroll = () => {
-      const remaining = el.scrollHeight - el.clientHeight - el.scrollTop;
-      setAtEnd(remaining < 24);
-    };
-    onScroll();
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => el.removeEventListener("scroll", onScroll);
-  }, []);
+export function Home() {
+  const [asked, setAsked] = useState<string | null>(null);
+  const [turn, setTurn] = useState(0);
+  const [draft, setDraft] = useState('');
 
-  // ~3 rows visible; each row ~140px including its hairline.
-  const visibleHeight = "clamp(380px, 44vh, 480px)";
+  function submitChat(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setAsked(draft.trim() || EMPTY_SUBMIT_FALLBACK);
+    setTurn((n) => n + 1);
+    setDraft('');
+  }
 
-  if (projects.length === 0) return null;
+  // `turn` is 1-based once a submit has happened; clamp so the first reply
+  // reads index 0 rather than wrapping to the end of the pool.
+  const deflection = DEFLECTIONS[(Math.max(turn, 1) - 1) % DEFLECTIONS.length];
 
   return (
-    <div style={{ position: "relative", marginTop: 14, borderTop: "1px solid var(--hairline)", paddingTop: 4, paddingBottom: 10 }}>
-      <div style={{
-        font: "var(--meta-sm)",
-        color: "var(--fg-muted)",
-        letterSpacing: "0.18em",
-        textTransform: "uppercase",
-        fontFamily: "var(--font-mono)",
-        padding: "10px 0 6px",
-      }}>
-        ※ projects
-      </div>
-      <div
-        ref={ref}
-        className="no-scrollbar"
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        padding: 'var(--pad-home)',
+      }}
+    >
+      <header
         style={{
-          height: visibleHeight,
-          overflowY: "auto",
-          paddingRight: 8,
-          WebkitMaskImage:
-            "linear-gradient(to bottom, black 0, black calc(100% - 72px), transparent 100%)",
-          maskImage:
-            "linear-gradient(to bottom, black 0, black calc(100% - 72px), transparent 100%)",
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
         }}
       >
-        {projects.map((p) => (
-          <ProjectRow
-            key={p.id}
-            title={p.title}
-            blurb={p.description}
-            progressPercent={p.progressPercent}
-            githubUrl={p.githubUrl}
-            liveUrl={p.liveUrl}
-            postUrl={p.postUrl}
-            thumbKind={p.thumbKind}
-            onClick={onOpen}
-          />
-        ))}
+        <Link href="/" className="h-word" style={{ color: 'var(--fg-strong)' }}>
+          Swarnim Bagre
+        </Link>
+      </header>
+
+      <div className="h-conv">
+        <div className="h-qbubble">{QUESTION}</div>
+
+        <div className="h-arow">
+          <Avatar />
+          <div style={{ flex: 1 }}>
+            <div className="h-bio">
+              <b>Yes, another one.</b> I do product and strategy at Dell by day,
+              AI tinkering by night. None of it is a business: no revenue model,
+              no growth strategy, just answers to &ldquo;why not.&rdquo;
+            </div>
+
+            <div className="h-actions">
+              {NAV_BUTTONS.map((button) => (
+                <Link
+                  key={button.href}
+                  href={button.href}
+                  className={`h-btn ${
+                    button.fill ? 'h-btn--fill' : 'h-btn--outline'
+                  }`}
+                >
+                  {button.label}
+                </Link>
+              ))}
+            </div>
+
+            <FindMeHere />
+          </div>
+        </div>
+
+        {asked !== null && (
+          <>
+            <div className="h-qbubble">{asked}</div>
+            <div className="h-arow">
+              <Avatar />
+              <div className="h-reply">{deflection}</div>
+            </div>
+          </>
+        )}
       </div>
 
-      <div
-        aria-hidden="true"
-        style={{
-          position: "absolute",
-          left: 0, right: 8, bottom: -22,
-          display: "flex",
-          justifyContent: "center",
-          pointerEvents: "none",
-          opacity: atEnd ? 0 : 1,
-          transition: "opacity var(--dur) var(--ease)",
-        }}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
-             stroke="currentColor" strokeWidth="1.5"
-             strokeLinecap="round" strokeLinejoin="round"
-             style={{ color: "var(--fg-faint)" }}>
-          <path d="M12 5v14"/>
-          <path d="M6 13l6 6 6-6"/>
-        </svg>
-      </div>
+      <form className="h-form" onSubmit={submitChat}>
+        <input
+          className="h-input"
+          type="text"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Ask a follow-up…"
+          aria-label="Ask a follow-up"
+        />
+        <button className="h-send" type="submit" aria-label="Send">
+          <SendGlyph />
+        </button>
+      </form>
     </div>
   );
 }

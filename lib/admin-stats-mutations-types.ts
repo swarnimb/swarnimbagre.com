@@ -24,15 +24,20 @@
  * Discriminated state shape returned by every admin STAT mutation Server
  * Action (T24). Same envelope shape as the project / post equivalents with
  * the `fieldErrors` keys narrowed to the fields the stat form actually owns
- * (`category`, `label`, `value`, `unit`). Stats has no lifecycle (no
- * draft/published, no edit, no slug) — the mutation surface is `insertStat`
- * and `deleteStat` only.
+ * (`category`, `label`, `value`, `unit`, plus `aside` and `sort_order` from
+ * T46 / migration 014). Stats has no lifecycle (no draft/published, no edit,
+ * no slug) — the mutation surface is `insertStat` and `deleteStat` only.
  */
 export interface StatMutationState {
   /** `'idle'` is the initial state used by `useActionState`. */
   status: 'idle' | 'ok' | 'error';
   /** Field-level zod errors, keyed by schema field name. */
-  fieldErrors?: Partial<Record<'category' | 'label' | 'value' | 'unit', string>>;
+  fieldErrors?: Partial<
+    Record<
+      'category' | 'label' | 'value' | 'unit' | 'aside' | 'sort_order',
+      string
+    >
+  >;
   /** Form-level error (Supabase failure, RLS denial, etc.). Generic copy. */
   formError?: string;
 }

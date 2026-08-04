@@ -1,84 +1,140 @@
 /* ============================================================
    Swarnim Bagre — Colors & Type
-   Dark mode only. Warm, editorial, opinionated.
-   ============================================================ */
+   Light mode only. Warm cream ground, deep-green accent.
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+   T46 redesign (2026-08-04). Every value here is lifted verbatim
+   from the Claude Design export that replaced the original dark
+   bundle. Do not "improve" these numbers — they are the source of
+   truth, and the previous bundle's CONSTRAINT-05 verbatim rule now
+   applies to this palette instead.
+
+   Fonts are loaded and self-hosted via next/font in app/layout.tsx
+   (Instrument Serif, Space Grotesk, Space Mono). There is no
+   @import here on purpose: an @import would re-fetch from Google
+   at runtime and cost a render-blocking round trip.
+   ============================================================ */
 
 :root {
   /* ---------- Color tokens ---------- */
-  --bg:            #1C1712;   /* page background — very dark warm brown */
-  --surface:       #252018;   /* cards, raised surfaces */
-  --surface-2:     #2E2820;   /* hover / pressed surface */
-  --hairline:      #3A3328;   /* borders, dividers */
-  --hairline-2:    #4A4135;   /* stronger border on hover */
+  --bg:              #F4F1EA;   /* page ground — warm cream */
+  --surface:         #EDE9DF;   /* carousel frame, menu card, input, avatar */
+  --surface-2:       #ECE7DB;   /* chat question bubble */
 
-  --fg:            #E8E0D0;   /* body text — warm off-white */
-  --fg-strong:     #F4ECDC;   /* headlines, max emphasis */
-  --fg-muted:      #7A7060;   /* dates, metadata, labels */
-  --fg-faint:      #5A5246;   /* very low emphasis */
+  --hairline:        #D3CDBE;   /* every border, and the 1px grid gaps */
+  --hairline-soft:   #DBD5C6;   /* chat question bubble border only */
 
-  --accent:        #C9A84C;   /* aged gold / mustard */
-  --accent-soft:   #8C7530;   /* darker gold, used sparingly */
-  --accent-glow:   rgba(201, 168, 76, 0.18);
+  --fg:              #24211A;   /* body text */
+  --fg-strong:       #16140E;   /* headings, wordmark, active nav, numerals */
+  --fg-bio:          #2B2820;   /* home chat bio + reply (sits between the two) */
+  --fg-muted:        #837D70;   /* ledes, dates, tags, labels, inactive nav */
+  --fg-placeholder:  #9A9384;   /* input placeholder */
 
-  /* Semantic colors — same warm family, no blues */
-  --positive:      #8AA361;   /* sage */
-  --warning:       #C9A84C;   /* same gold as accent */
-  --danger:        #B85C3C;   /* burnt sienna */
+  --accent:          #1F3D2F;   /* deep green — links, primary buttons */
+  --accent-hover:    #183020;   /* primary button hover */
+  --accent-dim:      rgba(31, 61, 47, 0.25);  /* inactive carousel dot */
+
+  /* Brand marks. The only saturated colors on the site, used at
+     16-18px in the home "Find me here" row and nowhere else.
+     Email has no brand, so it borrows --accent. */
+  --brand-linkedin:  #0A66C2;
+  --brand-github:    #181717;
 
   /* ---------- Type families ---------- */
-  --font-serif:    "Fraunces", "Iowan Old Style", "Charter", Georgia, serif;
-  --font-sans:     "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-mono:     "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-serif:  var(--font-instrument-serif), "Instrument Serif", serif;
+  --font-sans:   var(--font-space-grotesk), "Space Grotesk", system-ui, sans-serif;
+  --font-mono:   var(--font-space-mono), "Space Mono", ui-monospace, "SFMono-Regular", monospace;
 
-  /* ---------- Type scale (semantic) ---------- */
-  /* Display & headlines lean into Fraunces with optical size + soft */
-  --display:       400 clamp(56px, 9vw, 128px) / 0.95 var(--font-serif);
-  --display-soft:  300 clamp(56px, 9vw, 128px) / 0.95 var(--font-serif);
-  --h1:            400 clamp(40px, 5vw, 64px) / 1.05 var(--font-serif);
-  --h2:            500 32px / 1.15 var(--font-serif);
-  --h3:            600 22px / 1.3 var(--font-serif);
-  --h4:            600 18px / 1.35 var(--font-sans);
+  /* ---------- Type scale ----------
+     Fluid sizes are verbatim clamp() expressions from the export. */
+  --page-title:        400 clamp(44px, 9vw, 76px) / 1 var(--font-serif);
+  --page-title-inline: 400 clamp(34px, 4.4vw, 54px) / 1 var(--font-serif);  /* Other */
+  --card-title:        400 clamp(24px, 3vw, 30px) / 1.05 var(--font-serif);
+  --stat-num:          400 clamp(44px, 4.6vw, 74px) / 0.82 var(--font-serif);
+  --tile-line:         400 clamp(20px, 1.9vw, 27px) / 1.15 var(--font-serif);
+  --list-title:        400 26px / 1.12 var(--font-serif);
 
-  --body-lg:       400 19px / 1.55 var(--font-sans);
-  --body:          400 16px / 1.6 var(--font-sans);
-  --body-sm:       400 14px / 1.5 var(--font-sans);
+  --lede:              400 clamp(15px, 2vw, 17px) / 1.55 var(--font-sans);
+  --lede-sm:           400 14.5px / 1.4 var(--font-sans);   /* Other page lede */
+  --body:              400 15px / 1.55 var(--font-sans);
+  --body-sm:           400 14px / 1.45 var(--font-sans);
+  --bio:               400 21px / 1.5 var(--font-sans);
+  --reply:             400 19px / 1.5 var(--font-sans);
+  --bubble:            400 16px / 1.5 var(--font-sans);
 
-  --meta:          500 12px / 1.4 var(--font-mono);    /* dates, tags */
-  --meta-sm:       500 11px / 1.3 var(--font-mono);
-  --code:          400 14px / 1.55 var(--font-mono);
+  --meta:              400 12px / 1.4 var(--font-mono);     /* tags, counter pill */
+  --meta-date:         400 12.5px / 1.4 var(--font-mono);   /* writing row date */
+  --meta-kicker:       400 11px / 1.4 var(--font-mono);     /* tile kicker */
+  --meta-label:        400 13px / 1.35 var(--font-mono);    /* slide label, empty states */
 
-  /* ---------- Spacing ---------- */
+  /* ---------- Letter-spacing ---------- */
+  --ls-wordmark: 0.01em;
+  --ls-tag:      0.02em;
+  --ls-soon:     0.03em;
+  --ls-slide:    0.04em;
+  --ls-preview:  0.05em;
+  --ls-date:     0.08em;
+  --ls-kicker:   0.09em;
+
+  /* ---------- Spacing ----------
+     Page padding and rhythm, verbatim clamps. */
+  --pad-page:        clamp(24px, 5vw, 56px) clamp(16px, 4vw, 48px);
+  --pad-page-other:  clamp(22px, 3.5vw, 44px) clamp(16px, 4vw, 48px);
+  --pad-home:        clamp(28px, 5vw, 44px) clamp(20px, 6vw, 60px);
+  --pad-card-body:   clamp(18px, 2.4vw, 24px);
+  --pad-tile:        clamp(18px, 1.8vw, 28px);
+
+  --gap-grid:        clamp(20px, 3vw, 32px);
+  --mb-header:       clamp(36px, 6vw, 68px);
+  --mb-header-other: clamp(20px, 3vw, 34px);
+  --mb-title:        clamp(30px, 5vw, 52px);
+  --mb-title-other:  clamp(16px, 2.4vw, 26px);
+  --mt-closing:      clamp(28px, 4vw, 44px);
+
+  /* Fixed steps, for the places the export uses plain px. */
   --space-1:  4px;
   --space-2:  8px;
   --space-3:  12px;
-  --space-4:  16px;
-  --space-5:  24px;
-  --space-6:  32px;
-  --space-7:  48px;
-  --space-8:  64px;
-  --space-9:  96px;
-  --space-10: 144px;
+  --space-4:  14px;
+  --space-5:  18px;
+  --space-6:  20px;
+  --space-7:  24px;
 
-  /* ---------- Borders / radii ---------- */
-  --radius-0: 0;
-  --radius-1: 2px;
-  --radius-2: 4px;        /* default — small, restrained */
+  /* ---------- Widths ---------- */
+  --container:      1240px;   /* Projects / Writing / Other */
+  --conv-width:     680px;    /* home conversation column + input */
+  --title-width:    660px;    /* page title block */
+  --closing-width:  560px;    /* writing closing paragraph */
+  --lede-width:     440px;    /* Other page inline lede */
+  --card-min:       360px;    /* grid track floor */
+
+  /* ---------- Radii ---------- */
+  --r-card:   16px;
+  --r-menu:   14px;
+  --r-burger: 12px;
+  --r-form:   26px;
+  --r-btn:    22px;
+  --r-pill:   999px;
+  --r-bubble: 18px 18px 4px 18px;   /* chat question bubble, tail bottom-right */
   --border:   1px solid var(--hairline);
-  --border-strong: 1px solid var(--hairline-2);
 
-  /* ---------- Motion ---------- */
-  --ease:        cubic-bezier(.2, .7, .2, 1);
-  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
-  --dur-fast:   140ms;
-  --dur:        220ms;
-  --dur-slow:   420ms;
+  /* ---------- Motion ----------
+     Two transitions in the whole design. Nothing else animates. */
+  --dur:            .18s;
+  --ease:           ease;
+  --dur-carousel:   .4s;
+  --ease-carousel:  cubic-bezier(.4, 0, .2, 1);
+
+  /* ---------- Layout ----------
+     The design has exactly one breakpoint. Kept here as
+     documentation; media queries cannot read a custom property. */
+  --bp-mobile: 640px;
 }
 
 /* ============================================================
    Base
    ============================================================ */
+* { box-sizing: border-box; }
+
 html, body {
   background: var(--bg);
   color: var(--fg);
@@ -87,6 +143,8 @@ html, body {
   text-rendering: optimizeLegibility;
 }
 
+button { font-family: inherit; }
+
 ::selection {
   background: var(--accent);
   color: var(--bg);
@@ -94,80 +152,34 @@ html, body {
 
 /* ============================================================
    Semantic element styles
-   Use these as defaults; override with utility classes if needed.
    ============================================================ */
-.display      { font: var(--display); color: var(--fg-strong); letter-spacing: -0.02em; }
-.display-soft { font: var(--display-soft); color: var(--fg-strong); letter-spacing: -0.025em; font-variation-settings: "SOFT" 100, "WONK" 1; }
+h1, .h1 { font: var(--page-title); color: var(--fg-strong); margin: 0; }
+h2, .h2 { font: var(--list-title); color: var(--fg-strong); margin: 0; }
 
-h1, .h1 { font: var(--h1); color: var(--fg-strong); letter-spacing: -0.015em; margin: 0; }
-h2, .h2 { font: var(--h2); color: var(--fg-strong); letter-spacing: -0.01em; margin: 0; }
-h3, .h3 { font: var(--h3); color: var(--fg-strong); margin: 0; }
-h4, .h4 { font: var(--h4); color: var(--fg-strong); margin: 0; }
+p, .body { font: var(--body); color: var(--fg); margin: 0; text-wrap: pretty; }
+.lede    { font: var(--lede); color: var(--fg-muted); text-wrap: pretty; }
 
-p, .body  { font: var(--body); color: var(--fg); margin: 0; text-wrap: pretty; }
-.body-lg  { font: var(--body-lg); color: var(--fg); text-wrap: pretty; }
-.body-sm  { font: var(--body-sm); color: var(--fg); }
+.meta {
+  font: var(--meta);
+  color: var(--fg-muted);
+  letter-spacing: var(--ls-tag);
+}
 
-.meta     { font: var(--meta); color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.08em; }
-.meta-sm  { font: var(--meta-sm); color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.1em; }
-code, .code {
-  font: var(--code);
-  color: var(--fg);
-  background: var(--surface);
-  padding: 1px 6px;
-  border-radius: var(--radius-2);
+.kicker {
+  font: var(--meta-kicker);
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-kicker);
 }
 
 /* ============================================================
-   Links — accent gold, never blue.
-   The signature interaction: underline draws in left-to-right.
+   Links
+   The old bundle's left-to-right underline draw is gone: this
+   design changes color only, with no underline and no transition
+   on anchors themselves.
    ============================================================ */
 a, .link {
-  color: var(--fg-strong);
-  text-decoration: none;
-  background-image: linear-gradient(var(--accent), var(--accent));
-  background-position: 0 100%;
-  background-repeat: no-repeat;
-  background-size: 0% 1px;
-  transition: background-size var(--dur) var(--ease), color var(--dur) var(--ease);
-  padding-bottom: 2px;
-}
-a:hover, .link:hover {
-  background-size: 100% 1px;
   color: var(--accent);
-}
-
-/* Nav variant — slightly thicker underline */
-.nav-link {
-  color: var(--fg);
   text-decoration: none;
-  background-image: linear-gradient(var(--accent), var(--accent));
-  background-position: 0 100%;
-  background-repeat: no-repeat;
-  background-size: 0% 2px;
-  transition: background-size var(--dur) var(--ease), color var(--dur) var(--ease);
-  padding-bottom: 4px;
-  font: var(--body);
 }
-.nav-link:hover, .nav-link[aria-current="page"] {
-  background-size: 100% 2px;
-  color: var(--accent);
-}
-
-/* ============================================================
-   Surfaces — flat. No shadows, no gradients.
-   ============================================================ */
-.card {
-  background: var(--surface);
-  border: var(--border);
-  border-radius: var(--radius-2);
-  padding: var(--space-5);
-  transition: border-color var(--dur) var(--ease);
-}
-.card:hover { border-color: var(--hairline-2); }
-
-hr, .rule {
-  border: 0;
-  border-top: 1px solid var(--hairline);
-  margin: var(--space-6) 0;
-}
+a:hover, .link:hover { color: var(--fg-strong); }

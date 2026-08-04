@@ -131,7 +131,8 @@ export async function createProjectInternal(
     live_url: parsed.live_url,
     post_url: parsed.post_url,
     progress_percent: parsed.progress_percent,
-    thumb_kind: parsed.thumb_kind,
+    subtitle: parsed.subtitle,
+    tags: parsed.tags,
     post_id: parsed.post_id,
   };
   const { data, error } = await supabase
@@ -190,7 +191,8 @@ function buildProjectUpdatePayload(
     live_url: parsed.live_url,
     post_url: parsed.post_url,
     progress_percent: parsed.progress_percent,
-    thumb_kind: parsed.thumb_kind,
+    subtitle: parsed.subtitle,
+    tags: parsed.tags,
     image_after_id: parsed.image_after_id,
     post_id: parsed.post_id,
   };

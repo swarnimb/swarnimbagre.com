@@ -13,7 +13,7 @@ import { execSync } from 'node:child_process';
 
 // Single source of truth for the SEC-09 allowlist. Adding a new Server Action
 // requires updating BOTH the `'use server'` module(s) AND this constant in
-// lock-step. The allowlist is fifteen IDs spread across seven modules. Next.js
+// lock-step. The allowlist is eighteen IDs spread across eight modules. Next.js
 // only includes Server Actions in the manifest when they are reachable from
 // an app/** route, so an action stays out of the manifest until a page
 // renders a component (or directly calls the action).
@@ -23,6 +23,11 @@ import { execSync } from 'node:child_process';
 //   - `lib/admin-posts-mutations.ts`         — `createPost`, `updatePost`,
 //                                              `deletePost`
 //   - `lib/admin-stats-mutations.ts`         — `insertStat`, `deleteStat`
+//   - `lib/admin-notes-mutations.ts`         - `createNote`, `updateNote`,
+//                                              `deleteNote` (T46: the three
+//                                              text tiles on the Other page;
+//                                              manifest-reachable via
+//                                              `app/(admin)/admin/notes/page.tsx`)
 //   - `lib/admin-images-mutations.ts`        — `uploadImage`, `deleteOrphanImages`
 //                                              (T27 — orphan cleanup sweep)
 //   - `lib/admin-project-media-mutations.ts` — `saveProjectMedia` (T43.E
@@ -47,7 +52,11 @@ const SERVER_ACTION_ALLOWLIST = new Set<string>([
   'updatePost',
   'deletePost',
   'insertStat',
+  'updateStat',
   'deleteStat',
+  'createNote',
+  'updateNote',
+  'deleteNote',
   'uploadImage',
   'deleteOrphanImages',
   'saveProjectMedia',

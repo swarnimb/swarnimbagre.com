@@ -5,8 +5,9 @@ import { signOut } from '@/lib/auth';
 /**
  * Top navigation bar for the admin panel.
  *
- * Server component. Renders four section links (Projects, Posts, Stats, Images)
- * on the left and a sign-out form on the right. The sign-out button posts to the
+ * Server component. Renders five section links (Projects, Posts, Stats, Notes,
+ * Images) on the left and a sign-out form on the right. Notes sits next to
+ * Stats because the two back the same public page. The sign-out button posts to the
  * `signOut` Server Action in `lib/auth.ts`, which clears the Supabase session
  * and redirects to `/admin/login` (auth-flow.md §2a).
  *
@@ -41,6 +42,14 @@ export default function AdminNav(): React.ReactElement {
             className="text-foreground hover:text-primary transition-colors"
           >
             Stats
+          </Link>
+        </li>
+        <li>
+          <Link
+            href="/admin/notes"
+            className="text-foreground hover:text-primary transition-colors"
+          >
+            Notes
           </Link>
         </li>
         <li>

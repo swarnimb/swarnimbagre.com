@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createServerClient } from './supabase';
 import { ServiceError } from './errors';
 import { PUBLISHED, assertSlug, logDbError } from './db-internal';
-import type { Project, Stat, ImageRecord, ProjectMedia } from './types';
+import type { Project, Stat, Note, ImageRecord, ProjectMedia } from './types';
 
 /**
  * Public read-query layer.
@@ -27,16 +27,23 @@ export {
  *
  * Extended in T42 Session B to include the 6 nullable content-model columns
  * added by migration 009 (`github_url`, `live_url`, `post_url`,
- * `progress_percent`, `thumb_kind`, `image_after_id`). Public render
- * (`ProjectRow`, `ProjectMedia`) reads these directly off the row.
+ * `progress_percent`, `thumb_kind`, `image_after_id`), then again in T46
+ * (migration 013) with `subtitle` and `tags`. Public render reads these off
+ * the row via `lib/public-projects.ts`. `thumb_kind` is dead as of T46: the
+ * redesigned card renders photographic media only, so nothing reads it, but
+ * the column is retained so historical values survive.
  */
 const PROJECT_COLUMNS =
   'id, title, slug, description, status, image_id, created_at, updated_at, ' +
   'github_url, live_url, post_url, progress_percent, thumb_kind, image_after_id, ' +
-  'sort_order';
+  'sort_order, subtitle, tags';
 
-/** Column projection for stat queries. */
-const STAT_COLUMNS = 'id, category, label, value, unit, created_at';
+/** Column projection for stat queries. Extended in T46 (migration 014). */
+const STAT_COLUMNS =
+  'id, category, label, value, unit, created_at, aside, sort_order';
+
+/** Column projection for note queries (T46, migration 014). */
+const NOTE_COLUMNS = 'id, kicker, line, sort_order, created_at, updated_at';
 
 /** Column projection for image queries. */
 const IMAGE_COLUMNS = 'id, bucket_path, alt_text, parent_id, parent_type, created_at';
@@ -108,36 +115,59 @@ export async function getProjectBySlug(
 }
 
 /**
- * Fetch all stats and group them by category.
+ * Fetch all stats in display order.
  *
- * Categories are open-ended (LLM-driven), so grouping happens in JS rather
- * than via a hardcoded category list in SQL. Within each category, newest
- * stats come first.
+ * Replaced `getStatsByCategory` at T46. The redesigned Other page renders a
+ * fixed tile grid in a deliberate sequence, so category grouping (which
+ * ordered alphabetically by an open-ended, LLM-written category string) could
+ * not express the required order. Ordering is now explicit `sort_order` ASC
+ * with `created_at` DESC as a deterministic tiebreaker, matching the
+ * projects/posts convention from T44.
  *
  * @param client Optional injected client (for tests).
- * @returns Map of category -> ordered stat array. Empty object if no rows.
+ * @returns Ordered stat array. Empty array if no rows.
  * @throws  ServiceError on any database error.
  */
-export async function getStatsByCategory(
+export async function getOrderedStats(
   client?: SupabaseClient,
-): Promise<Record<string, Stat[]>> {
-  const operation = 'getStatsByCategory';
+): Promise<Stat[]> {
+  const operation = 'getOrderedStats';
   const supabase = client ?? (await createServerClient());
   const { data, error } = await supabase
     .from('stats')
     .select(STAT_COLUMNS)
-    .order('category', { ascending: true })
+    .order('sort_order', { ascending: true })
     .order('created_at', { ascending: false });
   if (error) {
     logDbError(operation, error);
     throw new ServiceError(`${operation} failed`, { cause: error, operation });
   }
-  const grouped: Record<string, Stat[]> = {};
-  for (const row of (data ?? []) as Stat[]) {
-    if (!grouped[row.category]) grouped[row.category] = [];
-    grouped[row.category].push(row);
+  return (data ?? []) as unknown as Stat[];
+}
+
+/**
+ * Fetch all note tiles in display order (T46, migration 014).
+ *
+ * Same ordering contract as `getOrderedStats`: explicit `sort_order` ASC with
+ * `created_at` DESC as the tiebreaker.
+ *
+ * @param client Optional injected client (for tests).
+ * @returns Ordered note array. Empty array if no rows.
+ * @throws  ServiceError on any database error.
+ */
+export async function getNotes(client?: SupabaseClient): Promise<Note[]> {
+  const operation = 'getNotes';
+  const supabase = client ?? (await createServerClient());
+  const { data, error } = await supabase
+    .from('notes')
+    .select(NOTE_COLUMNS)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: false });
+  if (error) {
+    logDbError(operation, error);
+    throw new ServiceError(`${operation} failed`, { cause: error, operation });
   }
-  return grouped;
+  return (data ?? []) as unknown as Note[];
 }
 
 /**

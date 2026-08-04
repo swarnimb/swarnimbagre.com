@@ -268,6 +268,8 @@ describe('getProjectById', () => {
     image_after_id: null,
     post_id: null,
     sort_order: 0,
+    subtitle: null,
+    tags: null,
   };
 
   it('returns the row when one matches the id', async () => {
@@ -319,6 +321,8 @@ describe('getAllStats', () => {
     value: '7.5',
     unit: 'h',
     created_at: '2026-05-13T00:00:00.000Z',
+    aside: null,
+    sort_order: 0,
   };
   /** Sample stat row — older, with a nullable unit. */
   const STAT_ROW_OLDER: Stat = {
@@ -328,9 +332,11 @@ describe('getAllStats', () => {
     value: '12',
     unit: null,
     created_at: '2026-05-12T00:00:00.000Z',
+    aside: null,
+    sort_order: 0,
   };
 
-  it('returns rows newest-first with the exact total count (TS-01 happy)', async () => {
+  it('returns rows in display order with the exact total count (TS-01 happy)', async () => {
     const { client, calls } = makeStub({
       data: [STAT_ROW_NEWEST, STAT_ROW_OLDER],
       error: null,
@@ -341,9 +347,16 @@ describe('getAllStats', () => {
 
     expect(result.rows).toEqual([STAT_ROW_NEWEST, STAT_ROW_OLDER]);
     expect(result.total).toBe(2);
-    // Reverse-chronological is server-side; assert the order() call shape.
-    const orderCall = calls.find((c) => c.method === 'order');
-    expect(orderCall?.args).toEqual(['created_at', { ascending: false }]);
+    // T46 changed this from `created_at DESC` to display order: `sort_order`
+    // ASC with `created_at` DESC as the tiebreaker, matching
+    // `lib/db.ts::getOrderedStats`. The admin list previously showed a
+    // different order from the public page, so an operator could not see the
+    // effect of their own `sort_order` edit without leaving admin.
+    // Ordering is server-side; assert both order() call shapes, in sequence.
+    const orderCalls = calls.filter((c) => c.method === 'order');
+    expect(orderCalls).toHaveLength(2);
+    expect(orderCalls[0]?.args).toEqual(['sort_order', { ascending: true }]);
+    expect(orderCalls[1]?.args).toEqual(['created_at', { ascending: false }]);
     // No filter — stats has no status column.
     expect(calls.find((c) => c.method === 'eq')).toBeUndefined();
   });

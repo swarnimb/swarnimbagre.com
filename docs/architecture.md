@@ -1,7 +1,10 @@
 # Architecture: swarnimbagre.com
 
 **Date:** 2026-05-06
+**Last revised:** 2026-08-04 (T46 public-site redesign)
 **Status:** Locked. Six architectural decisions captured below; each has a Founder Brief in [`founder-brief.md`](founder-brief.md). Binding constraints derived from these decisions are in [`constraints.md`](constraints.md).
+
+> **T46 re-baseline (2026-08-04).** The public site was rebuilt against a new design export. `constraints.md` CONSTRAINT-05 and `design-decisions.md` are the authoritative statement of what the design now is; this document describes how it is built. The mobile component fork, the device-variant middleware header, the `/projects/[slug]` route and the embla dependency were all removed. Overrides 1, 2 and 3 are retired. Sections below carry T46 notes where the shape changed.
 
 This document cannot change without a corresponding update to [`founder-brief.md`](founder-brief.md).
 
@@ -19,7 +22,8 @@ This document cannot change without a corresponding update to [`founder-brief.md
 
 ### 1.2 Frontend libraries
 
-- **Public site:** raw React + custom components from `site/components.jsx` and `site/mobile-components.jsx`. Styling is exclusively CSS variables in `site/colors_and_type.css` plus inline styles. No Tailwind, no component library. **One runtime JS dependency** (added T43 per Override 2): `embla-carousel-react` ^8, with transitive runtime deps `embla-carousel` (core; renamed from `embla-carousel-core` in v8) and `embla-carousel-reactive-utils` — used only by `ProjectMediaCarousel`. Measured baseline ~11.7 KB gzip combined across the three packages; budget ceiling 15 KB gzip per Override 2. The carousel's admin save path uses a Postgres RPC (`save_project_media`, migration `010a_save_project_media_rpc.sql`) for atomic delete-then-insert; see §6.6.9.
+- **Public site:** raw React with custom components under `components/public/`. Styling is exclusively the token layer in `app/styles/colors_and_type.css` plus the component sheets `app/styles/public.css`, `public-home.css`, `public-projects.css`, `public-writing.css` and `public-other.css`. No Tailwind, no component library. **Zero runtime JS dependencies** (T46). `embla-carousel-react` and its two transitive packages were uninstalled when the project media carousel was re-implemented by hand in `ProjectFrame.tsx`; see §4.9. The carousel's admin save path still uses a Postgres RPC (`save_project_media`, migration `010a_save_project_media_rpc.sql`) for atomic delete-then-insert; see §6.6.9.
+- **Public fonts:** Instrument Serif (display), Space Grotesk (body and UI), Space Mono (kickers, dates, tile labels). Loaded through `next/font/google` in `app/layout.tsx`, which self-hosts the files at build time, so there is no runtime request to Google and no render-blocking `@import`. See §4.10 for the `<html>`-vs-`<body>` placement rule, which is load-bearing.
 - **Admin panel:** shadcn/ui + Tailwind CSS, scoped to `/admin/*` only.
 - **Markdown renderer:** `marked` + DOMPurify (see Section 6).
 - **Component testing:** `@testing-library/react` ^16.1.0 + `@testing-library/jest-dom` ^6.6.3 (required for React 19 / Next 15 compatibility).
@@ -38,7 +42,9 @@ Phase A in earlier drafts was a static deploy of the React-via-CDN bundle, with 
 
 ## 2. Data Model
 
-Four tables. RLS default-deny on every one. Migrations live in `supabase/migrations/` with sequential numbering.
+Six tables: `projects`, `posts`, `stats`, `images`, `project_media`, `notes`. RLS default-deny on every one. Migrations live in `supabase/migrations/` with sequential numbering.
+
+**Applied ledger.** The Supabase migration ledger on the production project records nine entries: `007`, `009`, `010`, `010a`, `011`, `012`, `012a`, `013`, `014`. Files `001` through `006` and `008` exist in the repo but are not in the ledger. Migrations `013_project_card_fields.sql` and `014_other_page_model.sql` landed at T46 and are applied to production.
 
 ### 2.1 `projects`
 
@@ -54,10 +60,12 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 | `live_url` | `text` | NULL — public-card `↗ site` button source (migration 009) |
 | `post_url` | `text` | NULL — public-card `¶ notes` button source (migration 009) |
 | `progress_percent` | `integer` | NULL, CHECK `(progress_percent between 0 and 100)` — drives the ProgressRing; null → ring not rendered (migration 009) |
-| `thumb_kind` | `text` | NULL — selects an SVG motif from `lib/thumb-kinds.ts`. No DB-side enum / CHECK; the vocabulary lives in code so new motifs can be added without a migration (migration 009) |
+| `thumb_kind` | `text` | NULL. **Dead since T46.** Originally selected an SVG motif from `lib/thumb-kinds.ts` (migration 009). The redesigned card renders photographic media only, so `lib/thumb-kinds.ts` and the `ThumbKind` union were deleted and nothing reads the column. Retained rather than dropped so historical values survive if the decision is ever revisited. Still carried in the `PROJECT_COLUMNS` projection and typed `string \| null` on `Project` |
 | `image_after_id` | `uuid` | NULL, FK → `images.id` ON DELETE SET NULL — "after" image for the BeforeAfterMedia slider; when null, the card renders a single `<img>` from `image_id` (migration 009) |
 | `post_id` | `uuid` | NULL, FK → `posts.id` ON DELETE SET NULL — links a project to a published post whose body renders on the detail page (Override 3); independent of `post_url` (migration 011) |
 | `sort_order` | `integer` | NOT NULL, CHECK `(sort_order >= 0)` — explicit admin-controlled manual order, independent of `created_at`. Backfilled newest-first on apply so the public listing did not reshuffle on deploy. A `BEFORE INSERT` trigger appends new rows to the end (`max(sort_order)+1`) when no explicit value is supplied (migration 012) |
+| `subtitle` | `text` | NULL, CHECK `subtitle is null or length(btrim(subtitle)) between 1 and 120`. One short line under the card title. Capped so it cannot quietly become a second description and blow out the card layout (migration 013) |
+| `tags` | `text[]` | NULL, CHECK: 1 to 8 elements, no NULL element, no empty-string element, joined length ≤ 200. Rendered as the card's tag pills. Null or empty renders no tag row (migration 013) |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` |
 | `updated_at` | `timestamptz` | NOT NULL, default `now()`, trigger on update |
 
@@ -67,9 +75,13 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 
 **RLS on the new columns (migration 009).** No new policies required. The existing `projects_public_select` (anon, FOR SELECT, USING `status = 'published'`) and `projects_admin_all` (authenticated, FOR ALL) policies from migration 002 grant access at the row level, not column level — every new column is automatically covered. Verified against `pg_policies` post-apply.
 
-**Override 1 (project-card surface, 2026-05-19).** Six columns above are consumed by a redesigned project-card surface that intentionally deviates from the source bundle on the project-card surface only — see `design-decisions.md` "Override 1: Project card redesign" for the surface boundary and `founder-brief.md` decision #28 for the architectural rationale. CONSTRAINT-05's verbatim-bundle rule still applies everywhere outside the named Override 1 surface list.
+**Card content fields (T46, migration 013).** `subtitle` and `tags` fill the two content slots the redesigned project card renders but the schema did not carry. Both are nullable and the card degrades when either is missing, so the migration needs no backfill and every pre-existing row stays valid.
 
-**Override 3 (project detail embed, T45, 2026-06-03).** `post_id` attaches one published post; its body renders on `/projects/<slug>` below the card, and the `/projects` title-link is gated on `post_id`-set-or-2+-media. No new RLS policy — the existing row-level `projects_*` policies cover the column; only a published linked post renders, enforced in-query by `getPublishedPostById` (`lib/db-posts.ts`). See `design-decisions.md` Override 3 + `founder-brief.md` decision #32.
+The tag guards are written entirely with array operators (`array_length`, `cardinality`/`array_remove`, the `@>` containment test, `array_to_string`) rather than a per-element predicate. That is not a style choice: Postgres forbids subqueries inside a CHECK constraint, so there is no way to express "for every element, …" there. The NULL-element guard compares `cardinality(tags)` against `cardinality(array_remove(tags, null))` instead of using `array_position`, whose NULL-search semantics are easy to get subtly wrong. The joined-length ceiling is a coarse per-element size guard standing in for the per-element check that cannot be written. The one case the DB cannot catch is a whitespace-only tag; that is caught a layer up by the zod schema, which trims before validating (same split as the T43.E media schemas).
+
+**Override 1 (project-card surface, 2026-05-19). RETIRED at T46.** Six columns above were consumed by a project-card surface that deviated from the original dark bundle. That bundle and its overrides are retired; see the CONSTRAINT-05 re-baseline note in `constraints.md` and the retirement banner in `design-decisions.md`. `github_url`, `live_url`, `progress_percent` and `image_after_id` remain live columns on the new card surface; `post_url` and `thumb_kind` do not. Historical rationale is `founder-brief.md` decision #28.
+
+**Override 3 (project detail embed, T45, 2026-06-03). RETIRED at T46.** `app/projects/[slug]/page.tsx` was deleted with the redesign, so there is no project detail page and no embedded post body. `post_id` survives and changed job: it now resolves a project card's "Writeup" action to the linked post's own page at `/writing/<slug>`. `app/projects/page.tsx` loads the published post list once alongside the projects, indexes it by id, and maps `post_id` to a slug in one pass, so the resolution cost is one extra query regardless of how many projects link a writeup. A project whose linked post is no longer published simply falls out of the map and its card renders without a Writeup action, rather than linking to a 404. No new RLS policy: the existing row-level `projects_*` policies cover the column, and only published posts enter the map. Historical rationale is `founder-brief.md` decision #32.
 
 **Admin manual reorder (T44, 2026-06-03).** `sort_order` (above) backs admin drag-reorder for both `projects` and `posts`. Persistence goes through a `SECURITY INVOKER` RPC (`save_project_order` / `save_post_order`, migration 012a) that takes an ordered array of ids and writes 0-based positions back into `sort_order` in one transaction; callers supply display order only, never `sort_order` itself. Writes are gated by the existing `*_admin_all` (authenticated) policies — no new RLS. A reorder is a plain UPDATE, so the migration 001 `set_updated_at` trigger bumps `updated_at` (@cto decision, T44.A). Server Actions: `saveProjectOrder` / `savePostOrder`. See `founder-brief.md` decision #33.
 
@@ -98,9 +110,13 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 | `label` | `text` | NOT NULL |
 | `value` | `text` | NOT NULL |
 | `unit` | `text` | NULL (not every stat has a unit) |
+| `aside` | `text` | NULL, CHECK `aside is null or length(btrim(aside)) between 1 and 160`. The small italic line under the tile label. Optional, and capped so it stays a quip rather than a paragraph (migration 014) |
+| `sort_order` | `integer` | NOT NULL, default `0`, CHECK `(sort_order >= 0)`. Deterministic display order for the numeric tiles (migration 014) |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` |
 
-**Indexes:** `(category, created_at DESC)`. Append-only — no UPDATE policy, no DELETE policy for any role except `authenticated` (the admin).
+**Indexes:** `(category, created_at DESC)` from migration 001; `stats_sort_order_idx` on `(sort_order, created_at DESC)` added in migration 014 to serve the ordered public read. Append-only: no UPDATE policy, no DELETE policy for any role except `authenticated` (the admin).
+
+**Read ordering (T46).** `getStatsByCategory` was removed and replaced by `getOrderedStats()` in `lib/db.ts`, which returns a flat `Stat[]` ordered by `sort_order` ASC with `created_at` DESC as a deterministic tiebreaker. The redesigned Other page is a fixed tile grid in a deliberate sequence; the old grouped read ordered alphabetically by `category`, an open-ended string that OpenClaw writes, so it could not express "these four tiles, in this order". Ordering now matches the `projects` / `posts` convention from T44. `category` is still a column and still absorbs new stat kinds without a migration per §2.3's schema rationale; it just no longer drives display grouping.
 
 **Schema rationale (Decision 2 — resolves ASSUMPTION-01):** OpenClaw is an LLM agent that interprets plain-English Telegram messages. The schema must be flexible enough that adding a new "category" of stat does not require a migration. Per-category tables would mean a migration per new hobby. A KV store would lose typing entirely. A single typed table with `category` + `label` + `value` + `unit` text columns is the middle ground: typed enough to query, flexible enough to absorb new categories without schema changes. **Founder Brief:** "Stats schema" in [`founder-brief.md`](founder-brief.md).
 
@@ -135,7 +151,7 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 | `order_index` | `integer` | NOT NULL, CHECK `order_index >= 0` — derived by the `save_project_media` RPC from array position via `WITH ORDINALITY`, not trusted from the client |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` |
 
-**Shape discriminator.** `project_media` carries no explicit `kind` enum column. A row is a "single" when `image_after_id IS NULL` and a "pair" when `image_after_id` is non-NULL; the public render path branches on this nullability (see `components/public/ProjectMedia.tsx` + `ProjectMediaCarouselParts.tsx`). Keeping the discriminator implicit in FK nullability avoids a redundant column that could disagree with FK presence — and removes the need for a synchronizing CHECK constraint to keep `kind` and `image_after_id` consistent.
+**Shape discriminator.** `project_media` carries no explicit `kind` enum column. A row is a "single" when `image_after_id IS NULL` and a "pair" when `image_after_id` is non-NULL; the public render path branches on this nullability. Keeping the discriminator implicit in FK nullability avoids a redundant column that could disagree with FK presence, and removes the need for a synchronizing CHECK constraint to keep `kind` and `image_after_id` consistent. **T46 note:** the branch moved. `ProjectMedia.tsx` and `ProjectMediaCarouselParts.tsx` were deleted; `toSlides()` in `components/public/ProjectFrame.tsx` now flattens each row into one slide, or two when `imageAfterUrl` is present. The pair is presented as two sequential slides rather than a draggable before/after slider.
 
 **Image FK delete semantics.** Both `image_id` and `image_after_id` use `ON DELETE RESTRICT` — deleting an `images` row still referenced by any `project_media` row raises an error. This is the inverse of the legacy `projects.image_id` / `projects.image_after_id` columns (migrations 001 + 009), which use `ON DELETE SET NULL`. The RESTRICT posture here makes media-row removal explicit: the admin must delete the `project_media` row first, which releases the FK and lets the image be cleaned. This protects published carousel slides from silent breakage during orphan cleanup at `/admin/images` (T27).
 
@@ -151,9 +167,34 @@ Four tables. RLS default-deny on every one. Migrations live in `supabase/migrati
 
 **Storage bucket.** Reuses the existing `images` bucket per §2.4. No new bucket, no new `storage.objects` policy — CONSTRAINT-20 is N/A for migrations 010 / 010a. Storage-object access for media images is already gated by the `images` table's parent-published-status policy from migration 007.
 
-**Public render surface.** The carousel that renders these rows is documented in §4.9 (Carousel surface — Override 2) and `design-decisions.md` "Override 2: Project media carousel". The schema is content-model; the carousel is the visual surface; CONSTRAINT-22 (the public-site JS-library budget) governs the carousel's runtime dependency.
+**Public render surface.** The carousel that renders these rows is documented in §4.9. The schema is content-model; the carousel is the visual surface. **T46 note:** the schema is unchanged, but its consumer was replaced. Override 2 is retired and the carousel is hand-rolled, so CONSTRAINT-22 no longer has a consumer here; the rule itself still stands for the next library anyone proposes.
 
-**Founder Brief:** entries 29 (Override 2 / embla decision), 30 (atomic save — RPC pattern), and 31 (CONSTRAINT-22 codified + Override 2 surface boundary recorded) in [`founder-brief.md`](founder-brief.md).
+**Founder Brief:** entries 30 (atomic save, RPC pattern) and 34 (T46 redesign) in [`founder-brief.md`](founder-brief.md). Entries 29 and 31 record the retired embla decision and are historical.
+
+### 2.6 `notes`
+
+Added at T46 by migration `014_other_page_model.sql`. Backs the three text tiles on the Other page ("currently watching / reading / goal").
+
+| Column | Type | Constraints |
+|---|---|---|
+| `id` | `uuid` | PK, default `gen_random_uuid()` |
+| `kicker` | `text` | NOT NULL, CHECK `length(btrim(kicker)) between 1 and 40`. The small label above the line |
+| `line` | `text` | NOT NULL, CHECK `length(btrim(line)) between 1 and 120`. The tile's one sentence |
+| `sort_order` | `integer` | NOT NULL, default `0`, CHECK `(sort_order >= 0)` |
+| `created_at` | `timestamptz` | NOT NULL, default `now()` |
+| `updated_at` | `timestamptz` | NOT NULL, default `now()`, trigger on update |
+
+**Indexes:** `notes_sort_order_idx` on `(sort_order, created_at DESC)`, mirroring `stats_sort_order_idx`.
+
+**Trigger:** `notes_set_updated_at` (BEFORE UPDATE, per row) reuses the shared `public.set_updated_at()` function defined in migration 001. No new function was written.
+
+**RLS (migration 014).** `notes_public_select` (anon, FOR SELECT, USING `true`) and `notes_admin_all` (authenticated, FOR ALL, USING + WITH CHECK both `true`). Every note is public the moment it is written; there is no draft state, matching `stats` rather than `projects` / `posts`. `service_role` is deliberately not granted a policy: it bypasses RLS by definition, so adding one would be redundant and a footgun. RLS for `notes` is bundled into the same file as the table definition, following the migration 010 convention rather than the 002 through 005 split-file one.
+
+**Not reachable by OpenClaw.** The `stats-ingest` Edge Function writes `stats` only. `notes` is admin-authored through the panel. This keeps CONSTRAINT-04's programmatic write surface as narrow as it was before the table existed.
+
+**Why a separate table and not more `stats` rows.** A note is a kicker plus a line. It has no number, no unit and no category, so forcing it into `stats` would mean three NULL columns per row plus an implicit convention distinguishing "stat with a null value" from a real stat. A four-column table is cheaper than that convention and cannot be misread.
+
+**Read path.** `getNotes()` in `lib/db.ts` returns an ordered `Note[]` using the same contract as `getOrderedStats`: `sort_order` ASC, `created_at` DESC as tiebreaker. `app/other/page.tsx` loads stats and notes in parallel, each behind its own `safeLoad` call, so one failing query degrades half the grid instead of blanking the page. Admin CRUD follows the established per-resource split: `lib/admin-queries-notes.ts` plus the `lib/admin-notes-mutations-{types,internal,schemas,}.ts` family (§6.6.6, §6.6.8).
 
 ---
 
@@ -178,6 +219,8 @@ export async function getPublishedProjects() {
 ```
 
 All queries go through Supabase's query builder — never raw SQL string concatenation (SEC-03).
+
+**T46 read-surface changes.** `getStatsByCategory` was removed; `getOrderedStats()` and `getNotes()` replace it (§2.3, §2.6). `lib/post-summary.ts` was added with two pure helpers, `formatPostDate(createdAt)` and `excerptFromContent(content, maxChars = 180)`. The redesigned writing list shows a date string and a short excerpt per row; both are derived at render time from the `created_at` and `content` columns the `posts` table already has, rather than adding a `published_on` or `excerpt` column. The derivation is cheap, has no second source of truth to drift from, and needs no admin field or migration. If either ever needs to be authored by hand rather than derived, that is the point to add a column.
 
 ### 3.2 Admin writes — Server Actions
 
@@ -226,16 +269,20 @@ All admin routes are nested under `/admin/*`. Login lives at `/admin/login`, the
 ```
 swarnimbagre.com/
 ├── app/
-│   ├── layout.tsx                    # root layout — public fonts, public CSS, NO Tailwind
+│   ├── layout.tsx                    # root layout: next/font on <html>, public CSS, no Tailwind
 │   ├── page.tsx                      # Home
-│   ├── projects/page.tsx
-│   ├── projects/[slug]/page.tsx
+│   ├── projects/page.tsx             # no [slug] route, deleted at T46
 │   ├── writing/page.tsx
 │   ├── writing/[slug]/page.tsx
 │   ├── other/page.tsx
 │   ├── styles/                       # CSS files for the public site + admin
-│   │   ├── colors_and_type.css       # public bundle tokens, imported by root layout
+│   │   ├── colors_and_type.css       # public design tokens, imported by root layout
 │   │   ├── base.css                  # public site base, imported by root layout
+│   │   ├── public.css                # shared public shell (T46)
+│   │   ├── public-home.css           # per-page sheets, each with its own 640px block (T46)
+│   │   ├── public-projects.css
+│   │   ├── public-writing.css
+│   │   ├── public-other.css
 │   │   └── admin.css                 # Tailwind + scoped-preflight, imported only by admin layout
 │   └── (admin)/                      # route group — admin layout owns Tailwind import
 │       ├── layout.tsx                # admin-only Tailwind/shadcn CSS, Inter font
@@ -248,12 +295,19 @@ swarnimbagre.com/
 │           ├── stats/page.tsx
 │           └── images/page.tsx
 ├── components/
-│   ├── public/                       # public bundle ports (verbatim from site/)
+│   ├── public/                       # one responsive tree, no mobile/ fork (T46)
+│   │   ├── SiteHeader.tsx
+│   │   ├── ProjectCard.tsx
+│   │   ├── ProjectFrame.tsx          # hand-rolled carousel
+│   │   ├── MarkdownContent.tsx
+│   │   ├── home/SocialIcons.tsx
+│   │   └── pages/{Home,Projects,Writing,Other}.tsx
 │   ├── admin/                        # shadcn-based admin components
 │   └── ui/                           # shadcn primitives (generated)
 ├── lib/
 │   ├── supabase.ts                   # client factories (server, browser)
 │   ├── db.ts                         # public reads
+│   ├── post-summary.ts               # formatPostDate + excerptFromContent (T46)
 │   ├── admin-queries.ts              # admin reads — thin barrel re-exporting the per-resource modules (T37; see §6.6.8)
 │   ├── admin-queries-{projects,posts,stats}.ts  # admin reads, split per resource (T37)
 │   ├── admin-{projects,posts,stats}-mutations.ts  # admin writes (per-resource Server Actions; see §6.6.6)
@@ -267,7 +321,7 @@ swarnimbagre.com/
 │   ├── migrations/                   # SQL migrations, sequentially numbered
 │   └── functions/
 │       └── stats-ingest/index.ts     # Edge Function
-├── middleware.ts                     # Next.js middleware: UA detect + admin auth gate
+├── middleware.ts                     # Next.js middleware: admin auth gate only (T46)
 └── public/                           # static assets
 ```
 
@@ -312,11 +366,15 @@ The wrapper exists to convert data-layer throws into degraded UI states at the p
 
 **Founder Brief:** "UI-boundary error handling" in [`founder-brief.md`](founder-brief.md).
 
-### 4.5 Server / Client prop boundary — `Nav` / `MobileNav`
+### 4.5 Server / Client prop boundary — `Nav` / `MobileNav` (retired at T46)
 
-Next.js 15 RSC forbids passing function props from a Server Component to a Client Component (`Event handlers cannot be passed to Client Component props.`). `Nav` and `MobileNav` are `'use client'` components used by both Server Component detail pages (`app/projects/[slug]/page.tsx`, `app/writing/[slug]/page.tsx`) and Client Component list-render components (`components/public/pages/{Projects,Writing,Other}.tsx`).
+> **Retired.** `Nav` and `MobileNav` were deleted with the rest of the old component tree. Navigation is now `components/public/SiteHeader.tsx`, a single `'use client'` component that holds its own `NAV_ITEMS` array of plain `href` strings, renders `next/link` elements directly, and derives the active section from `usePathname()`. No caller passes link targets in at all, so the dual-prop dance below has no remaining consumer. `lib/nav-targets.ts` still exists in the tree but is no longer imported by anything.
+>
+> The underlying RSC rule is unchanged and still binding, which is why this section is kept rather than deleted: a Server Component cannot hand a function prop to a Client Component. Any future component that must accept link targets from both a Server Component page and a Client Component parent needs the same plain-data escape hatch.
 
-Both Nav components accept two parallel ways to specify link targets:
+Next.js 15 RSC forbids passing function props from a Server Component to a Client Component (`Event handlers cannot be passed to Client Component props.`). `Nav` and `MobileNav` were `'use client'` components used by both Server Component detail pages and Client Component list-render components.
+
+Both Nav components accepted two parallel ways to specify link targets:
 
 | Prop | Type | Caller boundary | Use when |
 |---|---|---|---|
@@ -330,17 +388,19 @@ Both Nav components accept two parallel ways to specify link targets:
 
 ### 4.6 Image read pattern
 
-Image rendering for public content uses async Server Components that resolve image IDs to signed Storage URLs at request time. The pipeline:
+Image IDs are resolved to signed Storage URLs on the server, at request time, before any markup is rendered. The pipeline (revised at T46):
 
-1. Page (Server Component) loads project/post data via `getProjectBySlug` / `getPostBySlug`, wrapped in `safeLoad` (CONSTRAINT-14). The data includes `image_id`.
-2. Page renders `<ProjectImage imageId={...} alt={...} />` or `<PostImage imageId={...} alt={...} />`.
-3. The image component (also a Server Component) calls `getImageById(imageId)` to resolve the `images` row, then `getImageUrl(bucket_path)` to produce a signed URL with TTL 3600s.
-4. The component returns `<img src=... alt=... loading="lazy" />`. On any error in the resolution chain it logs with context and returns `null` — visitors never see a broken-image icon (EH-04).
+1. Page (Server Component) calls a loader inside `safeLoad` (CONSTRAINT-14): `loadPublicProjects()` from `lib/public-projects.ts` for the projects list, `getPostBySlug` for a writing post.
+2. The loader calls `getImageById(imageId)` to resolve the `images` row, then `getImageUrl(bucket_path)` for a signed URL with TTL 3600s, and attaches the result to the render-ready shape (`PublicProject.imageUrl` / `imageAfterUrl` / `media[]`).
+3. The page hands the pre-signed shape to the client components (`ProjectCard`, `ProjectFrame`), which never touch the DB or Storage.
+4. Resolution failures are isolated per row: a failed URL becomes `null` and is logged with project id and column name, but the row still renders without its image. Visitors never see a broken-image icon (EH-04).
 
-**Why async Server Components, not client components:**
+**T46 change.** This used to run through per-image async Server Components, `<ProjectImage>` and `<PostImage>`, which each did their own `getImageById` + `getImageUrl` call at render time. Those components were deleted with the old component tree; the work moved up into the loader. CONSTRAINT-15 is unchanged (signed URLs only, TTL 3600s, centralized in `lib/images.ts::getImageUrl`); only the caller moved. Doing the resolution in one place also makes the per-row failure isolation explicit rather than a property of where the component happened to sit.
+
+**Why server-side resolution, not client fetching:**
 - SEO: search engines see the rendered `<img>` in the initial HTML.
 - First paint: the URL is present at hydration, no extra round trip.
-- Existing `components/public/` is mostly `'use client'` for interactive UI (cards, nav, demos). Image components are pure data loaders — different concern, different runtime.
+- `components/public/` is mostly `'use client'` for interactive UI (header, cards, carousel). Data loading is a different concern and a different runtime; keeping it above the client boundary means no component ever holds a Supabase client.
 
 **Why signed URLs, not public:**
 - The `images` bucket is private (migration `005_rls_images.sql`). Public URLs would 404. See CONSTRAINT-15.
@@ -350,7 +410,7 @@ Image rendering for public content uses async Server Components that resolve ima
 - `getImageUrl(bucketPath: string, client?: SupabaseClient): Promise<string>` — `lib/images.ts`. Throws `ServiceError` on empty path or storage failure.
 - `getImageById(id: string, client?: SupabaseClient): Promise<ImageRecord | null>` — `lib/db.ts`. Mirrors `getProjectBySlug` pattern (DI for tests, throws `ServiceError` on DB error).
 
-**Tests:** Vitest + `@testing-library/react` for React component rendering. React 19 / Next 15 require testing-library v16+. See `tests/images.test.ts` and `tests/ProjectImage.test.tsx`.
+**Tests:** Vitest + `@testing-library/react` for React component rendering. React 19 / Next 15 require testing-library v16+. See `tests/images.test.ts` and `tests/public-projects.test.ts` (`tests/ProjectImage.test.tsx` went with the component).
 
 ### 4.3 File and function size budgets
 
@@ -396,19 +456,43 @@ E2E tests log in via a server-side magic-link flow that mirrors the production c
 
 **Cross-references:** `tests/e2e/fixtures/auth.ts` (`loginAsAdmin()` helper), `tests/e2e/admin-logout.spec.ts` (consumer + serial-mode example), `docs/plan-phase-2-admin.md` T19.2 (origin), `docs/founder-brief.md` entries 19 + 20.
 
-### 4.9 Carousel surface — Override 2
+### 4.9 Carousel surface: hand-rolled (T46)
 
-The public-site project media carousel introduced at T43 is the first surface on the public site to depend on a runtime JS library. This section documents the boundary policy that surrounds it; the visual + chrome specs themselves live in `design-decisions.md` "Override 2: Project media carousel".
+> **Supersedes the previous §4.9 (Carousel surface, Override 2, T43).** Override 2 and its `embla-carousel-react` dependency are retired. The section below describes what ships now.
 
-**Public-site JS-library policy (CONSTRAINT-22).** Adding any runtime npm dependency to a public-site code path requires (a) a named Override entry in `design-decisions.md` with a Surface boundary listing every file the library touches, and (b) a build-time measurement showing the route-chunk delta on each affected production route stays at or under 15 KB gzip. Measurement source is `next build`'s First Load JS output on the route mounting the new code, not the published ESM size on npm — bundler tree-shaking and shared-chunk attribution make the published size a misleading proxy. Exceeding the budget escalates to `@cto`, not silent absorption. Override 2's measured delta at T43.H: +8 KB First Load JS on `/projects` + `/projects/[slug]`, inside budget.
+The project media carousel lives entirely in `components/public/ProjectFrame.tsx` (`'use client'`, no npm dependency). It imports `useRef` and `useState` from React and a type from `lib/types`, and nothing else.
 
-**Multi-instance DOM-id requirement.** `/projects` renders N project cards on one page; each card mounts its own carousel instance. Embla's `aria-controls` / `aria-labelledby` wiring and the dot-button IDs all need to be carousel-scoped — `React.useId()` per `ProjectMediaCarousel` mount, then prefix every accessibility-bearing id with that scope. The carousel must not assume it is the only instance on the page; a hardcoded DOM id (e.g., `id="carousel-prev"`) would collide on the second card and break screen-reader navigation for both. This requirement is enforced in `tests/ProjectMediaCarousel.test.tsx` (multi-mount test asserting per-instance id uniqueness).
+**Mechanics.** A single track element is translated with `transform: translateX(-current * 100%)`, where `current` is a `useState` index. Navigation wraps modulo slide count. Dots (`.sb-dot`, one per slide, `aria-current` on the active one), previous / next arrows and a `n / total` counter render only when there is more than one slide. Touch handling is a `touchstart` / `touchend` delta with a named `SWIPE_THRESHOLD_PX = 40` constant; a smaller delta is treated as a tap and ignored. `toSlides(media)` flattens the `project_media` rows into the slide array, emitting two slides for a row that has an `imageAfterUrl` (§2.5).
 
-**Client-component boundary.** `ProjectMediaCarousel` and `ProjectMediaCarouselParts` are both `'use client'`. Server Components above them (`ProjectMedia`, `ProjectCard`, page loaders) pass already-resolved data — signed image URLs (TTL 3600s per CONSTRAINT-15), caption text, alt text, kind, order — and never reach into the carousel's runtime state. The `view: 'list' | 'detail'` prop is the only render-time switch the server passes in; it selects dot/arrow sizing per the Decision specs table in Override 2.
+**Why hand-rolled and not embla restyled.** The design export's carousel is a transformed track with dots and arrows and nothing else. Matching it directly was both more faithful to the export and one dependency fewer than importing a gesture engine and then suppressing most of what it does. The behaviors that justified embla at T43, drag physics, keyboard coordination, snap containment, are not present in the export's version, so paying 8 KB of route chunk for them bought nothing. `embla-carousel-react` and its two transitive packages were uninstalled. **The public site is back to zero runtime JS dependencies.**
 
-**Surface boundary (referenced, not duplicated).** The file-by-file list of what counts as "the Override 2 surface" lives at `design-decisions.md` "Override 2: Project media carousel" → "Surface boundary." Changes to that list (adding or removing a file) require an Override 2 amendment, not a silent architecture-doc edit.
+**Public-site JS-library policy (CONSTRAINT-22) still applies.** Adding any runtime npm dependency to a public-site code path requires (a) a named Override entry in `design-decisions.md` with a Surface boundary listing every file the library touches, and (b) a build-time measurement showing the route-chunk delta on each affected production route stays at or under 15 KB gzip. Measurement source is `next build`'s First Load JS output on the route mounting the new code, not the published ESM size on npm: bundler tree-shaking and shared-chunk attribution make the published size a misleading proxy. Exceeding the budget escalates to `@cto`, not silent absorption. The constraint currently has zero consumers.
 
-**Cross-references:** `design-decisions.md` "Override 2: Project media carousel" + `constraints.md` CONSTRAINT-22 + `docs/founder-brief.md` entry 31 (CONSTRAINT-22 codification) + entry 29 (Override 2 / embla decision) + §2.5 above (the schema the carousel renders) + §6.6.9 below (the atomic save RPC that backs the admin write path).
+**Multi-instance safety.** `/projects` renders N project cards on one page, each mounting its own `ProjectFrame`. Every instance keeps its own `current` state and its accessibility wiring is label-based (`aria-label` referencing the project title) rather than id-based, so there are no cross-instance DOM id collisions to guard against. If a future change introduces an id-bearing attribute here, scope it per mount with `React.useId()`; a hardcoded id would collide on the second card and break screen-reader navigation for both.
+
+**Client-component boundary.** Server Components above `ProjectFrame` pass already-resolved data: signed image URLs (TTL 3600s per CONSTRAINT-15), caption text, alt text and order. Nothing above the boundary reaches into the carousel's runtime state.
+
+**Empty state.** A project with zero slides renders a `no preview yet` placeholder. There is no SVG-motif fallback: the motif set was deleted along with `thumb_kind` (§2.1). This makes a real screenshot a hard requirement for any project card that should look finished. See `founder-brief.md` entry 34.
+
+**Cross-references:** `constraints.md` CONSTRAINT-05 (re-baselined) + CONSTRAINT-22 + `design-decisions.md` + §2.5 above (the schema the carousel renders) + §6.6.9 below (the atomic save RPC that still backs the admin write path).
+
+### 4.10 Public render architecture: one responsive tree (T46)
+
+**No device fork.** The `components/public/mobile/` tree is deleted, and with it the T10 `x-device-variant` header that `middleware.ts` set from the User-Agent. The public site is a single component tree with **one breakpoint at 640px**. Every public stylesheet carries its own `@media (max-width: 640px)` block; there is no second breakpoint anywhere.
+
+Two components maintained in parallel is two places for a fix to land and one place for it to be forgotten, and server-side UA sniffing made every public response vary on a header, which is bad for caching and wrong at the edges of the UA string. The T46 design export is a single responsive layout, so the fork had nothing left to justify it.
+
+**Middleware no longer runs on public requests.** The matcher narrowed from a catch-all negative lookahead to `['/admin/:path*']`. Middleware is now exactly the admin session gate (§6.2). That is one fewer edge invocation per public page view and removes a whole class of "did middleware do something to this response" question from public-route debugging.
+
+**Stylesheet split.** Tokens live in `app/styles/colors_and_type.css`. Component classes are split across `app/styles/public.css` (the shared shell: header, nav, page frame) plus one sheet per page: `public-home.css`, `public-projects.css`, `public-writing.css`, `public-other.css`. Each page sheet owns its own responsive block, so a page's desktop and mobile rules sit next to each other in one file rather than in a shared bottom-of-file media query. All seven public sheets are imported by `app/layout.tsx`.
+
+**Font variables go on `<html>`, not `<body>`.** `colors_and_type.css` composes `--font-serif`, `--font-sans` and `--font-mono` at `:root` from the three `next/font` variables. A CSS custom property is substituted where it is **declared**, not where it is used. With the `next/font` variable classes on `<body>`, the `--font-instrument-serif` and friends are not in scope at `:root`, so the composed families resolve to the guaranteed-invalid value, which silently invalidates every `font:` shorthand that references them. The site rendered entirely in Times New Roman with no error in the console. This was a real bug during the build, found and fixed by moving the classes to `<html>`. The comment in `app/layout.tsx` records it. Do not move them back.
+
+**Palette inverted.** The public palette went from warm dark to light: `--bg` from `#1C1712` to `#F4F1EA` (warm cream), `--accent` from gold `#C9A84C` to deep green `#1F3D2F`. Admin deliberately stayed dark, so the four brand tokens in CONSTRAINT-16 are now admin-owned constants rather than values borrowed from the public palette, and must not be resynced to it. See §4.2 and the CONSTRAINT-16 T46 amendment.
+
+**Routes.** `app/projects/[slug]/page.tsx` was deleted; `/writing/[slug]` is retained. A project card's "Writeup" action links to the linked post's own page (§2.1, Override 3 retirement note). The public route set is `/`, `/projects`, `/writing`, `/writing/[slug]`, `/other`.
+
+**Remaining public components.** `SiteHeader`, `ProjectCard`, `ProjectFrame`, `MarkdownContent`, `home/SocialIcons`, and `pages/{Home,Projects,Writing,Other}`. Everything else formerly under `components/public/` was deleted: the entire `mobile/` tree (`MobileNav`, `MobileFooter`, `MobilePage`, `MobilePageTitle`, `MobileProjectCard`, `MobileProjectRow`, `mobile/pages/*`) plus `BeforeAfterMedia`, `BeforeAfterMediaScenes`, `DemoLoop`, `Footer`, `MorePointer`, `Nav`, `Page`, `PostImage`, `ProgressRing`, `ProjectImage`, `ProjectMedia`, `ProjectMediaCarousel`, `ProjectMediaCarouselParts`, `ProjectRow`, `ProjectThumb`, `SectionHead`, `SocialIcon`, `StatusPill`, `StillMedia`, `TweaksPanel`, `TypoIcon` and `Wordmark`. `lib/thumb-kinds.ts` went with them.
 
 ---
 
@@ -427,7 +511,7 @@ Single Vercel project linked to the GitHub repo. Production branch: `main`. Prev
 
 Single free-tier project. Migrations applied via Supabase CLI from `supabase/migrations/` (or via the Supabase MCP `apply_migration` tool during development).
 
-**Tables:** `projects`, `posts`, `stats`, `images` — all with RLS enabled.
+**Tables:** `projects`, `posts`, `stats`, `images`, `project_media`, `notes` — all with RLS enabled.
 **Storage:** bucket `images` (private bucket — public read goes through signed URLs or RLS-checked policy). Max file size 2 MB and the JPEG/PNG/WebP MIME allowlist are codified in `supabase/migrations/008_storage_images_limits.sql` (see §2.4).
 **Edge Functions:** `stats-ingest`.
 **Auth:** Email provider only, magic link enabled, SMTP defaults.
@@ -442,7 +526,7 @@ Single free-tier project. Migrations applied via Supabase CLI from `supabase/mig
 | `STATS_INGEST_SECRET` | Supabase Edge Function env | **no** | Shared secret for `stats-ingest` |
 | `ADMIN_ALLOWED_EMAIL` | Vercel server-only + local `.env.local` | **no** | Admin allowlist enforcement for magic-link sign-in (Layer 2 defense; Layer 1 is the Supabase dashboard). See `auth-flow.md` §3 and `lib/auth-internal.ts::assertAllowlistedEmail`. |
 | `NEXT_PUBLIC_SITE_URL` | Vercel + local `.env.local` | yes | Absolute site URL for magic-link `emailRedirectTo`. Falls back to `NEXT_PUBLIC_VERCEL_URL` when unset. See `lib/auth-internal.ts::getSiteUrl`. |
-| `NEXT_PUBLIC_TWEAKS` | Vercel (preview only, never production) | yes (boolean) | Gates the tweaks panel |
+| `NEXT_PUBLIC_TWEAKS` | Vercel (preview only, never production) | yes (boolean) | Gated the tweaks panel. **Dead since T46:** `components/public/TweaksPanel.tsx` was deleted with the old component tree, so nothing reads this variable. Left documented rather than silently dropped; removing it from Vercel is a housekeeping item, not a code change |
 
 `.env.example` lists every Next.js-runtime variable name with no values (SEC-01). The one exception is `STATS_INGEST_SECRET`: it is Edge-Function-only (read via `Deno.env.get`, never by the Next.js app), so it appears in `.env.example` only as a documented comment block — not as an assignable key — pointing at the Supabase secret-store lifecycle in `docs/openclaw-config.md`. Service role key is loaded only in server contexts; never imported in client components. `NEXT_PUBLIC_TWEAKS` is unset in production.
 
@@ -481,10 +565,19 @@ The following operational configuration is NOT in version control and is tracked
 - `images_public_select` — role `anon`, FOR SELECT, USING a join condition: visible only when the parent (project or post) has `status='published'`.
 - `images_admin_all` — role `authenticated`, FOR ALL, USING `true`, WITH CHECK `true`.
 
+#### `project_media`
+- `project_media_public_select`: role `anon`, FOR SELECT, USING an EXISTS check that re-resolves the parent project's `status='published'` at query time (migration 010; see §2.5).
+- `project_media_admin_all`: role `authenticated`, FOR ALL, USING `true`, WITH CHECK `true`.
+
+#### `notes`
+- `notes_public_select`: role `anon`, FOR SELECT, USING `true` (notes are public, like stats; there is no draft state).
+- `notes_admin_all`: role `authenticated`, FOR ALL, USING `true`, WITH CHECK `true`.
+- **No policy for `service_role`,** deliberately: it bypasses RLS by definition. **No write path for OpenClaw:** the Edge Function writes `stats` only (CONSTRAINT-04).
+
 ### 6.2 Auth boundaries
 
-- **Public routes** (`/`, `/projects`, `/projects/[slug]`, `/writing`, `/writing/[slug]`, `/other`): no auth. Anon Supabase client. RLS is the only filter.
-- **Admin routes** (`/admin/*`): middleware checks for a Supabase session cookie. Unauthenticated → redirect to `/admin/login`. The admin's email is enforced by the fact that there is exactly one user account; no role check is needed.
+- **Public routes** (`/`, `/projects`, `/writing`, `/writing/[slug]`, `/other`): no auth. Anon Supabase client. RLS is the only filter. Since T46 the middleware matcher is `['/admin/:path*']`, so middleware does not execute on these routes at all.
+- **Admin routes** (`/admin/*`): middleware checks for a Supabase session cookie. Unauthenticated → redirect to `/admin/login`. `/admin/login` and `/admin/auth/callback` are ungated by exact-match (never prefix-match). The admin's email is enforced by the fact that there is exactly one user account; no role check is needed.
 - **Edge Function**: shared-secret header. Constant-time comparison (SEC-04 — timing attack mitigation).
 
 Admin allowlist is two-layer (`auth-flow.md` §3): the Supabase dashboard "Allow new users to sign up" is OFF (Layer 1), and `lib/auth-internal.ts::assertAllowlistedEmail` rejects any email != `ADMIN_ALLOWED_EMAIL` before invoking `signInWithOtp` (Layer 2). Callback route defense-in-depth (`app/(admin)/admin/auth/callback/route.ts`) re-checks the email post-`verifyOtp` so a session is never minted for a non-allowlisted user.
@@ -528,13 +621,13 @@ Auth-adjacent Server Actions whose internal helpers have outcome-dependent timin
 
 #### 6.6.4 `/api/admin/*` route handler gate (F-17, audit pass 5)
 
-The middleware matcher `'/((?!api|_next/static|_next/image|favicon.ico).*)'` excludes `/api/*` (Next.js convention to avoid running middleware on API routes that handle their own auth). No `/api/admin/*` routes exist today — the only route under `app/api/` is the `NODE_ENV`-gated test fixture `app/api/test/sign-in/route.ts` (§4.7), which self-protects via its own secret + env gates and is unreachable in production — but the natural growth path lands admin-only endpoints (image upload, batch operations, deletes) under `/api/admin/*`, where the middleware admin-gate would not run. To prevent silent bypass, every route handler added under `app/api/admin/**` MUST: (1) call `getServerSession()` from `lib/session.ts` at the top of the handler, before any business logic; (2) return `new Response(null, { status: 401 })` if the session is null. Use the same uniform 401 across every admin API route — no body, no error detail — paralleling the SEC-09 redirect-uniformity contract that the page gate already satisfies. The alternative — tightening the middleware matcher to gate `/api/admin/*` directly — is acceptable but not preferred: per-handler protection keeps API routes self-protective and decouples them from the matcher's evolution. Document the choice when the first `/api/admin/*` route ships. **Code-review checklist:** any new file under `app/api/admin/**` must contain a `getServerSession()` call before any business logic. See `docs/security-report.md` audit-5 F-17.
+The middleware matcher does not cover `/api/*`. At the time of this finding the matcher was the negative-lookahead form `'/((?!api|_next/static|_next/image|favicon.ico).*)'`, which excluded `/api/*` explicitly; since T46 it is `['/admin/:path*']`, which excludes it by construction. Either way the conclusion below is unchanged, and the narrower matcher makes it more emphatic: nothing under `app/api/` is protected by middleware. No `/api/admin/*` routes exist today — the only route under `app/api/` is the `NODE_ENV`-gated test fixture `app/api/test/sign-in/route.ts` (§4.7), which self-protects via its own secret + env gates and is unreachable in production — but the natural growth path lands admin-only endpoints (image upload, batch operations, deletes) under `/api/admin/*`, where the middleware admin-gate would not run. To prevent silent bypass, every route handler added under `app/api/admin/**` MUST: (1) call `getServerSession()` from `lib/session.ts` at the top of the handler, before any business logic; (2) return `new Response(null, { status: 401 })` if the session is null. Use the same uniform 401 across every admin API route — no body, no error detail — paralleling the SEC-09 redirect-uniformity contract that the page gate already satisfies. The alternative — tightening the middleware matcher to gate `/api/admin/*` directly — is acceptable but not preferred: per-handler protection keeps API routes self-protective and decouples them from the matcher's evolution. Document the choice when the first `/api/admin/*` route ships. **Code-review checklist:** any new file under `app/api/admin/**` must contain a `getServerSession()` call before any business logic. See `docs/security-report.md` audit-5 F-17.
 
 #### 6.6.5 Build invariants (F-14, SEC-09)
 
 Two invariants on the auth surface must hold across every build. Breaking either one is a security regression, not a refactor.
 
-- **Server Action surface (F-14, audit pass 4):** every export of a `'use server'` module is a public Server Action with a stable hashed ID in the client bundle. After every build, `.next/server/server-reference-manifest.json` must list exactly the actions named in the test allowlist at `tests/server-actions-manifest.test.ts` — no more, no fewer. The allowlist is twelve IDs — `signInWithMagicLink` (T17), `signOut` (T18), `createProject` (T21), `updateProject` (T21), `deleteProject` (T22), `createPost` (T23), `updatePost` (T23), `deletePost` (T23), `insertStat` (T24), `deleteStat` (T24), `uploadImage` (T26), `deleteOrphanImages` (T27) — spread across five modules. The fifth module is `lib/admin-images-mutations.ts`, which ships `uploadImage` and `deleteOrphanImages`; `uploadImage` shipped at T25 commit 2 but only entered the manifest at T26 when `ImageUpload.tsx` became imported by `ProjectForm` and `PostForm`, and `deleteOrphanImages` lands in the manifest at T27 when the `/admin/images` page renders `OrphanCleanup` (Next.js excludes Server Actions that are not reachable from any app/** route). The throwing helper for the orphan sweep lives in `lib/admin-images-cleanup.ts` (sibling to `lib/admin-images-orphan.ts`) — the cleanup-sweep concern is split from the orphan-on-swap concern under CQ-03 (single responsibility). Any PR that adds a new action ID without updating the test allowlist + auditing the new surface is a wire-level enumeration regression. See §6.6.1, §6.6.6, `docs/auth-flow.md` §2a point 4, `docs/security-report.md` audit-4 F-14 and audit-5 F-14a/c/d.
+- **Server Action surface (F-14, audit pass 4):** every export of a `'use server'` module is a public Server Action with a stable hashed ID in the client bundle. After every build, `.next/server/server-reference-manifest.json` must list exactly the actions named in the test allowlist at `tests/server-actions-manifest.test.ts` — no more, no fewer. The allowlist is now eighteen IDs: `signInWithMagicLink` (T17), `signOut` (T18), `createProject` / `updateProject` (T21), `deleteProject` (T22), `createPost` / `updatePost` / `deletePost` (T23), `insertStat` / `deleteStat` (T24), `uploadImage` (T26), `deleteOrphanImages` (T27), `saveProjectMedia` (T43), `saveProjectOrder` / `savePostOrder` (T44), and `createNote` / `updateNote` / `deleteNote` (T46, the `notes` admin CRUD from §2.6). It stood at twelve across five modules through T27; each subsequent resource added its own module and its own entries. The fifth module is `lib/admin-images-mutations.ts`, which ships `uploadImage` and `deleteOrphanImages`; `uploadImage` shipped at T25 commit 2 but only entered the manifest at T26 when `ImageUpload.tsx` became imported by `ProjectForm` and `PostForm`, and `deleteOrphanImages` lands in the manifest at T27 when the `/admin/images` page renders `OrphanCleanup` (Next.js excludes Server Actions that are not reachable from any app/** route). The throwing helper for the orphan sweep lives in `lib/admin-images-cleanup.ts` (sibling to `lib/admin-images-orphan.ts`) — the cleanup-sweep concern is split from the orphan-on-swap concern under CQ-03 (single responsibility). Any PR that adds a new action ID without updating the test allowlist + auditing the new surface is a wire-level enumeration regression. See §6.6.1, §6.6.6, `docs/auth-flow.md` §2a point 4, `docs/security-report.md` audit-4 F-14 and audit-5 F-14a/c/d.
 - **Middleware uniformity (SEC-09, audit pass 5):** every middleware redirect outcome on the admin auth gate must pad to `MIN_DURATION_MS = 750` and write zero `Set-Cookie` headers. Tests S1–S5 in `tests/middleware.test.ts` enforce this contract across the no-session, Supabase-error, and helper-throw branches; do not relax them without re-running `@security`. See `docs/security-report.md` audit-5 "Six-channel SEC-09 uniformity".
 
 #### 6.6.6 Admin mutation surface — three-module file split, per resource

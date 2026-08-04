@@ -1,0 +1,205 @@
+/* ============================================================
+   Public site — "everything else" tile grid
+   T46 redesign (2026-08-04).
+
+   Viewport-locked on desktop: the page is exactly one screen and
+   does not scroll. Four numeric tiles over three text tiles.
+
+   The hairlines are NOT borders. The grid sets a 1px gap over a
+   --hairline background, so the seams are the background showing
+   through. That is why every tile sets its own --bg fill.
+
+   On mobile the height lock is released (height:auto) and the rows
+   reflow: numeric tiles go 2-up, text tiles stack.
+   ============================================================ */
+
+.cpage {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.cpage .container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: var(--pad-page-other);
+  width: 100%;
+}
+
+.cpage .site-header {
+  margin-bottom: var(--mb-header-other);
+}
+
+.cpage .desktop-nav {
+  font-size: 15px;
+}
+
+/* Title and lede sit on one baseline rather than stacking. */
+.ctitle-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 18px;
+  margin-bottom: var(--mb-title-other);
+}
+
+.ctitle {
+  font: var(--page-title-inline);
+  color: var(--fg-strong);
+  margin: 0;
+}
+
+.ctitle-lede {
+  font: var(--lede-sm);
+  color: var(--fg-muted);
+  max-width: var(--lede-width);
+  text-wrap: pretty;
+}
+
+/* ------------------------------------------------------------
+   Hairline grid
+   ------------------------------------------------------------ */
+.cgrid {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--hairline);
+  border: var(--border);
+  overflow: hidden;
+}
+
+.crow,
+.trow {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 1px;
+  background: var(--hairline);
+}
+
+.ctile,
+.ttile {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+  padding: var(--pad-tile);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ctile { gap: 14px; }
+.ttile { gap: 12px; }
+
+/* ------------------------------------------------------------
+   Numeric tile
+   ------------------------------------------------------------ */
+.c-numrow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.c-num {
+  font: var(--stat-num);
+  color: var(--fg-strong);
+}
+
+.c-unit {
+  font: var(--body);
+  color: var(--fg-muted);
+}
+
+.c-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.c-label {
+  font: var(--meta-label);
+  font-family: var(--font-sans);
+  color: var(--fg-muted);
+}
+
+.c-aside {
+  font: 400 11.5px/1.4 var(--font-sans);
+  font-style: italic;
+  color: var(--fg-muted);
+  text-wrap: pretty;
+}
+
+/* ------------------------------------------------------------
+   Text tile
+   ------------------------------------------------------------ */
+.t-kicker {
+  font: var(--meta-kicker);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-kicker);
+  color: var(--fg-muted);
+}
+
+.t-line {
+  font: var(--tile-line);
+  color: var(--fg-strong);
+  text-wrap: pretty;
+}
+
+/* ------------------------------------------------------------
+   Empty state
+   The page needs 7 filled tiles to look deliberate. Until the
+   content exists, say so plainly rather than rendering a grid of
+   blank boxes.
+   ------------------------------------------------------------ */
+.cempty {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: var(--border);
+  font: var(--meta-label);
+  font-family: var(--font-mono);
+  letter-spacing: var(--ls-preview);
+  color: var(--fg-muted);
+}
+
+/* ============================================================
+   Mobile — release the height lock and reflow
+   ============================================================ */
+@media (max-width: 640px) {
+  .cpage {
+    height: auto;
+    overflow: visible;
+  }
+
+  .cgrid,
+  .crow,
+  .trow {
+    flex: none;
+  }
+
+  .crow {
+    flex-wrap: wrap;
+  }
+
+  .crow .ctile {
+    flex: 1 1 calc(50% - 1px);
+    min-height: 152px;
+  }
+
+  .trow {
+    flex-direction: column;
+  }
+
+  .ttile {
+    min-height: 96px;
+  }
+}

@@ -39,6 +39,8 @@ const PUBLISHED_ROW: Project = {
   image_after_id: null,
   post_id: null,
   sort_order: 0,
+  subtitle: null,
+  tags: null,
 };
 
 /** Sample draft row used as the pre-fetch result on draft-edit paths. */
@@ -59,23 +61,32 @@ const DRAFT_ROW: Project = {
   image_after_id: null,
   post_id: null,
   sort_order: 0,
+  subtitle: null,
+  tags: null,
 };
 
 /**
- * Null defaults for the five T42 content-model fields. Spread into create-
- * and update-side test inputs so each case only declares the fields it
- * actually exercises — the rest carry through as `null`. Kept here (not in
- * the schemas module) because it is test-scaffolding, not production shape.
+ * Null defaults for the content-model fields carried on both mutation
+ * boundaries. Spread into create- and update-side test inputs so each case
+ * only declares the fields it actually exercises — the rest carry through as
+ * `null`. Kept here (not in the schemas module) because it is
+ * test-scaffolding, not production shape.
+ *
+ * `thumb_kind` left this set at T46: the schemas are `.strict()`, so the key
+ * is now rejected outright rather than merely ignored.
  */
-const NULL_T42_FIELDS = {
+const NULL_CONTENT_FIELDS = {
   github_url: null,
   live_url: null,
   post_url: null,
   progress_percent: null,
-  thumb_kind: null,
-  // T45.A — `post_id` rides alongside the T42 content-model fields on both the
-  // create- and update-side payloads. Defaulted to null here so each case only
-  // declares it when it specifically exercises the post link.
+  // T46: `subtitle` and `tags` are nullable but NOT optional on either
+  // schema, so every payload has to carry them.
+  subtitle: null,
+  tags: null,
+  // T45.A — `post_id` rides alongside the other content-model fields on both
+  // the create- and update-side payloads. Defaulted to null here so each case
+  // only declares it when it specifically exercises the post link.
   post_id: null,
 } as const;
 
@@ -86,7 +97,7 @@ const NULL_T42_FIELDS = {
  */
 const NULL_UPDATE_FIELDS = {
   image_id: null,
-  ...NULL_T42_FIELDS,
+  ...NULL_CONTENT_FIELDS,
   image_after_id: null,
 } as const;
 
@@ -247,6 +258,8 @@ describe('createProjectInternal', () => {
       image_after_id: null,
       post_id: null,
       sort_order: 0,
+      subtitle: null,
+      tags: null,
     };
     const { client, calls } = makeCreateStub({ data: insertedRow, error: null });
 
@@ -255,7 +268,7 @@ describe('createProjectInternal', () => {
         title: 'New Thing',
         description: 'first cut',
         status: 'draft',
-        ...NULL_T42_FIELDS,
+        ...NULL_CONTENT_FIELDS,
       },
       client,
     );
@@ -268,7 +281,7 @@ describe('createProjectInternal', () => {
       description: 'first cut',
       status: 'draft',
       slug: 'new-thing',
-      ...NULL_T42_FIELDS,
+      ...NULL_CONTENT_FIELDS,
     });
   });
 
@@ -284,17 +297,18 @@ describe('createProjectInternal', () => {
           title: 'Dup',
           description: 'collision',
           status: 'draft',
-          ...NULL_T42_FIELDS,
+          ...NULL_CONTENT_FIELDS,
         },
         client,
       ),
     ).rejects.toBeInstanceOf(ServiceError);
   });
 
-  // T42 — five new content-model fields ride alongside the existing
+  // T42 — the content-model fields ride alongside the existing
   // title/description/status/slug payload on the create-side INSERT. Image
   // FKs stay out of create (CONSTRAINT-12 / T42 schema docstring) — they
-  // attach post-insert via the edit flow.
+  // attach post-insert via the edit flow. T46 swapped `thumb_kind` out of the
+  // set for `subtitle` and `tags`.
   it('passes new content-model fields into the insert payload', async () => {
     const insertedRow: Project = {
       id: 'p-full',
@@ -309,10 +323,12 @@ describe('createProjectInternal', () => {
       live_url: 'https://example.com/live',
       post_url: '/writing/foo',
       progress_percent: 75,
-      thumb_kind: 'disc',
+      thumb_kind: null,
       image_after_id: null,
       post_id: null,
       sort_order: 0,
+      subtitle: 'One short line',
+      tags: ['next', 'supabase'],
     };
     const { client, calls } = makeCreateStub({
       data: insertedRow,
@@ -328,7 +344,8 @@ describe('createProjectInternal', () => {
         live_url: 'https://example.com/live',
         post_url: '/writing/foo',
         progress_percent: 75,
-        thumb_kind: 'disc',
+        subtitle: 'One short line',
+        tags: ['next', 'supabase'],
         post_id: null,
       },
       client,
@@ -341,7 +358,8 @@ describe('createProjectInternal', () => {
     expect(payload.live_url).toBe('https://example.com/live');
     expect(payload.post_url).toBe('/writing/foo');
     expect(payload.progress_percent).toBe(75);
-    expect(payload.thumb_kind).toBe('disc');
+    expect(payload.subtitle).toBe('One short line');
+    expect(payload.tags).toEqual(['next', 'supabase']);
   });
 
   // T45.A — `post_id` (nullable uuid FK into `posts`) rides on the create-side
@@ -365,6 +383,8 @@ describe('createProjectInternal', () => {
       image_after_id: null,
       post_id: POST_ID,
       sort_order: 0,
+      subtitle: null,
+      tags: null,
     };
     const { client, calls } = makeCreateStub({ data: insertedRow, error: null });
 
@@ -373,7 +393,7 @@ describe('createProjectInternal', () => {
         title: 'Linked Thing',
         description: 'links to a post',
         status: 'draft',
-        ...NULL_T42_FIELDS,
+        ...NULL_CONTENT_FIELDS,
         post_id: POST_ID,
       },
       client,
@@ -630,7 +650,8 @@ describe('updateProjectInternal', () => {
         live_url: 'https://example.com/live',
         post_url: '/writing/foo',
         progress_percent: 75,
-        thumb_kind: 'disc',
+        subtitle: 'One short line',
+        tags: ['next', 'supabase'],
         image_after_id: IMAGE_AFTER_ID,
         post_id: null,
       },
@@ -644,7 +665,8 @@ describe('updateProjectInternal', () => {
     expect(payload.live_url).toBe('https://example.com/live');
     expect(payload.post_url).toBe('/writing/foo');
     expect(payload.progress_percent).toBe(75);
-    expect(payload.thumb_kind).toBe('disc');
+    expect(payload.subtitle).toBe('One short line');
+    expect(payload.tags).toEqual(['next', 'supabase']);
     expect(payload.image_after_id).toBe(IMAGE_AFTER_ID);
   });
 
@@ -677,7 +699,8 @@ describe('updateProjectInternal', () => {
         live_url: null,
         post_url: null,
         progress_percent: null,
-        thumb_kind: null,
+        subtitle: null,
+        tags: null,
         image_after_id: NEW_AFTER_ID,
         post_id: null,
       },
@@ -738,7 +761,8 @@ describe('updateProjectInternal', () => {
         live_url: null,
         post_url: null,
         progress_percent: null,
-        thumb_kind: null,
+        subtitle: null,
+        tags: null,
         image_after_id: SAME_AFTER_ID,
         post_id: null,
       },

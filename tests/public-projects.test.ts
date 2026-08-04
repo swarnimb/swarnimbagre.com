@@ -55,6 +55,8 @@ function makeRow(overrides: Partial<Project> = {}): Project {
     image_after_id: null,
     post_id: null,
     sort_order: 0,
+    subtitle: null,
+    tags: null,
     ...overrides,
   };
 }
@@ -80,6 +82,8 @@ describe('loadPublicProjects — happy path', () => {
         post_url: '/writing/x',
         progress_percent: 60,
         thumb_kind: 'disc',
+        subtitle: 'Counts putts so you do not have to.',
+        tags: ['next', 'supabase'],
       }),
     ]);
 
@@ -91,6 +95,8 @@ describe('loadPublicProjects — happy path', () => {
       title: 'putt-or-not',
       slug: 'putt-or-not',
       description: 'Disc golf stats tracker.',
+      subtitle: 'Counts putts so you do not have to.',
+      tags: ['next', 'supabase'],
       thumbKind: 'disc',
       progressPercent: 60,
       githubUrl: 'https://github.com/sb/x',

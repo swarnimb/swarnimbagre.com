@@ -1,151 +1,59 @@
-'use client'
+import Link from 'next/link';
+import { SiteHeader } from '@/components/public/SiteHeader';
+import { excerptFromContent, formatPostDate } from '@/lib/post-summary';
+import type { Post } from '@/lib/types';
 
-// Writing — list-driven. No cards. Magazine-feeling.
-// Title + date + one-line description. Type does the work.
+/**
+ * `/writing` — the post list.
+ *
+ * Each row links to `/writing/[slug]`. The design export pointed every row
+ * back at the list itself, which would have left post bodies unreachable;
+ * keeping the detail route was the T46 Q2 decision.
+ *
+ * The whole row is the link, so the hover arrow and the title recolor are
+ * driven by `.lrow:hover` in CSS rather than by state here.
+ */
 
-import { useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { resolveNavPath } from '@/lib/nav-targets';
-import { Page } from '@/components/public/Page';
-import { Nav } from '@/components/public/Nav';
-import { Footer } from '@/components/public/Footer';
+const LEDE =
+  'Mostly essays I wrote to figure out what I think. Occasionally a build log. Never a thread.';
 
-const DEFAULT_POSTS = [
-  {
-    date: "APR 2026",
-    title: "Things I learned by quitting my todo app, three times",
-    desc:  "A short essay about systems, in which the system is mostly me.",
-  },
-  {
-    date: "FEB 2026",
-    title: "On being mediocre, on purpose",
-    desc:  "Why I pick hobbies I'm bad at, and why everyone telling me to pick one is wrong.",
-  },
-  {
-    date: "DEC 2025",
-    title: "I taught an LLM to argue with my disc golf scorecard",
-    desc:  "Build log. Mostly a long list of edge cases for what counts as a 'fair' birdie.",
-  },
-  {
-    date: "OCT 2025",
-    title: "Personal finance, but only the next 90 minutes",
-    desc:  "Why most budgeting tools fail at the only question I actually ask.",
-  },
-  {
-    date: "JUL 2025",
-    title: "Agents, frameworks, and the fine art of half-reading docs",
-    desc:  "A field report from someone who built one anyway.",
-  },
-  {
-    date: "MAY 2025",
-    title: "Volleyball: a beginner's grief manual",
-    desc:  "I started at 28. Here is everything that hurts now.",
-  },
-  {
-    date: "FEB 2025",
-    title: "Tennis, but mostly an essay about giving up",
-    desc:  "And then unquitting the next morning, because that's the whole bit.",
-  },
-];
+const CLOSING =
+  'Written between builds. New pieces land here first, usually once a project is finished enough to explain.';
 
-export interface WritingItem {
-  date: string;
-  title: string;
-  desc: string;
-  /** When present, the row's title link navigates to this URL. */
-  href?: string;
-}
+const EMPTY = 'Nothing published yet.';
 
-interface WritingProps {
-  items?: WritingItem[];
-}
-
-export function Writing({ items = DEFAULT_POSTS }: WritingProps = {}) {
-  const router = useRouter();
-  const onNav = useCallback((target: string) => {
-    router.push(resolveNavPath(target));
-  }, [router]);
-
+export function Writing({ posts }: { posts: Post[] }) {
   return (
-    <Page>
-      <Nav current="writing" onNav={onNav} resolveHref={resolveNavPath} />
+    <div className="container">
+      <SiteHeader />
 
-      <header style={{ padding: "72px 0 32px", maxWidth: 720 }}>
-        <h1 style={{
-          font: "300 italic clamp(48px, 6vw, 72px)/1 var(--font-serif)",
-          letterSpacing: "-0.025em",
-          color: "var(--fg-strong)",
-          margin: 0,
-          fontVariationSettings: '"SOFT" 100, "WONK" 1',
-        }}>
-          writing
-        </h1>
-        <p style={{
-          font: "var(--body-lg)",
-          color: "var(--fg-muted)",
-          marginTop: 20,
-          textWrap: "pretty",
-          maxWidth: 540,
-        }}>
-          Mostly essays I wrote to figure out what I think.
-          Occasionally a build log. Never a thread.
-        </p>
-      </header>
+      <div className="title-block">
+        <h1 className="page-title">Writing</h1>
+        <p className="page-lede">{LEDE}</p>
+      </div>
 
-      {/* Magazine list — wide single column. */}
-      <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
-        {items.map((p, i) => (
-          <li
-            key={i}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "minmax(90px, 110px) 1fr",
-              gap: 32,
-              padding: "26px 0",
-              borderBottom: "1px solid var(--hairline)",
-              alignItems: "baseline",
-            }}
-          >
-            <div style={{
-              font: "var(--meta-sm)",
-              color: "var(--fg-muted)",
-              letterSpacing: "0.14em",
-            }}>
-              {p.date}
-            </div>
-            <div>
-              <h2 style={{
-                font: "400 26px/1.25 var(--font-serif)",
-                color: "var(--fg-strong)",
-                letterSpacing: "-0.012em",
-                margin: 0,
-              }}>
-                {p.href ? (
-                  <a href={p.href} className="link">
-                    {p.title}
-                  </a>
-                ) : (
-                  <a href="#" className="link" onClick={(e) => e.preventDefault()}>
-                    {p.title}
-                  </a>
-                )}
-              </h2>
-              <p style={{
-                font: "var(--body)",
-                color: "var(--fg-muted)",
-                margin: "6px 0 0",
-                maxWidth: 620,
-                textWrap: "pretty",
-              }}>
-                {p.desc}
-              </p>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {posts.length === 0 ? (
+        <p className="page-lede">{EMPTY}</p>
+      ) : (
+        <section className="lsection">
+          {posts.map((post) => (
+            <Link className="lrow" key={post.id} href={`/writing/${post.slug}`}>
+              <span className="lrow-date">{formatPostDate(post.created_at)}</span>
+              <div>
+                <h2 className="ltitle">
+                  {post.title}
+                  <span className="larrow" aria-hidden="true">
+                    &rarr;
+                  </span>
+                </h2>
+                <p className="lexcerpt">{excerptFromContent(post.content)}</p>
+              </div>
+            </Link>
+          ))}
+        </section>
+      )}
 
-      <div style={{ flex: 1 }} />
-      <Footer line="Thinking out loud, with a publish button." />
-    </Page>
+      <p className="lclosing">{CLOSING}</p>
+    </div>
   );
 }

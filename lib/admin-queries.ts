@@ -11,6 +11,7 @@
  *   - `lib/admin-queries-projects.ts`      — projects list + detail reads
  *   - `lib/admin-queries-posts.ts`         — posts list + detail reads
  *   - `lib/admin-queries-stats.ts`         — stats list reads
+ *   - `lib/admin-queries-notes.ts`         — notes list reads (T46)
  *   - `lib/admin-queries-project-media.ts` — project media (carousel rows) reads (T43.D)
  *
  * The shared structured-log helper lives in `lib/admin-mutation-log.ts`
@@ -25,5 +26,7 @@ export { getAllPosts, getPostById, listPostsForPicker } from './admin-queries-po
 export type { PostFilter, PostRow, PostPickerRow } from './admin-queries-posts';
 
 export { getAllStats } from './admin-queries-stats';
+
+export { getAllNotes } from './admin-queries-notes';
 
 export { getProjectMediaByProjectAdmin } from './admin-queries-project-media';

@@ -4,8 +4,11 @@ import { useActionState, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import StatFields, {
+  EMPTY_STAT_VALUES,
+  statFieldsFilled,
+  type StatFieldValues,
+} from '@/components/admin/StatFields';
 import { insertStat } from '@/lib/admin-stats-mutations';
 import {
   STAT_MUTATION_INITIAL_STATE,
@@ -16,91 +19,32 @@ import {
 const SAVE_SUCCESS_MESSAGE = 'Saved.';
 
 /**
- * Max input length for each text field. Mirrors `STAT_FIELD_MAX_LENGTH` in
- * `lib/admin-stats-mutations-internal.ts` so the HTML `maxLength`
- * attribute and the zod boundary agree.
- */
-const FIELD_MAX_LENGTH = 200;
-
-/** Names of fields the stat form owns. */
-type StatFormField = 'category' | 'label' | 'value' | 'unit';
-
-/** Props for {@link FieldRow}. */
-interface FieldRowProps {
-  id: string;
-  name: StatFormField;
-  labelText: string;
-  value: string;
-  onValueChange: (next: string) => void;
-  error: string;
-  required?: boolean;
-}
-
-/**
- * Label + Input + inline error slot row. Extracted (CQ-07) because the four
- * stat-form fields differ only in `name`, `labelText`, and `required` —
- * inlining the same JSX four times would be duplication, not clarity.
- */
-function FieldRow({
-  id,
-  name,
-  labelText,
-  value,
-  onValueChange,
-  error,
-  required = false,
-}: FieldRowProps): React.ReactElement {
-  const errorId = `${id}-error`;
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={id}>{labelText}</Label>
-      <Input
-        id={id}
-        name={name}
-        value={value}
-        onChange={(e) => onValueChange(e.target.value)}
-        aria-invalid={Boolean(error)}
-        aria-describedby={errorId}
-        maxLength={FIELD_MAX_LENGTH}
-        required={required}
-      />
-      {error ? (
-        <p id={errorId} role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-/**
  * Props for {@link StatsInsertForm}.
  */
 export interface StatsInsertFormProps {
-  /** Optional injected action — tests override this to avoid Server Action wiring. */
+  /** Optional injected action: tests override this to avoid Server Action wiring. */
   insertAction?: typeof insertStat;
-}
-
-/**
- * Read a field error from the action state, defaulting to empty string for
- * the inline `<p role="alert">` slot below each input.
- */
-function fieldError(state: StatMutationState, field: StatFormField): string {
-  return state.fieldErrors?.[field] ?? '';
 }
 
 /**
  * Admin insert form for a stat row.
  *
- * Stats has no edit path (CONSTRAINT-10: delete-then-reinsert for
- * corrections) and no slug or status, so this is an insert-only form. Four
- * text inputs — `category`, `label`, `value` are required; `unit` is
- * optional. The Submit button is disabled until all three required fields
- * are non-empty (the controlled-state guard matches the zod boundary's
- * `.trim().min(1)`).
+ * `category`, `label`, `value` are required; `unit` and `aside` are optional;
+ * `sort_order` is a number defaulting to 0. The Save button is disabled until
+ * all three required fields are non-empty (the controlled-state guard matches
+ * the zod boundary's `.trim().min(1)`).
+ *
+ * T46 (migration 014) added the last two fields: `aside` is the italic quip
+ * the redesigned tile renders under the label, and `sort_order` is the manual
+ * display rank the fixed 7-tile grid needs, since category-then-recency could
+ * not express "these four, in this sequence".
+ *
+ * The inputs themselves live in {@link import('./StatFields').default}, which
+ * this form shares with {@link import('./StatRow').default} so the insert
+ * path and the in-place edit path cannot drift apart.
  *
  * On a successful action resolution (`state.status === 'ok'`), the form
- * surfaces a sonner toast, resets the four controlled fields, and calls
+ * surfaces a sonner toast, resets the controlled fields, and calls
  * `router.refresh()` so the list below picks up the new row without a
  * navigation. On error, field-level zod messages render inline under each
  * input, and a form-level generic message renders above the form for any
@@ -118,10 +62,7 @@ export default function StatsInsertForm({
     FormData
   >(insertAction, STAT_MUTATION_INITIAL_STATE);
 
-  const [category, setCategory] = useState('');
-  const [label, setLabel] = useState('');
-  const [value, setValue] = useState('');
-  const [unit, setUnit] = useState('');
+  const [values, setValues] = useState<StatFieldValues>(EMPTY_STAT_VALUES);
 
   // `useActionState` returns a new object reference on every dispatch; the
   // ref tracks which `'ok'` state we've already handled so the success
@@ -133,17 +74,11 @@ export default function StatsInsertForm({
     if (state.status !== 'ok' || handledStateRef.current === state) return;
     handledStateRef.current = state;
     toast.success(SAVE_SUCCESS_MESSAGE);
-    setCategory('');
-    setLabel('');
-    setValue('');
-    setUnit('');
+    setValues(EMPTY_STAT_VALUES);
     router.refresh();
   }, [state, router]);
 
-  const isFilled =
-    category.trim().length > 0 &&
-    label.trim().length > 0 &&
-    value.trim().length > 0;
+  const isFilled = statFieldsFilled(values);
 
   return (
     <section className="px-6 py-10 space-y-6">
@@ -154,40 +89,11 @@ export default function StatsInsertForm({
         </p>
       ) : null}
       <form action={formAction} className="space-y-6" noValidate>
-        <FieldRow
-          id="stat-category"
-          name="category"
-          labelText="Category"
-          value={category}
-          onValueChange={setCategory}
-          error={fieldError(state, 'category')}
-          required
-        />
-        <FieldRow
-          id="stat-label"
-          name="label"
-          labelText="Label"
-          value={label}
-          onValueChange={setLabel}
-          error={fieldError(state, 'label')}
-          required
-        />
-        <FieldRow
-          id="stat-value"
-          name="value"
-          labelText="Value"
-          value={value}
-          onValueChange={setValue}
-          error={fieldError(state, 'value')}
-          required
-        />
-        <FieldRow
-          id="stat-unit"
-          name="unit"
-          labelText="Unit (optional)"
-          value={unit}
-          onValueChange={setUnit}
-          error={fieldError(state, 'unit')}
+        <StatFields
+          idPrefix="stat"
+          values={values}
+          onChange={setValues}
+          state={state}
         />
         <div className="flex items-center gap-2">
           <Button type="submit" disabled={isPending || !isFilled}>

@@ -1,159 +1,97 @@
-'use client'
-
-import { useState } from 'react'
-import { ProgressRing } from './ProgressRing'
-import { TypoIcon } from './TypoIcon'
-import { ProjectMedia } from './ProjectMedia'
-import type { PublicProjectMediaItem } from '@/lib/types'
+import Link from 'next/link';
+import { ProjectFrame } from './ProjectFrame';
+import type { PublicProject } from '@/lib/public-projects';
 
 /**
- * Card-shaped project tile used on the `/projects` grid. T42 Session B
- * replaced the bundle's `StatusPill` header slot with `ProgressRing` and
- * replaced the open `links` array with the three fixed nullable URL
- * fields (`githubUrl`, `liveUrl`, `postUrl`). The media slot is now
- * driven by `imageId` / `imageAfterId` / `thumbKind` rather than the
- * bundle's `demo.kind`/`demo.variant` dummy data — see `ProjectMedia`.
+ * A project card on the `/projects` grid.
  *
- * CONSTRAINT-05 Override 1.
+ * T46 rebuilt this against the redesign: media frame over a body of title,
+ * subtitle, description, tags and actions. Everything below the frame
+ * degrades gracefully, because the schema allows a project to be almost
+ * entirely empty and the design draws that state deliberately rather than
+ * leaving a hole.
+ *
+ * The card is a server component. Only the frame needs interactivity, and it
+ * carries its own 'use client' boundary.
+ *
+ * `writeupHref` resolves from the T45 `post_id` link. There is no project
+ * detail page any more (T46 Q2), so depth lives in the linked post.
  */
 
-interface ProjectCardProps {
-  /** Display title — required. */
-  title: string;
-  /** Single-line blurb under the title. */
-  blurb: string;
-  /** Optional progress 0–100. Null/undefined hides the ring. */
-  progressPercent?: number | null;
-  /** External GitHub URL. Null/undefined hides the github icon. */
-  githubUrl?: string | null;
-  /** External live-site URL. Null/undefined hides the live icon. */
-  liveUrl?: string | null;
-  /** Write-up URL. Null/undefined hides the post icon. */
-  postUrl?: string | null;
-  /** Signed Storage URL for the primary screenshot. Pre-resolved by the page. */
-  imageUrl?: string | null;
-  /** Signed Storage URL for the after-screenshot (enables before/after slider). */
-  imageAfterUrl?: string | null;
-  /**
-   * Ordered `project_media` rows. When present with at least one item the
-   * card's media slot renders the carousel; when omitted the legacy
-   * `imageUrl` / `imageAfterUrl` branches run unchanged.
-   */
-  media?: PublicProjectMediaItem[];
-  /** Surface context passed through to the media slot for carousel sizing. */
-  view?: 'list' | 'detail';
-  /** Click handler — typically navigates to the project detail page. */
-  onClick?: () => void;
-}
+const EMPTY_TITLE = 'Untitled project';
+const EMPTY_SUBTITLE = 'A new build, details on the way.';
 
 export function ProjectCard({
-  title,
-  blurb,
-  progressPercent,
-  githubUrl,
-  liveUrl,
-  postUrl,
-  imageUrl,
-  imageAfterUrl,
-  media,
-  view,
-  onClick,
-}: ProjectCardProps) {
-  const [hover, setHover] = useState(false);
-  const hasAnyLink = Boolean(githubUrl || liveUrl || postUrl);
-  return (
-    <article
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        background: 'var(--surface)',
-        border: `1px solid ${hover ? 'var(--hairline-2)' : 'var(--hairline)'}`,
-        borderRadius: 6,
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        transition: 'border-color var(--dur) var(--ease), transform var(--dur) var(--ease)',
-        transform: hover ? 'translateY(-2px)' : 'translateY(0)',
-        cursor: onClick ? 'pointer' : 'default',
-      }}
-      onClick={onClick}
-    >
-      <div
-        style={{
-          aspectRatio: '16 / 9',
-          position: 'relative',
-          background: 'var(--bg)',
-          borderBottom: '1px solid var(--hairline)',
-          overflow: 'hidden',
-        }}
-      >
-        <ProjectMedia imageUrl={imageUrl} imageAfterUrl={imageAfterUrl} title={title} media={media} view={view} />
-      </div>
+  project,
+  writeupHref,
+}: {
+  project: PublicProject;
+  writeupHref: string | null;
+}) {
+  const title = project.title?.trim() || EMPTY_TITLE;
+  const isUntitled = !project.title?.trim();
+  const subtitle = project.subtitle?.trim() || EMPTY_SUBTITLE;
+  const tags = project.tags?.filter((tag) => tag.trim().length > 0) ?? [];
 
-      <div style={{ padding: '22px 24px 22px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h3
-            style={{
-              font: '500 24px/1.2 var(--font-serif)',
-              color: 'var(--fg-strong)',
-              margin: 0,
-              letterSpacing: '-0.012em',
-              flex: '1 1 auto',
-              minWidth: 0,
-            }}
-          >
-            {onClick ? (
-              <a
-                href="#"
-                className="link"
-                onClick={(e) => {
-                  e.preventDefault();
-                  onClick();
-                }}
-              >
-                {title}
-              </a>
-            ) : (
-              // Override 3 (T45.D): with no navigation handler the title is an
-              // inert label — no `.link` affordance, no anchor, no gold
-              // underline. The card frame already sets `cursor: default` when
-              // `onClick` is absent.
-              title
-            )}
-          </h3>
-          {progressPercent !== null && progressPercent !== undefined && (
-            <span style={{ marginLeft: 'auto', flex: '0 0 auto', display: 'inline-flex', alignItems: 'center' }}>
-              <ProgressRing percent={progressPercent} />
-            </span>
-          )}
-        </div>
-        <p
-          style={{
-            font: 'var(--body)',
-            color: 'var(--fg-muted)',
-            margin: 0,
-            textWrap: 'pretty',
-          }}
+  const hasAnyAction = Boolean(
+    project.liveUrl || project.githubUrl || writeupHref,
+  );
+
+  return (
+    <article className="sb-card">
+      <ProjectFrame media={project.media} title={title} />
+
+      <div className="sb-body">
+        <h2
+          className={`sb-card-title${isUntitled ? ' sb-card-title--empty' : ''}`}
         >
-          {blurb}
-        </p>
-        {hasAnyLink && (
-          <div
-            style={{
-              display: 'flex',
-              gap: 18,
-              marginTop: 8,
-              paddingTop: 14,
-              borderTop: '1px solid var(--hairline)',
-              flexWrap: 'wrap',
-              alignItems: 'baseline',
-            }}
-          >
-            {githubUrl && <TypoIcon kind="github" href={githubUrl} />}
-            {liveUrl && <TypoIcon kind="live" href={liveUrl} />}
-            {postUrl && <TypoIcon kind="post" href={postUrl} />}
+          {title}
+        </h2>
+
+        <p className="sb-subtitle">{subtitle}</p>
+
+        {project.description?.trim() && (
+          <p className="sb-desc">{project.description}</p>
+        )}
+
+        {tags.length > 0 && (
+          <div className="sb-tags">
+            {tags.map((tag) => (
+              <span className="sb-tag" key={tag}>
+                {tag}
+              </span>
+            ))}
           </div>
         )}
+
+        <div className="sb-actions">
+          {project.liveUrl && (
+            <a
+              className="sb-action sb-action--primary"
+              href={project.liveUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              Demo
+            </a>
+          )}
+          {project.githubUrl && (
+            <a
+              className="sb-action sb-action--secondary"
+              href={project.githubUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              GitHub
+            </a>
+          )}
+          {writeupHref && (
+            <Link className="sb-action sb-action--secondary" href={writeupHref}>
+              Writeup
+            </Link>
+          )}
+          {!hasAnyAction && <span className="sb-soon">links coming soon</span>}
+        </div>
       </div>
     </article>
   );

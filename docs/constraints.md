@@ -1,7 +1,7 @@
 # Constraints: swarnimbagre.com
 
 **Date seeded:** 2026-05-06 (by `@plan` Phase 4)
-**Last updated:** 2026-05-16 (CONSTRAINT-21 added)
+**Last updated:** 2026-08-04 (T46 redesign: CONSTRAINT-05 re-baselined, 03/15/16/22 amended)
 
 > Loaded by `@session-start` every session. Active binding decisions only — not history, not options considered. New constraints are added when `@plan`, `@cto`, or the builder makes a binding decision. A constraint is removed only when the decision is explicitly reversed, with the reversal noted in `docs/session-log.md`.
 
@@ -39,7 +39,7 @@
 
 **Decision:** Tailwind CSS is imported in exactly one file (`styles/admin.css`), which is imported only by `app/(admin)/layout.tsx`. Tailwind's Preflight reset is scoped under `.admin-root` via `tailwindcss-scoped-preflight`. The public site bundle never sees Tailwind.
 
-**What it means in practice:** No `className="px-4 text-lg"` style usage in any public component. Public styling is exclusively CSS variables from `site/colors_and_type.css` plus inline styles. Admin pages are wrapped in `<div className="admin-root">`. Tailwind config's `content` glob excludes public routes.
+**What it means in practice:** No `className="px-4 text-lg"` style usage in any public component. Public styling is exclusively CSS variables from `app/styles/colors_and_type.css` plus inline styles. Admin pages are wrapped in `<div className="admin-root">`. Tailwind config's `content` glob excludes public routes.
 
 **Who decided and when:** `@plan` (Phase 2 architecture, resolves ASSUMPTION-04), 2026-05-06.
 
@@ -59,22 +59,29 @@
 
 ---
 
-### [CONSTRAINT-05] Public bundle is verbatim — inviolable
+### [CONSTRAINT-05] Public design source is verbatim — inviolable
 
-**Decision:** The design bundle at `docs/design-source/personal-site-web/` is the source of truth for every public-site visual decision. No Tailwind, no shadcn, no Aceternity, no Magic UI on the public site. New public components extend `site/components.jsx` / `site/mobile-components.jsx`; tokens come from `site/colors_and_type.css`.
+> **RE-BASELINED at T46 (2026-08-04).** The constraint stands; its *subject* changed. The original dark bundle at `docs/design-source/personal-site-web/` is retired, along with Overrides 1, 2 and 3, which described surfaces that no longer exist.
 
-**What it means in practice:** A new public-site visual pattern requires either (a) finding the matching pattern in the bundle, or (b) stopping work and consulting `@designer`. No improvisation, no "close enough" substitutes, no library defaults. Same hex codes, same px values, same 220ms `cubic-bezier(.2, .7, .2, 1)` timing.
+**Decision:** The Claude Design export at `docs/design-source/redesign-2026-08/` is the source of truth for every public-site visual decision. `template.extracted.html` is the readable unpacked markup; `swarnim-bagre-site.bundled.html` is the shipped artifact it came from. No Tailwind, no shadcn, no Aceternity, no Magic UI on the public site. Tokens come from `app/styles/colors_and_type.css`; component classes from `app/styles/public*.css`.
 
-**Additive prop extensions to bundle-ported components are permitted** when (a) the component renders byte-identically with the new prop omitted — i.e., the default value equals the existing hardcoded content, so the bundle still renders verbatim at design time — and (b) interactive behavior (link `href`, form actions, navigation targets) is wired to real destinations. The verbatim rule governs rendered visual output: pixels, motion, typography. It does not govern prop interfaces or runtime behavior. A new *visual* pattern (different layout, new component, off-bundle styling) still requires (a) match in bundle or (b) `@designer` consult per above.
+**What it means in practice:** A new public-site visual pattern requires either (a) finding the matching pattern in the export, or (b) stopping work and consulting `@designer`. No improvisation, no "close enough" substitutes, no library defaults. Same hex codes, same px values, same `clamp()` expressions, same transition timing (`.18s ease` hover, `.4s cubic-bezier(.4, 0, .2, 1)` carousel track). **One breakpoint: 640px.**
 
-**Overrides:**
-- **Override 1 (T42, 2026-05-19):** approved for the project-card surface only. See `docs/design-decisions.md` "Override 1: Project card redesign" entry for the surface boundary (named file list) and the rationale.
-- **Override 2 (T43, 2026-05-20):** approved for the project media carousel surface only. See `docs/design-decisions.md` "Override 2: Project media carousel" entry for the surface boundary (named file list), the chrome specs, and the rationale. Override 2 also introduces the public site's first runtime JS dependency (`embla-carousel-react`); the dependency budget for any public-site Override is codified at CONSTRAINT-22.
-- **Override 3 (T45, 2026-05-28):** approved for the project detail page + the project-list title-link only. See `docs/design-decisions.md` "Override 3: Project detail page — embedded writeup" entry for the surface boundary (named file list) and rationale. A linked post's body renders below the project card on the detail page, reusing the `/writing` body rendering. No new public-site JS dependency. (T45 planned, not yet built.)
+**Additive prop extensions are permitted** when (a) the component renders identically with the new prop omitted and (b) interactive behavior is wired to real destinations. The verbatim rule governs rendered visual output: pixels, motion, typography. It does not govern prop interfaces or runtime behavior.
 
-**Who decided and when:** Kickoff + `@designer`, 2026-05-05. Reaffirmed at `@plan`, 2026-05-06.
+**Deliberate, recorded deviations from the export** (these are the design as built, not drift):
+- The blinking `.h-cursor` caret is removed. It faked a mid-typing state that never resolved and read as a bug.
+- The home page has no fourth "Email him" pill. It is replaced by a "Find me here:" row of three branded marks, which are the only saturated color anywhere on the site.
+- Every page footer is removed; the export has none.
+- `/writing/[slug]` exists. The export pointed every list row back at the list itself, which would have left post bodies unreachable.
+- The carousel is hand-rolled, not embla-backed. See the CONSTRAINT-22 note below.
+- Copy is first person throughout, including the home bio, which the export wrote in third person.
 
-**What this closes off:** Faster iteration on public-site visuals using off-the-shelf libraries. Reversing means accepting visual drift from the bundle and re-deriving design decisions in conversation, which is what the bundle was created to avoid.
+**Overrides:** none active. Overrides 1, 2 and 3 were retired with the bundle they amended.
+
+**Who decided and when:** Kickoff + `@designer`, 2026-05-05. Reaffirmed at `@plan`, 2026-05-06. Re-baselined onto the new export at T46, 2026-08-04, after real user feedback that the original design was confusing and disliked.
+
+**What this closes off:** Faster iteration on public-site visuals using off-the-shelf libraries. Reversing means accepting visual drift from the export and re-deriving design decisions in conversation, which is what having a canonical design source exists to avoid.
 
 ---
 
@@ -190,13 +197,15 @@
 
 ### [CONSTRAINT-15] Image reads use signed URLs (TTL 3600s), not public URLs
 
-Image URLs are generated at request time via Supabase Storage `createSignedUrl(bucketPath, 3600)`. `getPublicUrl` must not be used for the `images` bucket — the bucket is private per migration `005_rls_images.sql` and public URLs return 404. Signed-URL generation is centralized in `lib/images.ts::getImageUrl`. TTL is fixed at 3600 seconds: long enough for a typical reading session, short enough to limit leaked-URL exposure. Components consuming images (`ProjectImage`, `PostImage`) must call `getImageUrl` rather than constructing URLs directly.
+Image URLs are generated at request time via Supabase Storage `createSignedUrl(bucketPath, 3600)`. `getPublicUrl` must not be used for the `images` bucket — the bucket is private per migration `005_rls_images.sql` and public URLs return 404. Signed-URL generation is centralized in `lib/images.ts::getImageUrl`. TTL is fixed at 3600 seconds: long enough for a typical reading session, short enough to limit leaked-URL exposure. Components consuming images must call `getImageUrl` rather than constructing URLs directly. (T46 note: the named `ProjectImage` / `PostImage` components were deleted with the old bundle. Public image URLs are now resolved server-side in `lib/public-projects.ts` and handed to `ProjectFrame` pre-signed; the rule is unchanged, only the caller moved.)
 
 ---
 
 ### [CONSTRAINT-16] Admin color tokens namespaced as `--admin-*`
 
-Admin borrows 8 color tokens, all namespaced under `--admin-*` — NOT as bare `--bg`, `--surface`, `--fg`, `--accent`, etc. (those names are owned by the public site's `:root` block in `app/styles/colors_and_type.css`). Hex values match the public palette where they're sourced from it; only variable names differ. This prevents cascade collisions if the public `:root` ever leaks into admin or vice versa. Tailwind's `theme.colors` config maps shadcn slot names to the `--admin-*` variables, so utility class names and shadcn component internals stay clean.
+Admin owns 8 color tokens, all namespaced under `--admin-*` — NOT as bare `--bg`, `--surface`, `--fg`, `--accent`, etc. (those names are owned by the public site's `:root` block in `app/styles/colors_and_type.css`).
+
+**T46 amendment (2026-08-04):** these were originally described as *borrowed* from the public palette. They are now **admin-owned constants**. The public site went light (cream `#F4F1EA`, deep-green accent `#1F3D2F`) in the T46 redesign; admin deliberately stayed dark. Admin is single-user and behind auth, so restyling it buys nothing externally, and dark is easier for long content-authoring sessions. The hex values below are therefore no longer a mirror of anything and must not be "resynced" to the public palette. This prevents cascade collisions if the public `:root` ever leaks into admin or vice versa. Tailwind's `theme.colors` config maps shadcn slot names to the `--admin-*` variables, so utility class names and shadcn component internals stay clean.
 
 **The 8 tokens and their shadcn slot mappings:**
 
@@ -287,6 +296,8 @@ or a re-evaluation of header uniformity under PKCE.
 
 ### [CONSTRAINT-22] JS libraries on the public site require a named Override and a 15 KB gzip budget
 
+> **T46 status (2026-08-04): the constraint stands, but it currently has zero consumers.** Its only invocation was Override 2's `embla-carousel-react`. The redesigned carousel is hand-rolled — the export's version is a single transformed track with dots, arrows and a 40px swipe threshold, so matching it directly was both more faithful and one dependency fewer than restyling embla to imitate it. `embla-carousel-react` was uninstalled and Override 2 retired with the rest of the old bundle. **The public site is now back to zero runtime JS dependencies.** The rule below applies unchanged to the next library anyone proposes.
+
 **Decision:** JS libraries on the public site are permitted only with a documented Override and ≤15 KB gzip total per Override surface (measured against the production route chunk, not published ESM).
 
 **What it means in practice:** Adding a runtime npm dependency to any public-site code path is not a unilateral choice — it requires (a) a named Override entry in `docs/design-decisions.md` with a Surface boundary listing every file the library touches, and (b) a build-time measurement showing the route-chunk delta on the affected production route stays at or under 15 KB gzip. The measurement is taken from `next build` output on the route that mounts the new code (e.g., `/projects` First Load JS delta), not from the package's published ESM size on npm — bundler tree-shaking, code-splitting, and shared-chunk attribution make the published size a misleading proxy. Exceeding the budget triggers an `@cto` re-evaluation, not a silent absorption. The first invocation of this constraint is Override 2 (T43, `embla-carousel-react`), which measured ~11.7 KB gzip published ESM at T43.B and +8 KB First Load JS on `/projects` + `/projects/[slug]` at T43.H — both inside budget.
@@ -305,7 +316,7 @@ or a re-evaluation of header uniformity under PKCE.
 | 02 | Single Supabase + Vercel project | No staging environment | `@plan` | 2026-05-06 |
 | 03 | Tailwind scoped to admin only | No Tailwind on public site | `@plan` | 2026-05-06 |
 | 04 | OpenClaw via Edge Function | Shared-secret header only write path | `@plan` | 2026-05-06 |
-| 05 | Public bundle verbatim | No library substitutions on public site | `@designer` + `@plan` | 2026-05-06 |
+| 05 | Public design source verbatim | No library substitutions on public site. Re-baselined onto `docs/design-source/redesign-2026-08/` at T46; Overrides 1/2/3 retired | `@designer` + `@plan`, re-baselined T46 | 2026-05-06 / 2026-08-04 |
 | 06 | Markdown via marked + DOMPurify | Whitelist enforced; DB stores raw MD | `@plan` | 2026-05-06 |
 | 07 | Image bucket path scheme | Path encodes parent type and id | `@plan` | 2026-05-06 |
 | 08 | RLS default-deny on all tables | Every new table needs explicit policies | `@plan` | 2026-05-06 |
@@ -322,4 +333,4 @@ or a re-evaluation of header uniformity under PKCE.
 | 19 | Dev-only routes use bracket NODE_ENV indirection | Defeats Next 15 compile-time inlining; runtime gate enforced | `@dev` + T19.2 | 2026-05-12 |
 | 20 | Storage bucket RLS policies accompany table FK migrations | Every bucket gets a `storage.objects` policy scoped to `bucket_id` (USING + WITH CHECK); default-deny applies to Storage | `@supabase` + T28 | 2026-05-14 |
 | 21 | Canonical domain = apex `swarnimbagre.com` (no `www`) | All origin config (Vercel/Supabase/env/email) resolves to apex; `www` redirects to it | Main thread on builder behalf, confirmed by builder | 2026-05-16 |
-| 22 | Public-site JS libraries require a named Override + ≤15 KB gzip route-chunk budget | Every public-site npm dep gets a Surface boundary doc and a measured route-chunk delta; first instance is Override 2 (embla, T43) | `@cto` S34, codified at T43.I | 2026-05-20 / codified 2026-05-23 |
+| 22 | Public-site JS libraries require a named Override + ≤15 KB gzip route-chunk budget | Every public-site npm dep gets a Surface boundary doc and a measured route-chunk delta. **Zero consumers as of T46**: embla was uninstalled and the carousel hand-rolled, so the public site has no runtime JS dependencies | `@cto` S34, codified at T43.I | 2026-05-20 / codified 2026-05-23 / zeroed 2026-08-04 |

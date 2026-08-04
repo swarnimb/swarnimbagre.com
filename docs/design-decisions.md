@@ -2,15 +2,22 @@
 
 ## ⚠ CANONICAL SOURCE — READ FIRST
 
-**The design for swarnimbagre.com is the bundle at `docs/design-source/personal-site-web/`. It is used VERBATIM, not as inspiration.**
+> **RE-BASELINED at T46, 2026-08-04.** The original dark bundle is retired. The builder showed the live site to several people; they were confused by it and disliked the look. That is real user feedback, and it outranks every internal argument for keeping the old design. Overrides 1, 2 and 3 are retired with it, because they amended surfaces that no longer exist.
+
+**The design for swarnimbagre.com is the Claude Design export at `docs/design-source/redesign-2026-08/`. It is used VERBATIM, not as inspiration.**
+
+- `swarnim-bagre-site.bundled.html` is the shipped artifact (a self-unpacking React bundle).
+- `template.extracted.html` is its unpacked markup, and is the readable source of truth for hex codes, `clamp()` expressions, spacing and timing.
 
 **Scope:** These rules apply to the PUBLIC SITE. The admin panel (`/admin`) follows different rules — see "Admin Panel" section below.
 
-- `@ui` and every implementation task MUST use the existing components from `site/components.jsx` and `site/mobile-components.jsx`. New components extend these files; they do not replace them.
-- All styling MUST use the existing CSS variables in `site/colors_and_type.css`. No new tokens, no overrides, no "close enough" substitutes.
-- Where a pattern exists in the bundle, the implementation matches it exactly — same hex codes, same px sizes, same font weights, same spacing tokens, same animation timing (220ms, `cubic-bezier(.2, .7, .2, 1)`).
-- "Similar-looking" is NOT acceptable. If the bundle uses a hairline + 24px gap, the implementation is a hairline + 24px gap — not a card with a shadow, not a 20px gap.
-- If a needed pattern does NOT exist in the bundle, stop and consult `@designer` before improvising. Do not derive a "compatible" solution silently.
+- Every implementation task MUST use the token layer in `app/styles/colors_and_type.css` and the component classes in `app/styles/public.css` + `public-home.css` / `public-projects.css` / `public-writing.css` / `public-other.css`. No new tokens, no overrides, no "close enough" substitutes.
+- Where a pattern exists in the export, the implementation matches it exactly: same hex codes, same px sizes, same `clamp()` expressions, same font weights, same spacing, same timing (`.18s ease` on hover, `.4s cubic-bezier(.4, 0, .2, 1)` on the carousel track).
+- "Similar-looking" is NOT acceptable.
+- **One breakpoint: 640px.** Single responsive tree. No mobile component fork, no server-side device split. Both were deleted at T46.
+- If a needed pattern does NOT exist in the export, stop and consult `@designer` before improvising.
+
+**Deliberate deviations from the export** (design as built, not drift): no blinking caret; no fourth "Email him" pill (replaced by a "Find me here:" row of three branded marks); no footers; `/writing/[slug]` retained; hand-rolled carousel instead of embla; first-person copy throughout.
 
 **Why this rule:** the design was developed through long iteration on claude.ai/design and represents finished, locked decisions. Re-interpretation invalidates that work and produces drift.
 
@@ -30,7 +37,7 @@
 
 **Primary user:** Mixed — recruiters reviewing background, engineering peers, potential collaborators, people landing via social (X, Reddit, etc.), casual readers exploring the writing. Voice and density must hold up across all of them simultaneously; do not optimize for one.
 
-**Platform priority:** Balanced — desktop and mobile are independent, first-class designs (separate `index.html` and `mobile.html`), not a single responsive layout. Both are equally important.
+**Platform priority:** Balanced. Desktop and mobile are equally important. **REVISED T46:** they are now served by a SINGLE responsive layout with one breakpoint at 640px, not by two independent designs. The old split (separate `index.html` / `mobile.html`, later a `components/public/mobile/` tree and a server-side device header) was retired because it meant building and maintaining every screen twice, on a one-person site.
 
 **Use frequency:** Occasional — visitors will read once, maybe return periodically. Not a daily-use tool. Affects density (spacious is fine) and motion (subtle only — nothing that grates on repeat visits).
 
@@ -38,15 +45,15 @@
 
 ## Component Approach
 
-**Primary library:** None — raw React with custom components in `site/components.jsx` (desktop) and `site/mobile-components.jsx` (mobile).
+**Primary library:** None. Raw React with custom components under `components/public/`. **T46:** a single responsive tree. The former `site/components.jsx` / `site/mobile-components.jsx` pair, and the `components/public/mobile/` tree built from them, are all deleted.
 
 **Accent libraries:** None.
 
-**Tailwind:** Not used. All styling via CSS variables in `site/colors_and_type.css` plus inline styles in components.
+**Tailwind:** Not used on the public site. Styling comes from the token layer in `app/styles/colors_and_type.css` plus the component classes in `app/styles/public*.css`, with inline styles only for one-off static values, matching how the export is authored.
 
-**Rationale:** Component libraries (shadcn, Aceternity, Magic UI, etc.) carry visual conventions — rounded pills, shadows, gradients, default focus rings — that directly violate the bundle's anti-patterns. Importing and overriding every default would be more work than the custom components already in the bundle, and would risk visual drift.
+**Rationale:** Component libraries (shadcn, Aceternity, Magic UI, etc.) carry visual conventions — rounded pills, shadows, gradients, default focus rings — that directly violate the bundle's anti-patterns. Importing and overriding every default would be more work than the custom components already in the export, and would risk visual drift.
 
-**For `@ui` skill:** Do NOT apply the standard `@ui saas` (shadcn) or `@ui landing` (Aceternity + Magic UI) configurations. The project-specific UI skill (generated during `@recruit`) must reference this file and the source bundle as the only valid pattern source.
+**For `@ui` skill:** Do NOT apply the standard `@ui saas` (shadcn) or `@ui landing` (Aceternity + Magic UI) configurations. The project-specific UI skill (generated during `@recruit`) must reference this file and `docs/design-source/redesign-2026-08/` as the only valid pattern source.
 
 ---
 
@@ -64,25 +71,27 @@
 
 Verbatim from the bundle's anti-patterns. Non-negotiable:
 
-- No rounded pill cards (hairlines + spacing only; max `border-radius` is 12px on mobile section buttons, 4px or 0 elsewhere)
+- ~~No rounded pill cards~~ **REVISED T46.** The new export uses radii deliberately: 16px cards, 999px pills on tags and action buttons, 26px on the chat input, and an asymmetric 18px/4px chat bubble. Match the export; do not import radii from the retired dark bundle.
 - No shadows on any surface (flat surfaces only)
 - No SaaS phrases ("AI-powered", "next-gen", "seamless", "powerful", etc.)
 - No emoji — typographic symbols only (※, ¶, *, →, ↗, { })
 - No logo brands or brand marks — typographic symbols substitute
-- No external images — all visuals are CSS gradients + inline SVG
-- No external fonts beyond the three already in use (Fraunces, Inter, JetBrains Mono)
-- No animations on page load or transition
+- **REVISED T46.** Project cards render photographic screenshots from `project_media`. Inline SVG remains the rule for icons and marks; the S49 motif set was retired with the old card.
+- No external fonts beyond the three in use. **T46:** these are now Instrument Serif (display), Space Grotesk (body/UI) and Space Mono (kickers, dates, labels). Fraunces and JetBrains Mono are gone. Inter remains, admin-only.
+- No animations on page load or transition. **T46:** exactly two transitions exist site-wide, `.18s ease` on hover states and `.4s cubic-bezier(.4, 0, .2, 1)` on the carousel track. Nothing else moves.
 - No scroll-triggered animations
 - No opacity-based hover states (color, border, or 2px `translateY` lift only)
 - No deep-shadow or high-contrast button styles
 - No standard form chrome (default radios, checkboxes, inputs) — custom styled controls only
 - No background gradients (only inside `DemoLoop` scenes)
 - No nested anchors
-- No blue — palette is warm dark (browns, golds, sage, sienna). No cool tones.
+- **REVISED T46.** The palette is warm LIGHT: cream ground `#F4F1EA`, deep-green accent `#1F3D2F`. The warm-dark palette (browns, golds, sage, sienna) belongs to the retired bundle and survives only in admin, which stayed dark on purpose. The one deliberate exception to "no blue" is the LinkedIn brand mark in the home reach-out row; brand marks are the only saturated color on the site.
 
 ---
 
 ## Overrides to the verbatim-bundle rule
+
+> **ALL THREE OVERRIDES BELOW ARE RETIRED (T46, 2026-08-04).** They amended the original dark bundle and named files that no longer exist (`ProjectCard` as it was, `ProjectMediaCarousel`, `app/projects/[slug]`, the whole `components/public/mobile/` tree). They are kept verbatim as a historical record of what was decided and why. **Do not implement against them.** CONSTRAINT-05 now has no active Overrides.
 
 Documented exceptions to CONSTRAINT-05. Every override is scoped to a named surface and recorded here. A pattern that is not under an override entry below is still bundle-verbatim.
 
@@ -251,11 +260,11 @@ Eight tokens total: 4 brand (original) + 4 semantic (added 2026-05-12 after `@de
 - `--admin-border` (#3A3328) — sources hex from public `--hairline`. Maps to shadcn `border`, `input`.
 - `--admin-muted-fg` (#7A7060) — sources hex from public `--fg-muted` (dates, metadata). Maps to shadcn `muted-foreground`.
 
-**Why expanding from 4 to 8 does NOT violate the bundle rule:** the original "4 tokens only" rule existed to keep the public site's *identity elements* out of admin — Fraunces typography, hairline-driven layout grammar, the gold-underline link signature. Those remain public-only. Adding semantic admin tokens for shadcn slot coverage (destructive states, borders, muted text) is mechanical chrome, not identity. The shadcn aesthetic is preserved; only the hex values shift to the warm palette so admin doesn't clash visually when toggled with the public site.
+**Why expanding from 4 to 8 does NOT violate the bundle rule:** the original "4 tokens only" rule existed to keep the public site's *identity elements* out of admin — Fraunces typography, hairline-driven layout grammar, the gold-underline link signature. Those remain public-only (post-T46 the display face is Instrument Serif, and the link signature is a flat accent-color change rather than the old gold underline). Adding semantic admin tokens for shadcn slot coverage (destructive states, borders, muted text) is mechanical chrome, not identity. The shadcn aesthetic is preserved; only the hex values shift to the warm palette so admin doesn't clash visually when toggled with the public site. **T46 note:** the public site went light and admin stayed dark, so the two no longer share hex values at all. See the CONSTRAINT-16 amendment.
 
 Do NOT pull typography tokens, spacing tokens, motion tokens, or any other public-site variables. The 8 colors above are the complete admin import.
 
-**Typography:** shadcn defaults (Inter or system font). Do NOT use Fraunces or JetBrains Mono in admin — those are public-site signature fonts and using them in admin dilutes the public site's identity.
+**Typography:** shadcn defaults (Inter or system font). Do NOT use the public-site signature fonts in admin. As of T46 those are **Instrument Serif, Space Grotesk and Space Mono** (they replaced Fraunces and JetBrains Mono, which no longer exist anywhere in the project). Using them in admin dilutes the public site's identity.
 
 **Anti-patterns relaxed for admin:**
 - Rounded corners — allowed (shadcn defaults, typically 6–8px)
@@ -291,6 +300,8 @@ Design decisions with technical implications that need `@cto` resolution during 
 ---
 
 ## Source Bundle Reference
+
+> **RETIRED T46 (2026-08-04).** Everything in this section describes the original dark bundle at `docs/design-source/personal-site-web/`, which is no longer the design source. Kept as a historical record. The current source is `docs/design-source/redesign-2026-08/`; see the CANONICAL SOURCE block at the top of this file.
 
 For granular specs not duplicated in this doc:
 

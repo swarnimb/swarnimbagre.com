@@ -8,24 +8,11 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import DeleteStatButton from '@/components/admin/DeleteStatButton';
+import StatRow from '@/components/admin/StatRow';
 import type { Stat } from '@/lib/types';
 
 /** Empty-state copy. CONSTRAINT-13: terse, no decoration, no SaaS phrasing. */
 const EMPTY_STATE = 'No stats yet';
-
-/** Format an ISO timestamp into a compact YYYY-MM-DD string for the Created column. */
-function formatCreated(iso: string): string {
-  return iso.slice(0, 10);
-}
 
 /** Props for {@link StatsList}. Page route owns search-param parsing and fetching. */
 export interface StatsListProps {
@@ -36,18 +23,23 @@ export interface StatsListProps {
 }
 
 /**
- * Admin stats list view. shadcn Table + shadcn Pagination. Page changes push
- * to URL search params; the server page at `app/(admin)/admin/stats/page.tsx`
- * reads them and refetches via
- * {@link import('@/lib/admin-queries').getAllStats}. Sort is fixed to
- * `created_at DESC` server-side.
+ * Admin stats list view. A stack of editable {@link StatRow} cards plus the
+ * shadcn Pagination footer. Page changes push to URL search params; the
+ * server page at `app/(admin)/admin/stats/page.tsx` reads them and refetches
+ * via {@link import('@/lib/admin-queries').getAllStats}. Sort is fixed
+ * server-side to `sort_order ASC, created_at DESC`, so the list reads in the
+ * order the public Other page renders and doubles as a preview of the running
+ * order.
  *
- * Stats has no edit (CONSTRAINT-10: delete-then-reinsert for corrections)
- * and no status enum, so the list is simpler than `PostsList` — no filter
- * dropdown, no Edit button per row, just a Delete button.
+ * This was a shadcn Table until stats gained an edit path. Stats are now
+ * corrected in place rather than deleted and retyped, and a `form` cannot
+ * legally be a child of a `tr`, so table markup and inline editing are
+ * mutually exclusive. {@link import('./NotesList').default} made the same
+ * trade for the same reason; the two admin surfaces are deliberately the same
+ * shape.
  *
- * Mirrors `PostsList` structurally; the column set, the absence of filter
- * UI, and the absence of an Edit action are the deliberate differences.
+ * Delete semantics are untouched: still hard-delete only behind a confirm
+ * modal (CONSTRAINT-10). The edit path is an addition, not a replacement.
  */
 export default function StatsList({
   rows,
@@ -77,46 +69,24 @@ export default function StatsList({
     <section className="px-6 py-10 space-y-6">
       <header className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-foreground">All stats</h2>
+        <p className="text-sm text-muted-foreground">
+          {total} total, in display order
+        </p>
       </header>
 
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">{EMPTY_STATE}</p>
       ) : (
         <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Category</TableHead>
-                <TableHead>Label</TableHead>
-                <TableHead>Value</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => (
-                <TableRow key={row.id}>
-                  <TableCell className="font-medium">{row.category}</TableCell>
-                  <TableCell>{row.label}</TableCell>
-                  <TableCell>{row.value}</TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {row.unit ?? ''}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatCreated(row.created_at)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DeleteStatButton id={row.id} name={row.label} size="sm" />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ul className="space-y-4">
+            {rows.map((row) => (
+              <StatRow key={row.id} stat={row} />
+            ))}
+          </ul>
 
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              Page {page} of {totalPages} — {total} total
+              Page {page} of {totalPages}
             </p>
             <Pagination className="mx-0 w-auto justify-end">
               <PaginationContent>

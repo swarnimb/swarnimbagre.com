@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="2e886ac3-601c-4990-ac37-27cb5b0ea6dc"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<style>/* latin-ext */
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("a280cbd7-9c28-4843-b60c-434a78eb7c0c") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("8c09f583-1571-4dca-b7a5-7c9f6bd2bd46") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("b19e448a-14bf-4da4-ab42-70811dc85c3a") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("046e89a1-2371-4036-8b24-9fdd49408b05") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("1bb60166-9042-4a2d-a2b5-559e1961a18e") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("e276ab82-d383-4d5c-bd6d-0c91b874e165") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("2ecdd1c0-f8d7-48d3-891f-6ef52964fc82") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("1bb60166-9042-4a2d-a2b5-559e1961a18e") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("e276ab82-d383-4d5c-bd6d-0c91b874e165") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("2ecdd1c0-f8d7-48d3-891f-6ef52964fc82") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("1bb60166-9042-4a2d-a2b5-559e1961a18e") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("e276ab82-d383-4d5c-bd6d-0c91b874e165") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("2ecdd1c0-f8d7-48d3-891f-6ef52964fc82") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("1bb60166-9042-4a2d-a2b5-559e1961a18e") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("e276ab82-d383-4d5c-bd6d-0c91b874e165") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("2ecdd1c0-f8d7-48d3-891f-6ef52964fc82") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* vietnamese */
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("a9b7b729-a12b-467a-a401-2089109ed4ca") format('woff2');
+  unicode-range: U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("ee506919-0159-416f-99ff-6e70fb81b522") format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Space Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("7a7697d0-6aab-4199-99ad-76b55f6566ea") format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+</style>
+
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #F4F1EA; color: #24211A; font-family: 'Space Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  a { color: #1F3D2F; text-decoration: none; }
+  a:hover { color: #16140E; }
+  button { font-family: inherit; }
+  input::placeholder { color: #9A9384; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .burger { display: none; }
+  .mmenu { display: none; }
+
+  .lrow:hover .ltitle { color: #1F3D2F; }
+  .lrow:hover .larrow { opacity: 1; transform: translateX(0); }
+  .larrow { opacity: 0; transform: translateX(-6px); transition: opacity .18s ease, transform .18s ease; color: #1F3D2F; }
+
+  /* Home responsive */
+  .h-word { font-size: 26px; }
+  .h-conv { max-width: 680px; align-self: center; gap: 20px; }
+  .h-qbubble { max-width: 70%; font-size: 16px; padding: 12px 17px; border-radius: 18px 18px 4px 18px; }
+  .h-arow { gap: 14px; }
+  .h-avatar { flex: 0 0 40px; width: 40px; height: 40px; font-size: 20px; }
+  .h-bio { font-size: 21px; }
+  .h-cursor { width: 9px; height: 22px; vertical-align: -4px; margin-left: 4px; }
+  .h-actions { gap: 10px; margin-top: 20px; }
+  .h-btn { font-size: 15px; padding: 10px 18px; border-radius: 22px; }
+  .h-reply { font-size: 19px; }
+  .h-form { height: 52px; border-radius: 26px; padding: 0 10px 0 20px; max-width: 680px; align-self: center; }
+  .h-input { font-size: 15px; }
+  .h-send { width: 36px; height: 36px; }
+
+  @media (max-width: 640px) {
+    .desktop-nav { display: none !important; }
+    .burger { display: inline-flex !important; }
+    .mmenu.open { display: flex !important; }
+    .page-title { font-size: 46px !important; }
+    .lrow { grid-template-columns: 1fr !important; gap: 7px !important; padding: 18px 0 !important; }
+    .lrow-date { padding-top: 0 !important; }
+    .larrow { display: none !important; }
+    .sb-frame { aspect-ratio: 3 / 2 !important; }
+    .sb-body { padding: 18px !important; gap: 12px !important; }
+    .sb-actions a { min-height: 42px !important; padding: 10px 15px !important; font-size: 13px !important; }
+    .sb-tag { padding: 3px 10px !important; font-size: 11px !important; }
+    .sb-card-title { font-size: 24px !important; }
+    .sb-desc { font-size: 14px !important; }
+    .cpage { height: auto !important; overflow: visible !important; }
+    .cgrid { flex: none !important; }
+    .crow { flex: none !important; flex-wrap: wrap !important; }
+    .crow .ctile { flex: 1 1 calc(50% - 1px) !important; min-height: 152px; }
+    .trow { flex: none !important; flex-direction: column !important; }
+    .trow .ttile { min-height: 96px; }
+    .h-word { font-size: 22px; }
+    .h-conv { max-width: 100%; align-self: stretch; gap: 16px; }
+    .h-qbubble { max-width: 82%; font-size: 14px; padding: 10px 14px; border-radius: 16px 16px 4px 16px; }
+    .h-arow { gap: 11px; }
+    .h-avatar { flex: 0 0 34px; width: 34px; height: 34px; font-size: 17px; }
+    .h-bio { font-size: 16px; }
+    .h-cursor { width: 8px; height: 17px; vertical-align: -3px; margin-left: 3px; }
+    .h-actions { gap: 8px; margin-top: 15px; }
+    .h-btn { font-size: 13.5px; padding: 9px 14px; border-radius: 20px; }
+    .h-reply { font-size: 15px; }
+    .h-form { height: 46px; border-radius: 24px; padding: 0 8px 0 16px; }
+    .h-input { font-size: 14px; }
+    .h-send { width: 32px; height: 32px; }
+  }
+</style>
+</helmet>
+
+<sc-if value="{{ showHome }}" hint-placeholder-val="{{ true }}">
+<div style="min-height:100vh; display:flex; flex-direction:column; padding:clamp(28px,5vw,44px) clamp(20px,6vw,60px); color:#24211A; font-family:'Space Grotesk',sans-serif;">
+  <header style="display:flex; justify-content:space-between; align-items:center;">
+    <a href="#home" class="h-word" style="font-family:'Instrument Serif',serif; color:#16140E;">Swarnim Bagre</a>
+  </header>
+  <div class="h-conv" style="margin:auto 0; width:100%; display:flex; flex-direction:column;">
+    <div class="h-qbubble" style="align-self:flex-end; background:#ECE7DB; border:1px solid #DBD5C6; color:#837D70;">who’s swarnim bagre?</div>
+    <div class="h-arow" style="display:flex; align-items:flex-start;">
+      <div class="h-avatar" style="border-radius:50%; border:1px solid #D3CDBE; background:#EDE9DF; display:flex; align-items:center; justify-content:center; font-family:'Instrument Serif',serif; color:#16140E;">S</div>
+      <div style="flex:1">
+        <div class="h-bio" style="line-height:1.5; color:#2B2820;"><b style="font-weight:500; color:#16140E;">Swarnim Bagre</b> — product &amp; strategy at Dell by profession. After hours he builds AI things worth looking at.<span class="h-cursor" style="display:inline-block; background:#24211A; animation:blink 1.1s step-end infinite;"></span></div>
+        <div class="h-actions" style="display:flex; flex-wrap:wrap;">
+          <a href="#projects" class="h-btn" style="font-weight:500; background:#1F3D2F; border:1px solid #1F3D2F; color:#F4F1EA;">See the projects</a>
+          <a href="#writing" class="h-btn" style="font-weight:500; border:1px solid #D3CDBE; color:#24211A;">Writing</a>
+          <a href="#other" class="h-btn" style="font-weight:500; border:1px solid #D3CDBE; color:#24211A;">Other</a>
+          <a href="mailto:hi@swarnimbagre.com" class="h-btn" style="font-weight:500; border:1px solid #D3CDBE; color:#24211A;"><svg sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px; height:14px; vertical-align:-2px; margin-right:6px;"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m3 7 9 6 9-6"></path></svg>Email him</a>
+        </div>
+      </div>
+    </div>
+    <sc-if value="{{ chatShown }}" hint-placeholder-val="{{ false }}">
+      <div class="h-qbubble" style="align-self:flex-end; background:#ECE7DB; border:1px solid #DBD5C6; color:#837D70;">{{ chatAsked }}</div>
+      <div class="h-arow" style="display:flex; align-items:flex-start;">
+        <div class="h-avatar" style="border-radius:50%; border:1px solid #D3CDBE; background:#EDE9DF; display:flex; align-items:center; justify-content:center; font-family:'Instrument Serif',serif; color:#16140E;">S</div>
+        <div class="h-reply" style="flex:1; line-height:1.5; color:#2B2820;">Ha — I’m just for show. The real Swarnim reads email, though: <a href="mailto:hi@swarnimbagre.com" style="color:#16140E; text-decoration:underline;">hi@swarnimbagre.com</a>.</div>
+      </div>
+    </sc-if>
+  </div>
+  <form sc-camel-on-submit="{{ submitChat }}" class="h-form" style="width:100%; border:1px solid #D3CDBE; background:#EDE9DF; display:flex; align-items:center; gap:8px; flex:0 0 auto;">
+    <input class="h-input" placeholder="Ask a follow-up…" style="flex:1; min-width:0; background:transparent; border:none; outline:none; color:#24211A; font-family:'Space Grotesk',sans-serif;">
+    <button type="submit" aria-label="Send" class="h-send" style="border-radius:50%; border:none; background:#1F3D2F; color:#F4F1EA; display:flex; align-items:center; justify-content:center; cursor:pointer; flex:0 0 auto;"><svg sc-camel-view-box="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:17px; height:17px;"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button>
+  </form>
+</div>
+</sc-if>
+
+<sc-if value="{{ showProjects }}" hint-placeholder-val="{{ false }}">
+<div style="min-height:100vh;">
+  <div style="max-width:1240px; margin:0 auto; padding: clamp(24px,5vw,56px) clamp(16px,4vw,48px);">
+    <header style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px 16px; margin-bottom: clamp(36px,6vw,68px);">
+      <a href="#home" style="font-family:'Instrument Serif', serif; font-size:23px; color:#16140E; letter-spacing:0.01em;">Swarnim Bagre</a>
+      <nav class="desktop-nav" style="display:flex; flex-wrap:wrap; gap: 8px 18px; font-size:14px;">
+        <a href="#projects" style="color:#16140E; font-weight:500;">Projects</a>
+        <a href="#writing" style="color:#837D70;">Writing</a>
+        <a href="#other" style="color:#837D70;">Other</a>
+      </nav>
+      <button class="burger" sc-camel-on-click="{{ toggleMenu }}" aria-label="Menu" style="width:44px; height:44px; border-radius:12px; border:1px solid #D3CDBE; background:#F4F1EA; cursor:pointer; align-items:center; justify-content:center; flex-direction:column; gap:5px;">
+        <span style="display:block; width:18px; height:1.5px; background:#16140E;"></span><span style="display:block; width:18px; height:1.5px; background:#16140E;"></span><span style="display:block; width:18px; height:1.5px; background:#16140E;"></span>
+      </button>
+    </header>
+    <nav class="mmenu {{ menuClass }}" style="flex-direction:column; gap:2px; margin:-8px 0 28px; border:1px solid #D3CDBE; border-radius:14px; overflow:hidden; background:#EDE9DF;">
+      <a href="#projects" style="padding:14px 18px; color:#16140E; font-weight:500; font-size:15px; border-bottom:1px solid #D3CDBE;">Projects</a>
+      <a href="#writing" style="padding:14px 18px; color:#837D70; font-size:15px; border-bottom:1px solid #D3CDBE;">Writing</a>
+      <a href="#other" style="padding:14px 18px; color:#837D70; font-size:15px;">Other</a>
+    </nav>
+    <div style="margin-bottom: clamp(30px,5vw,52px); max-width:660px;">
+      <h1 class="page-title" style="font-family:'Instrument Serif', serif; font-size: clamp(44px,9vw,76px); line-height:1.0; color:#16140E; margin-bottom:16px;">Projects</h1>
+      <p style="color:#837D70; font-size: clamp(15px,2vw,17px); line-height:1.55; text-wrap:pretty;">A selection of things I’ve designed, built, and written about — across product, systems, and tools.</p>
+    </div>
+    <section style="display:grid; gap:clamp(20px,3vw,32px); grid-template-columns:repeat(auto-fill, minmax(min(100%, 360px), 1fr));">
+      <sc-for list="{{ projects }}" as="p" hint-placeholder-count="3">
+        <article style="display:flex; flex-direction:column; background:#F4F1EA; border:1px solid #D3CDBE; border-radius:16px; overflow:hidden;">
+          <div class="sb-frame" style="{{ p.frameStyle }}" sc-camel-on-touch-start="{{ p.onTouchStart }}" sc-camel-on-touch-end="{{ p.onTouchEnd }}">
+            <sc-if value="{{ p.hasImages }}" hint-placeholder-val="{{ true }}">
+              <div style="{{ p.trackStyle }}">
+                <sc-for list="{{ p.slides }}" as="s" hint-placeholder-count="1">
+                  <div role="img" aria-label="{{ s.alt }}" style="flex:0 0 100%; width:100%; height:100%; display:flex; align-items:center; justify-content:center; padding:16px;">
+                    <span style="font-family:ui-monospace, 'SFMono-Regular', monospace; font-size:13px; letter-spacing:0.04em; color:#837D70; text-align:center;">{{ s.label }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <sc-if value="{{ p.multi }}" hint-placeholder-val="{{ true }}">
+                <span style="position:absolute; top:12px; right:12px; padding:4px 10px; border-radius:999px; background:#F4F1EA; border:1px solid #D3CDBE; font-size:12px; color:#837D70; letter-spacing:0.02em;">{{ p.counter }}</span>
+                <button sc-camel-on-click="{{ p.onPrev }}" aria-label="Previous image" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); width:44px; height:44px; border-radius:999px; background:#F4F1EA; border:1px solid #D3CDBE; color:#1F3D2F; font-size:22px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center;" style-hover="border-color:#1F3D2F;">‹</button>
+                <button sc-camel-on-click="{{ p.onNext }}" aria-label="Next image" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); width:44px; height:44px; border-radius:999px; background:#F4F1EA; border:1px solid #D3CDBE; color:#1F3D2F; font-size:22px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center;" style-hover="border-color:#1F3D2F;">›</button>
+                <div style="position:absolute; bottom:14px; left:0; right:0; display:flex; gap:7px; justify-content:center;">
+                  <sc-for list="{{ p.dots }}" as="d" hint-placeholder-count="3">
+                    <button sc-camel-on-click="{{ d.onClick }}" aria-label="Go to image" style="{{ d.style }}"></button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </sc-if>
+            <sc-if value="{{ p.noImages }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;">
+                <span style="font-family:ui-monospace, 'SFMono-Regular', monospace; font-size:13px; letter-spacing:0.05em; color:#837D70;">no preview yet</span>
+              </div>
+            </sc-if>
+          </div>
+          <div class="sb-body" style="padding: clamp(18px,2.4vw,24px); display:flex; flex-direction:column; gap:14px; flex:1;">
+            <div>
+              <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:5px;">
+                <h2 class="sb-card-title" style="{{ p.titleStyle }}">{{ p.displayTitle }}</h2>
+              </div>
+              <p style="font-size:14px; color:#837D70; line-height:1.45;">{{ p.subtitle }}</p>
+            </div>
+            <sc-if value="{{ p.hasDesc }}" hint-placeholder-val="{{ true }}">
+              <p class="sb-desc" style="font-size:15px; line-height:1.55; color:#24211A; text-wrap:pretty;">{{ p.description }}</p>
+            </sc-if>
+            <sc-if value="{{ p.hasTags }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                <sc-for list="{{ p.tags }}" as="t" hint-placeholder-count="3">
+                  <span class="sb-tag" style="padding:4px 11px; border-radius:999px; border:1px solid #D3CDBE; font-size:12px; color:#837D70; letter-spacing:0.02em;">{{ t }}</span>
+                </sc-for>
+              </div>
+            </sc-if>
+            <div style="margin-top:auto; padding-top:8px;">
+              <sc-if value="{{ p.hasAnyAction }}" hint-placeholder-val="{{ true }}">
+                <div class="sb-actions" style="display:flex; flex-wrap:wrap; gap:10px;">
+                  <sc-if value="{{ p.hasDemo }}" hint-placeholder-val="{{ true }}">
+                    <a href="{{ p.demoUrl }}" style="display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:12px 22px; border-radius:999px; background:#1F3D2F; color:#F4F1EA; border:1px solid #1F3D2F; font-size:14px; font-weight:500;" style-hover="background:#183020; border-color:#183020; color:#F4F1EA;">Demo</a>
+                  </sc-if>
+                  <sc-if value="{{ p.hasGithub }}" hint-placeholder-val="{{ true }}">
+                    <a href="{{ p.githubUrl }}" style="display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:12px 20px; border-radius:999px; background:transparent; color:#24211A; border:1px solid #D3CDBE; font-size:14px; font-weight:500;" style-hover="border-color:#1F3D2F; color:#1F3D2F;">GitHub</a>
+                  </sc-if>
+                  <sc-if value="{{ p.hasWriteup }}" hint-placeholder-val="{{ true }}">
+                    <a href="{{ p.writeupUrl }}" style="display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:12px 20px; border-radius:999px; background:transparent; color:#24211A; border:1px solid #D3CDBE; font-size:14px; font-weight:500;" style-hover="border-color:#1F3D2F; color:#1F3D2F;">Writeup</a>
+                  </sc-if>
+                </div>
+              </sc-if>
+              <sc-if value="{{ p.isEmpty }}" hint-placeholder-val="{{ false }}">
+                <span style="font-family:ui-monospace, 'SFMono-Regular', monospace; font-size:12px; letter-spacing:0.03em; color:#837D70;">links coming soon</span>
+              </sc-if>
+            </div>
+          </div>
+        </article>
+      </sc-for>
+    </section>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ showWriting }}" hint-placeholder-val="{{ false }}">
+<div style="min-height:100vh;">
+  <div style="max-width:1240px; margin:0 auto; padding: clamp(24px,5vw,56px) clamp(16px,4vw,48px);">
+    <header style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px 16px; margin-bottom: clamp(36px,6vw,68px);">
+      <a href="#home" style="font-family:'Instrument Serif', serif; font-size:23px; color:#16140E; letter-spacing:0.01em;">Swarnim Bagre</a>
+      <nav class="desktop-nav" style="display:flex; flex-wrap:wrap; gap: 8px 18px; font-size:14px;">
+        <a href="#projects" style="color:#837D70;">Projects</a>
+        <a href="#writing" style="color:#16140E; font-weight:500;">Writing</a>
+        <a href="#other" style="color:#837D70;">Other</a>
+      </nav>
+      <button class="burger" sc-camel-on-click="{{ toggleMenu }}" aria-label="Menu" style="width:44px; height:44px; border-radius:12px; border:1px solid #D3CDBE; background:#F4F1EA; cursor:pointer; align-items:center; justify-content:center; flex-direction:column; gap:5px;">
+        <span style="display:block; width:18px; height:1.5px; background:#16140E;"></span><span style="display:block; width:18px; height:1.5px; background:#16140E;"></span><span style="display:block; width:18px; height:1.5px; background:#16140E;"></span>
+      </button>
+    </header>
+    <nav class="mmenu {{ menuClass }}" style="flex-direction:column; gap:2px; margin:-8px 0 28px; border:1px solid #D3CDBE; border-radius:14px; overflow:hidden; background:#EDE9DF;">
+      <a href="#projects" style="padding:14px 18px; color:#837D70; font-size:15px; border-bottom:1px solid #D3CDBE;">Projects</a>
+      <a href="#writing" style="padding:14px 18px; color:#16140E; font-weight:500; font-size:15px; border-bottom:1px solid #D3CDBE;">Writing</a>
+      <a href="#other" style="padding:14px 18px; color:#837D70; font-size:15px;">Other</a>
+    </nav>
+    <div style="margin-bottom: clamp(30px,5vw,52px); max-width:660px;">
+      <h1 class="page-title" style="font-family:'Instrument Serif', serif; font-size: clamp(44px,9vw,76px); line-height:1.0; color:#16140E; margin-bottom:16px;">Writing</h1>
+      <p style="color:#837D70; font-size: clamp(15px,2vw,17px); line-height:1.55; text-wrap:pretty;">Mostly essays I wrote to figure out what I think. Occasionally a build log. Never a thread.</p>
+    </div>
+    <section style="border-bottom:1px solid #D3CDBE;">
+      <sc-for list="{{ posts }}" as="p" hint-placeholder-count="9">
+        <a href="#writing" class="lrow" style="display:grid; grid-template-columns:132px 1fr; gap:24px; align-items:baseline; padding:22px 0; border-top:1px solid #D3CDBE;">
+          <div class="lrow-date" style="font-family:ui-monospace,'SFMono-Regular',monospace; font-size:12.5px; letter-spacing:0.08em; text-transform:uppercase; color:#837D70; padding-top:5px;">{{ p.date }}</div>
+          <div>
+            <h2 class="ltitle" style="font-family:'Instrument Serif', serif; font-size:26px; line-height:1.12; color:#16140E; transition:color .18s ease;">{{ p.title }}<span class="larrow" style="margin-left:9px; font-family:'Space Grotesk',sans-serif; font-size:18px; display:inline-block;">→</span></h2>
+            <p style="margin-top:6px; font-size:15px; line-height:1.5; color:#837D70; text-wrap:pretty; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; overflow:hidden;">{{ p.excerpt }}</p>
+          </div>
+        </a>
+      </sc-for>
+    </section>
+    <p style="margin-top: clamp(28px,4vw,44px); color:#837D70; font-size:15px; line-height:1.55; text-wrap:pretty; max-width:560px;">Written between builds — new pieces land here first, usually once a project is finished enough to explain.</p>
+  </div>
+</div>
+</sc-if>
+
+<sc-if value="{{ showOther }}" hint-placeholder-val="{{ false }}">
+<div class="cpage" style="height: 100vh; overflow: hidden; background: #F4F1EA; color: #24211A; font-family: 'Space Grotesk', system-ui, sans-serif; -webkit-font-smoothing: antialiased;">
+  <div style="max-width: 1240px; height: 100%; margin: 0 auto; padding: clamp(22px, 3.5vw, 44px) clamp(16px, 4vw, 48px); display: flex; flex-direction: column;">
+    <header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; margin-bottom: clamp(20px, 3vw, 34px);">
+      <a href="#home" style="font-family: 'Instrument Serif', serif; font-size: 23px; color: #16140E; letter-spacing: 0.01em;">Swarnim Bagre</a>
+      <nav class="desktop-nav" style="display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 15px;">
+        <a href="#projects" style="color: #837D70;">Projects</a>
+        <a href="#writing" style="color: #837D70;">Writing</a>
+        <a href="#other" style="color: #16140E; font-weight: 500;">Other</a>
+      </nav>
+      <button class="burger" sc-camel-on-click="{{ toggleMenu }}" aria-label="Menu" style="width: 44px; height: 44px; border-radius: 12px; border: 1px solid #D3CDBE; background: #F4F1EA; cursor: pointer; align-items: center; justify-content: center; flex-direction: column; gap: 5px;">
+        <span style="display: block; width: 18px; height: 1.5px; background: #16140E;"></span><span style="display: block; width: 18px; height: 1.5px; background: #16140E;"></span><span style="display: block; width: 18px; height: 1.5px; background: #16140E;"></span>
+      </button>
+    </header>
+    <nav class="mmenu {{ menuClass }}" style="flex-direction: column; gap: 2px; margin: -12px 0 22px; border: 1px solid #D3CDBE; border-radius: 14px; overflow: hidden; background: #EDE9DF;">
+      <a href="#projects" style="padding: 14px 16px; font-size: 16px; color: #837D70; border-bottom: 1px solid #D3CDBE;">Projects</a>
+      <a href="#writing" style="padding: 14px 16px; font-size: 16px; color: #837D70; border-bottom: 1px solid #D3CDBE;">Writing</a>
+      <a href="#other" style="padding: 14px 16px; font-size: 16px; color: #16140E; font-weight: 500;">Other</a>
+    </nav>
+    <div style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 18px; margin-bottom: clamp(16px, 2.4vw, 26px);">
+      <h1 style="font-family: 'Instrument Serif', serif; font-size: clamp(34px, 4.4vw, 54px); line-height: 1; color: #16140E; margin: 0;">everything else</h1>
+      <p style="color: #837D70; font-size: 14.5px; line-height: 1.4; margin: 0; max-width: 440px; text-wrap: pretty;">Some things I count, some things I'm just in the middle of.</p>
+    </div>
+    <div class="cgrid" style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 1px; background: #D3CDBE; border: 1px solid #D3CDBE;">
+      <div class="crow" style="flex: 1; min-height: 0; display: flex; gap: 1px; background: #D3CDBE;">
+        <sc-for list="{{ counts }}" as="c" hint-placeholder-count="4">
+          <div class="ctile" style="flex: 1; min-width: 0; background: #F4F1EA; padding: clamp(18px, 1.8vw, 28px); display: flex; flex-direction: column; justify-content: center; gap: 14px; overflow: hidden;">
+            <div style="display: flex; align-items: baseline; gap: 8px;">
+              <span style="font-family: 'Instrument Serif', serif; line-height: 0.82; color: #16140E; font-size: clamp(44px, 4.6vw, 74px);">{{ c.num }}</span>
+              <span style="font-size: 15px; color: #837D70;">{{ c.unit }}</span>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+              <div style="font-size: 13px; line-height: 1.35; color: #837D70; text-wrap: pretty;">{{ c.label }}</div>
+              <sc-if value="{{ c.hasAside }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size: 11.5px; line-height: 1.4; color: #837D70; font-style: italic; text-wrap: pretty;">{{ c.aside }}</div>
+              </sc-if>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div class="trow" style="flex: 1; min-height: 0; display: flex; gap: 1px; background: #D3CDBE;">
+        <sc-for list="{{ texts }}" as="t" hint-placeholder-count="3">
+          <div class="ttile" style="flex: 1; min-width: 0; background: #F4F1EA; padding: clamp(18px, 1.8vw, 28px); display: flex; flex-direction: column; justify-content: center; gap: 12px; overflow: hidden;">
+            <div style="font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; color: #837D70;">{{ t.kicker }}</div>
+            <div style="font-family: 'Instrument Serif', serif; font-size: clamp(20px, 1.9vw, 27px); line-height: 1.15; color: #16140E; text-wrap: pretty;">{{ t.line }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script="" data-props="{
+  &quot;$preview&quot;: { &quot;width&quot;: 1200, &quot;height&quot;: 760 }
+}">
+class Component extends DCLogic {
+  state = { route: 'home', menuOpen: false, projIdx: {}, chatShown: false, chatAsked: '' };
+
+  parseHash() {
+    const h = (location.hash || '').replace('#', '').toLowerCase();
+    return ['projects', 'writing', 'other'].includes(h) ? h : 'home';
+  }
+  componentDidMount() {
+    this._onHash = () => this.setState({ route: this.parseHash(), menuOpen: false });
+    window.addEventListener('hashchange', this._onHash);
+    this.setState({ route: this.parseHash() });
+  }
+  componentWillUnmount() { window.removeEventListener('hashchange', this._onHash); }
+
+  toggleMenu = () => this.setState((s) => ({ menuOpen: !s.menuOpen }));
+
+  _tx = null;
+  onTouchStart = (e) => { this._tx = e.touches[0].clientX; };
+  onTouchEnd = (id, len) => (e) => {
+    if (this._tx == null || len < 2) { this._tx = null; return; }
+    const dx = e.changedTouches[0].clientX - this._tx;
+    if (Math.abs(dx) > 40) this.step(id, dx < 0 ? 1 : -1, len);
+    this._tx = null;
+  };
+  step(id, dir, len) {
+    if (len <= 1) return;
+    this.setState((s) => {
+      const cur = s.projIdx[id] || 0;
+      return { projIdx: { ...s.projIdx, [id]: (cur + dir + len) % len } };
+    });
+  }
+  goTo(id, i) { this.setState((s) => ({ projIdx: { ...s.projIdx, [id]: i } })); }
+
+  projData = [
+    { id: 'halcyon', title: 'Halcyon', subtitle: 'Realtime collaborative canvas', year: '2025',
+      description: 'A multiplayer whiteboard with CRDT sync, vector tools, and offline-first storage. Built for teams that sketch before they spec.',
+      tags: ['TypeScript', 'WebRTC', 'Rust', 'CRDT'],
+      images: [
+        { label: 'interface — board view', alt: 'Halcyon collaborative canvas showing a shared board with multiple cursors' },
+        { label: 'detail — vector toolbar', alt: 'Close-up of the Halcyon vector drawing toolbar' },
+        { label: 'mobile — canvas + gestures', alt: 'Halcyon running on a phone with touch gesture controls' },
+      ],
+      actions: { demo: '#', github: '#', writeup: '#' } },
+    { id: 'fieldnote', title: 'Fieldnote', subtitle: 'Terminal-first research log', year: '2024',
+      description: 'A CLI for structured journaling — tagged entries, fast capture, and clean markdown export.',
+      tags: ['Go', 'SQLite'],
+      images: [ { label: 'terminal — capture flow', alt: 'Fieldnote CLI capturing a tagged journal entry in the terminal' } ],
+      actions: { github: '#', writeup: '#' } },
+    { id: 'untitled', title: null, subtitle: null, year: '2026', description: null, tags: [], images: [], actions: {} },
+  ];
+
+  writingData = [
+    { date: 'May 2026', title: 'The merge conflict nobody sees', excerpt: 'Realtime collaboration promises two people can edit the same thing at once. The hard part was never the network — it’s deciding whose intent wins when the bytes disagree.' },
+    { date: 'Mar 2026', title: 'What I learned shipping Halcyon', excerpt: 'A build log. Eight months, one accent color, and a stubborn refusal to add the feature everyone asked for. Here’s what survived contact with real users.' },
+    { date: 'Feb 2026', title: 'In defense of the blank terminal', excerpt: 'Every few years someone declares the command line dead. I keep coming back for the same reason I keep a paper notebook: nothing gets between me and the thought.' },
+    { date: 'Dec 2025', title: 'Taste is just paying attention', excerpt: 'People talk about taste like it’s innate. I think it’s mostly noticing — the slow accumulation of caring about details other people wave past.' },
+    { date: 'Nov 2025', title: 'Designing Fieldnote for the five-second capture', excerpt: 'A journaling tool you have to think about is one you stop using. Fieldnote spent its whole design budget on the moment between having a thought and losing it.' },
+    { date: 'Sep 2025', title: 'The tyranny of the empty state', excerpt: 'Every app is beautiful with fake data. Real products live or die in the first thirty seconds, when the user has nothing and the screen has to earn their next tap.' },
+    { date: 'Jun 2025', title: 'Constraints are a design material', excerpt: 'Give me an infinite canvas and I freeze. Give me a four-inch screen, a 200-millisecond budget, and one accent color, and the decisions start making themselves.' },
+    { date: 'Mar 2025', title: 'Why I still write my own CSS', excerpt: 'Frameworks are faster until the day you need the thing they didn’t imagine. I’d rather own every line than fight an abstraction I didn’t choose.' },
+    { date: 'Dec 2024', title: 'Shipping is a feature', excerpt: 'The version that exists beats the version that’s perfect in your head. I’ve lost more good ideas to indecision than I ever lost to bad execution.' },
+  ];
+
+  renderVals() {
+    const route = this.state.route;
+    const accent = '#1F3D2F';
+    const idx = this.state.projIdx || {};
+    const projects = this.projData.map((p) => {
+      const len = p.images.length;
+      const cur = Math.min(idx[p.id] || 0, Math.max(0, len - 1));
+      const isEmpty = !p.title;
+      const a = p.actions || {};
+      return {
+        id: p.id,
+        displayTitle: p.title || 'Untitled project',
+        subtitle: p.subtitle || (isEmpty ? 'A new build — details on the way.' : ''),
+        description: p.description, tags: p.tags || [], hasTags: (p.tags || []).length > 0,
+        hasDesc: !!p.description, isEmpty, hasImages: len > 0, noImages: len === 0, multi: len > 1,
+        counter: len ? (cur + 1) + ' / ' + len : '',
+        slides: p.images.map((im, i) => ({ label: im.label, alt: im.alt || im.label, key: p.id + '-' + i })),
+        trackStyle: { display: 'flex', height: '100%', transform: 'translateX(' + (-cur * 100) + '%)', transition: 'transform .4s cubic-bezier(.4,0,.2,1)' },
+        dots: p.images.map((_, i) => ({ onClick: () => this.goTo(p.id, i), key: 'd' + i,
+          style: { width: '8px', height: '8px', borderRadius: '999px', border: 'none', padding: 0, cursor: 'pointer', background: i === cur ? accent : 'rgba(31,61,47,0.25)' } })),
+        onPrev: () => this.step(p.id, -1, len), onNext: () => this.step(p.id, 1, len),
+        onTouchStart: this.onTouchStart, onTouchEnd: this.onTouchEnd(p.id, len),
+        frameStyle: { position: 'relative', aspectRatio: '16 / 10', overflow: 'hidden', background: '#EDE9DF', borderBottom: '1px solid #D3CDBE', touchAction: 'pan-y' },
+        titleStyle: { fontFamily: "'Instrument Serif', serif", fontSize: 'clamp(24px, 3vw, 30px)', lineHeight: 1.05, color: isEmpty ? '#837D70' : '#16140E', fontStyle: isEmpty ? 'italic' : 'normal' },
+        hasDemo: !!a.demo, hasGithub: !!a.github, hasWriteup: !!a.writeup,
+        hasAnyAction: !!(a.demo || a.github || a.writeup),
+        demoUrl: a.demo || '#', githubUrl: a.github || '#', writeupUrl: a.writeup || '#',
+      };
+    });
+
+    return {
+      showHome: route === 'home',
+      showProjects: route === 'projects',
+      showWriting: route === 'writing',
+      showOther: route === 'other',
+      menuClass: this.state.menuOpen ? 'open' : '',
+      toggleMenu: this.toggleMenu,
+      projects,
+      posts: this.writingData,
+      counts: [
+        { num: '34', unit: 'matches', label: 'Beach volleyball matches', hasAside: true, aside: "casual tournaments, no one's keeping the score that matters" },
+        { num: '26', unit: 'rounds', label: 'Disc golf rounds walked', hasAside: false, aside: '' },
+        { num: '18', unit: 'sets', label: 'Tennis sets, mostly lost', hasAside: true, aside: 'the losing is part of the format, apparently' },
+        { num: '92', unit: 'hrs', label: 'Hours behind the drum kit', hasAside: false, aside: '' },
+      ],
+      texts: [
+        { kicker: 'Currently watching', line: 'The Bear, one episode at a time' },
+        { kicker: 'Currently reading', line: 'Pale Fire, slowly and on purpose' },
+        { kicker: 'Current goal', line: 'A paradiddle that survives tempo' },
+      ],
+      chatShown: this.state.chatShown,
+      chatAsked: this.state.chatAsked,
+      submitChat: (e) => {
+        e.preventDefault();
+        const inp = e.currentTarget.querySelector('input');
+        const v = ((inp && inp.value) || '').trim() || 'tell me more';
+        this.setState({ chatShown: true, chatAsked: v });
+        if (inp) inp.value = '';
+      },
+    };
+  }
+}
+</script>
+
+
+</body></html>

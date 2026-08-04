@@ -45,6 +45,7 @@ This file is the plain-language record of every architectural decision. The audi
 | 31 | CONSTRAINT-22 codified + Override 2 surface boundary recorded — public-site JS-library posture closed (T43.I) | [§4.9](architecture.md#49-carousel-surface--override-2) + `constraints.md` CONSTRAINT-22 + `design-decisions.md` Override 2 |
 | 32 | Project↔post link — embedded writeup FK (`projects.post_id`, T45) | [§2.1](architecture.md#21-projects) + `design-decisions.md` Override 3 + `prd.md` §3.8 |
 | 33 | Admin manual reorder — `sort_order` column + atomic RPC (T44) | [§2.1](architecture.md#21-projects) + §2.2 + `supabase/migrations/012_sort_order.sql` + `012a_save_sort_order_rpc.sql` |
+| 34 | Public-site redesign: one responsive tree, one fewer route, zero JS deps (T46) | [§4.10](architecture.md#410-public-render-architecture-one-responsive-tree-t46) + §2.1 + §2.3 + §2.6 + §4.9 + `constraints.md` CONSTRAINT-05 |
 
 ---
 
@@ -701,6 +702,28 @@ wall-clock proves the wrapper ran end-to-end).
 **What this closes off:** A `created_at`-only public order (rejected — no manual curation) and an application-layer multi-UPDATE reorder (rejected — non-atomic, can leave gaps/dupes on partial failure). Ordering is now a first-class, admin-owned, atomically-persisted property.
 
 **Implementation note:** Server Actions `saveProjectOrder` / `savePostOrder` (four-file pattern); admin UI is `ResourceListReorder` with a "Save order" action (T44.C / T44.D).
+
+---
+
+## 34. Public-site redesign: one responsive tree, one fewer route, zero JS deps (T46)
+
+**Date:** 2026-08-04
+**Architecture link:** [`architecture.md` §4.10](architecture.md#410-public-render-architecture-one-responsive-tree-t46) + §2.1 + §2.3 + §2.6 + §4.9 + `constraints.md` CONSTRAINT-05 (re-baselined) + `design-decisions.md`
+
+**Decided:** The original dark design bundle is retired and the public site is rebuilt wholesale against a new Claude Design export at `docs/design-source/redesign-2026-08/`. You showed the live site to several people; they were confused by it and did not like the look. That is feedback from the actual audience, and it outranks every internal argument for keeping a design we had already paid for. The palette inverted from warm dark to light (cream `#F4F1EA` background, deep green `#1F3D2F` accent), the typefaces changed to Instrument Serif, Space Grotesk and Space Mono, and the page structures were re-cut. Two migrations added the fields the new design renders: `subtitle` and `tags` on projects (013), `aside` and `sort_order` on stats plus a new `notes` table for the three text tiles on the Other page (014). Overrides 1, 2 and 3 retired with the bundle they amended.
+
+**What this means for your product:** The site now looks like something a person would want to read rather than something that needs explaining. Underneath, there is materially less of it to maintain. One component tree instead of two: the separate mobile fork and the server-side device sniffing are both gone, replaced by a single responsive layout with one breakpoint at 640px. One fewer public route: the project detail page is deleted, and a project's "Writeup" button now goes straight to the post itself at `/writing/<slug>`. One fewer dependency: the carousel is hand-written, so the public site is back to zero runtime JavaScript libraries. Each of those was a place a bug could hide in one copy and not the other. Ordering on the Other page is now yours to set explicitly, the same way project and post ordering already was.
+
+**Check before approving:**
+- **Project cards now require real screenshots.** The old card could fall back to a generated SVG motif when a project had no image. That fallback is gone; a project with no media renders a plain "no preview yet" box. This was chosen deliberately: a hand-drawn motif standing in for a screenshot is decoration pretending to be evidence, and a page of decoration is exactly what reads as unfinished. The price is that capturing screenshots for every project is now a **hard launch gate**, not a nice-to-have.
+- The old bundle is deleted, not parked. Reverting means restoring components from git history, not flipping a setting.
+- `projects.thumb_kind` stays in the database but nothing reads it, so historical values survive if the motif idea is ever revisited.
+- Admin deliberately stayed dark while the public site went light. The two palettes are independent by design now; admin's four brand colors are its own constants and must not be resynced to the public ones (CONSTRAINT-16, T46 amendment).
+- The writing list's dates and excerpts are derived from `created_at` and `content` at render time rather than stored. If you ever want to hand-write an excerpt, that is the moment to add a column.
+
+**What this closes off:** A separate mobile design. Anything the site does at narrow widths must now be expressible in one tree at one breakpoint, which is a real constraint on layouts that want to be structurally different on phones. Also closed: the project detail page as a place to put content. Long-form project writing goes through the posts system and lives at `/writing/<slug>`; there is no longer a URL that is "the project's own page". And the tag list on a project is capped at 8 short labels by a database constraint, so tags cannot quietly become a taxonomy.
+
+**Implementation note:** Migrations `013_project_card_fields.sql` and `014_other_page_model.sql` are applied to production. `getStatsByCategory` was replaced by `getOrderedStats()`; `getNotes()` and `lib/post-summary.ts` are new. The `x-device-variant` branch was removed from `middleware.ts` and the matcher narrowed to `/admin/:path*`, so middleware no longer executes on public requests at all. One bug worth remembering: the `next/font` variable classes were first placed on `<body>`, and because a CSS custom property is substituted where it is declared rather than where it is used, every composed font family at `:root` resolved to an invalid value. Every `font:` shorthand on the site silently fell back to Times New Roman with nothing in the console. Moving the classes to `<html>` fixed it, and the comment in `app/layout.tsx` exists so nobody moves them back.
 
 ---
 

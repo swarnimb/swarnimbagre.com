@@ -50,7 +50,8 @@ const ALLOWED_FIELD_KEYS: ReadonlySet<ProjectMutationFieldName> = new Set([
   'live_url',
   'post_url',
   'progress_percent',
-  'thumb_kind',
+  'subtitle',
+  'tags',
   'image_after_id',
   'post_id',
 ]);
@@ -87,7 +88,7 @@ function projectZodErrorToFieldErrors(
 /**
  * Read a FormData field as a trimmed non-empty string, or `null` if empty
  * or missing. Used for every nullable text field — URLs, image FK ids,
- * `thumb_kind`. Mirrors the empty-string-to-null convention that the zod
+ * `subtitle`. Mirrors the empty-string-to-null convention that the zod
  * schemas (`.nullable()`) expect at the boundary.
  */
 function readNullableTrimmed(formData: FormData, key: string): string | null {
@@ -95,6 +96,27 @@ function readNullableTrimmed(formData: FormData, key: string): string | null {
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
   return trimmed.length === 0 ? null : trimmed;
+}
+
+/**
+ * Read the comma-separated `tags` field into a trimmed string array, or
+ * `null` when the field is empty or missing.
+ *
+ * The form submits one comma-separated text input rather than a repeated
+ * field, because a handful of short tags is faster to type than it is to
+ * manage as a widget. Blank segments are dropped here so a trailing comma
+ * ("a, b,") does not produce an empty tag; the zod schema still rejects
+ * whitespace-only entries that survive, which is the case the DB CHECK
+ * cannot catch on its own.
+ */
+function readTagsField(formData: FormData): string[] | null {
+  const raw = formData.get('tags');
+  if (typeof raw !== 'string') return null;
+  const tags = raw
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter((tag) => tag.length > 0);
+  return tags.length > 0 ? tags : null;
 }
 
 /**
@@ -119,7 +141,7 @@ function readPercentField(formData: FormData): unknown {
  * `image_after_id`: image upload requires the parent's UUID, which only
  * exists after the project row has been inserted. Images are attached on
  * the subsequent edit. The five non-image content-model fields (URLs,
- * progress, thumb_kind) are included so a publish-on-create flow can land
+ * progress, subtitle, tags) are included so a publish-on-create flow can land
  * a complete row in one round-trip.
  */
 function readProjectCreateFormData(formData: FormData): unknown {
@@ -131,7 +153,8 @@ function readProjectCreateFormData(formData: FormData): unknown {
     live_url: readNullableTrimmed(formData, 'live_url'),
     post_url: readNullableTrimmed(formData, 'post_url'),
     progress_percent: readPercentField(formData),
-    thumb_kind: readNullableTrimmed(formData, 'thumb_kind'),
+    subtitle: readNullableTrimmed(formData, 'subtitle'),
+    tags: readTagsField(formData),
     post_id: readNullableTrimmed(formData, 'post_id'),
   };
 }
@@ -154,7 +177,8 @@ function readProjectUpdateFormData(formData: FormData): unknown {
     live_url: readNullableTrimmed(formData, 'live_url'),
     post_url: readNullableTrimmed(formData, 'post_url'),
     progress_percent: readPercentField(formData),
-    thumb_kind: readNullableTrimmed(formData, 'thumb_kind'),
+    subtitle: readNullableTrimmed(formData, 'subtitle'),
+    tags: readTagsField(formData),
     image_after_id: readNullableTrimmed(formData, 'image_after_id'),
     post_id: readNullableTrimmed(formData, 'post_id'),
   };

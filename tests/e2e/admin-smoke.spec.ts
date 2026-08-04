@@ -32,7 +32,7 @@
  *     the duration of the test; asserted empty at the end.
  */
 
-import { test, expect, type BrowserContext, type ConsoleMessage, type Page } from '@playwright/test';
+import { test, expect, type ConsoleMessage, type Page } from '@playwright/test';
 import { loginAsAdmin } from './fixtures/auth';
 
 // --- Constants (CQ-04) -----------------------------------------------------
@@ -51,6 +51,8 @@ const POST_MARKDOWN_BODY = `## T28 heading\n\nA list item exercises the renderer
 const STAT_CATEGORY = `t28-${RUN_ID}`;
 const STAT_LABEL = `T28 stat ${RUN_ID}`;
 const STAT_VALUE = '42';
+/** Second value, used to prove the T46 `updateStat` edit path persists. */
+const STAT_VALUE_EDITED = '43';
 
 // --- T42 end-to-end path constants (CQ-04) --------------------------------
 
@@ -62,12 +64,28 @@ const T42_PROJECT_DESCRIPTION = `T42 end-to-end project description ${RUN_ID}.`;
 const T42_GITHUB_URL = 'https://github.com/test/t42-smoke';
 /** T42 live URL — https, non-collision. */
 const T42_LIVE_URL = 'https://example.com/t42-smoke';
-/** T42 post URL — relative form is permitted by `postUrlSchema`. */
+/**
+ * T42 post URL. The relative form is permitted by `postUrlSchema`.
+ *
+ * Still an admin field, so the create step still fills it, but T46 stopped
+ * rendering `post_url` anywhere: the card's Writeup action resolves from the
+ * linked post's slug instead. Nothing on the public side asserts this value.
+ */
 const T42_POST_URL = '/writing/t42-smoke-post';
-/** T42 progress — 100 triggers the `ProgressRing` done-glow render path. */
+/**
+ * T42 progress: an in-range value the admin field must round-trip. T46
+ * deleted `ProgressRing`, so it no longer reaches any public surface.
+ */
 const T42_PROGRESS_PERCENT = '100';
-/** T42 thumb_kind — first entry of `THUMB_KIND_OPTIONS` (`disc`). */
-const T42_THUMB_KIND_LABEL = 'Disc';
+/** T46 subtitle: renders as `.sb-subtitle` under the card title. */
+const T42_SUBTITLE = `T42 subtitle ${RUN_ID}`;
+/**
+ * T46 tags: one comma-separated text input, not a widget. The server splits,
+ * trims and drops blanks, so the pills below are what the card should draw.
+ */
+const T42_TAGS_INPUT = 'Next.js, Supabase, Postgres';
+/** Expected `.sb-tag` pill texts, in order, after the server-side split. */
+const T42_TAG_PILLS: readonly string[] = ['Next.js', 'Supabase', 'Postgres'];
 
 /** T43.F media-flow project title — distinct prefix so cleanup can scope by it. */
 const T43F_MEDIA_TITLE = `T43F media project ${RUN_ID}`;
@@ -75,20 +93,30 @@ const T43F_MEDIA_TITLE = `T43F media project ${RUN_ID}`;
 const T43F_CAPTION_SINGLE = `T43F single caption ${RUN_ID}`;
 const T43F_CAPTION_PAIR = `T43F pair caption ${RUN_ID}`;
 
-/** TypoIcon visible-text labels. Unicode characters preserved verbatim per
- * CONSTRAINT-13 — `↗` and `¶` must not be transliterated to `->` or `section`. */
-const TYPO_ICON_GITHUB_TEXT = '{ } code';
-const TYPO_ICON_LIVE_TEXT = '↗ site';
-const TYPO_ICON_POST_TEXT = '¶ notes';
+/**
+ * T46 public card action labels. Exact visible text on the `.sb-action`
+ * anchors inside `.sb-actions`. These replace the deleted `TypoIcon` glyph
+ * labels, which is why no Unicode is pinned here any more.
+ */
+const ACTION_DEMO_TEXT = 'Demo';
+const ACTION_GITHUB_TEXT = 'GitHub';
+const ACTION_WRITEUP_TEXT = 'Writeup';
+/** Copy rendered as `.sb-soon` in place of the actions when a card has none. */
+const ACTION_EMPTY_TEXT = 'links coming soon';
+/** Copy rendered as `.sb-noprev` when a project has zero `project_media` rows. */
+const NO_PREVIEW_TEXT = 'no preview yet';
+/** Text typed into the home chat box so the echoed bubble is identifiable. */
+const HOME_FOLLOWUP = 'so it does nothing at all';
 
 /**
- * Mobile UA token matched by `MOBILE_UA_TOKENS` in `middleware.ts`. Selecting
- * the iPhone string keeps parity with `tests/e2e/ua-mobile.spec.ts`; both
- * specs exercise the same middleware classification path.
+ * T46 removed the server-side device split and the whole `components/public/
+ * mobile/` tree, so there is no mobile UA context to open any more: the public
+ * site is one responsive render with a single 640px breakpoint. Mobile
+ * coverage is therefore a viewport resize below that breakpoint, followed by a
+ * resize back to the runner default so the admin steps after it lay out wide.
  */
-const T42_MOBILE_USER_AGENT =
-  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) ' +
-  'AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+const MOBILE_VIEWPORT = { width: 390, height: 844 } as const;
+const DESKTOP_VIEWPORT = { width: 1280, height: 720 } as const;
 
 /** SEC-02 payloads. Both must round-trip as literal text — no execution. */
 const XSS_SCRIPT_PAYLOAD = `<script>window.__t28_xss=1;</script>`;
@@ -278,10 +306,12 @@ async function runStep(
 /**
  * Pick a value from a shadcn Select by its accessible label. Mirrors
  * `selectFormStatus` but parameterised on the trigger's accessible name so
- * it works for both the `Status` and `Thumbnail` selects on `ProjectForm`.
+ * it works for the `Linked writeup` select as well as `Status`.
  *
  * The trigger's accessible name comes from `<Label htmlFor="…">`; the
- * project-thumb-kind select label is "Thumbnail" (see ProjectFormDisplay.tsx).
+ * linked-post select label is "Linked writeup" (see ProjectFormDisplay.tsx).
+ * T46 deleted the third consumer, the "Thumbnail" select, along with
+ * `thumb_kind` itself.
  */
 async function selectFormOption(
   page: Page,
@@ -296,52 +326,45 @@ async function selectFormOption(
 }
 
 /**
- * Assert that the three T42 TypoIcon link buttons render with their exact
- * bundle-preserved Unicode labels and carry the URLs we submitted on the
- * admin form. The TypoIcon component renders each as an `<a>`; the visible
- * text is glyph + space + label (e.g. `{ } code`). We scope the assertion
- * to the project card region by passing the article `Locator` in.
+ * Assert that the T46 card's three action links render with their exact
+ * visible text, the right primary/secondary treatment, and the URLs we
+ * submitted on the admin form. Scope the assertion to one card by passing
+ * the `article.sb-card` Locator in.
  *
- * Each link's `onClick` only calls `preventDefault` when `href === "#"`
- * (decorative bundle default). Production consumers pass a real URL, so
- * primary clicks navigate normally; the `href` attribute carries the URL
- * directly.
+ * T46 replaced the `TypoIcon` glyph row with plain anchors in `.sb-actions`:
+ * `Demo` for the live URL, `GitHub` for the repo, `Writeup` for the linked
+ * post. Two consequences for this helper:
+ *   1. `Writeup` points at `/writing/[slug]` derived from `post_id`, not at
+ *      the `post_url` column, which no longer renders anywhere.
+ *   2. There is no inert-link regression guard any more. `TypoIcon` called
+ *      `preventDefault` unconditionally and the same bug existed on the old
+ *      `SocialIcon`; both components are deleted, and these are ordinary
+ *      anchors with no click handler for a guard to catch.
  */
-async function assertT42LinkRow(
+async function assertT42ActionRow(
   scope: Page | import('@playwright/test').Locator,
   expectedUrls: {
     githubUrl: string;
     liveUrl: string;
-    postUrl: string;
+    writeupHref: string;
   },
 ): Promise<void> {
-  const githubLink = scope.getByRole('link', { name: TYPO_ICON_GITHUB_TEXT });
-  const liveLink = scope.getByRole('link', { name: TYPO_ICON_LIVE_TEXT });
-  const postLink = scope.getByRole('link', { name: TYPO_ICON_POST_TEXT });
+  const demoLink = scope.getByRole('link', { name: ACTION_DEMO_TEXT });
+  const githubLink = scope.getByRole('link', { name: ACTION_GITHUB_TEXT });
+  const writeupLink = scope.getByRole('link', { name: ACTION_WRITEUP_TEXT });
+  await expect(demoLink.first()).toBeVisible();
   await expect(githubLink.first()).toBeVisible();
-  await expect(liveLink.first()).toBeVisible();
-  await expect(postLink.first()).toBeVisible();
+  await expect(writeupLink.first()).toBeVisible();
+  await expect(demoLink.first()).toHaveAttribute('href', expectedUrls.liveUrl);
   await expect(githubLink.first()).toHaveAttribute('href', expectedUrls.githubUrl);
-  await expect(liveLink.first()).toHaveAttribute('href', expectedUrls.liveUrl);
-  await expect(postLink.first()).toHaveAttribute('href', expectedUrls.postUrl);
-}
-
-/**
- * Assert the `ProgressRing` is present and in done-state (percent === 100).
- *
- * `ProgressRing` returns `null` when `percent` is null/undefined, so the
- * presence of the `[role="img"]` span with `aria-label="progress 100%"` is
- * a load-bearing signal that:
- *   1. The DB value round-tripped to the public render (component received `100`).
- *   2. The done-state branch fired (the aria-label is computed AFTER the
- *      `Math.min(100, percent)` clamp; only `percent === 100` produces this
- *      exact string).
- */
-async function assertProgressRingDone(
-  scope: Page | import('@playwright/test').Locator,
-): Promise<void> {
-  const ring = scope.getByRole('img', { name: 'progress 100%' });
-  await expect(ring.first()).toBeVisible();
+  await expect(writeupLink.first()).toHaveAttribute(
+    'href',
+    expectedUrls.writeupHref,
+  );
+  // Only the live URL gets the filled treatment; the other two are outlines.
+  await expect(demoLink.first()).toHaveClass(/sb-action--primary/);
+  await expect(githubLink.first()).toHaveClass(/sb-action--secondary/);
+  await expect(writeupLink.first()).toHaveClass(/sb-action--secondary/);
 }
 
 // --- The flow --------------------------------------------------------------
@@ -569,44 +592,71 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
     });
 
     // Stats CRUD.
-    await runStep(failures, 'stats: insert + delete with confirm modal', async () => {
+    //
+    // T46 replaced the shadcn Table with a stack of editable `<li>` cards,
+    // matching the notes surface. A `<form>` cannot legally be a child of a
+    // `<tr>`, so in-place editing forced the change. Two consequences here:
+    //
+    //   1. Row assertions target `listitem`, not `cell` / `row`.
+    //   2. `getByLabel('Category')` is now ambiguous, because every rendered
+    //      row carries the same six labels. Fields are addressed by id
+    //      instead: the insert form uses the bare `stat-` prefix, while rows
+    //      use `stat-<uuid>-`, so `#stat-category` matches only the form.
+    await runStep(failures, 'stats: insert + edit + delete with confirm modal', async () => {
       await page.goto('/admin/stats');
       await assertVoiceClean(page, '/admin/stats');
-      await page.getByLabel('Category').fill(STAT_CATEGORY);
-      await page.getByLabel('Label').fill(STAT_LABEL);
-      await page.getByLabel('Value').fill(STAT_VALUE);
-      await page.getByRole('button', { name: /^save$/i }).click();
+
+      await page.locator('#stat-category').fill(STAT_CATEGORY);
+      await page.locator('#stat-label').fill(STAT_LABEL);
+      await page.locator('#stat-value').fill(STAT_VALUE);
+      await page.getByRole('button', { name: /^save$/i }).first().click();
+
+      const statCard = page
+        .getByRole('listitem')
+        .filter({ hasText: STAT_LABEL });
+      await expect(statCard).toHaveCount(1);
+
+      // T46 edit path (`updateStat`). Stats were insert-or-delete only until
+      // the redesign made the Other-page tiles hand-maintained and long-lived.
+      const valueField = statCard.locator('input[name="value"]');
+      await valueField.fill(STAT_VALUE_EDITED);
+      await statCard.getByRole('button', { name: /^save$/i }).click();
+      await page.reload();
       await expect(
-        page.getByRole('cell', { name: STAT_LABEL }).first(),
-      ).toBeVisible();
+        page
+          .getByRole('listitem')
+          .filter({ hasText: STAT_LABEL })
+          .locator('input[name="value"]'),
+      ).toHaveValue(STAT_VALUE_EDITED);
+
       await page
-        .getByRole('row', { name: new RegExp(STAT_LABEL) })
+        .getByRole('listitem')
+        .filter({ hasText: STAT_LABEL })
         .getByRole('button', { name: /^delete$/i })
         .click();
       await confirmDeleteInDialog(page);
       await expect(
-        page.getByRole('cell', { name: STAT_LABEL }),
+        page.getByRole('listitem').filter({ hasText: STAT_LABEL }),
       ).toHaveCount(0);
     });
 
     // -------------------------------------------------------------------
-    // T42 end-to-end path — admin create with the 6 new content-model
-    // fields → publish → assert public render on desktop AND mobile.
+    // T42 end-to-end path: admin create with the content-model fields →
+    // publish → assert the public render.
     //
     // Image attachment to the deprecated `image_id` / `image_after_id`
     // columns is SKIPPED — T43.F removed `ProjectImageField`, so those
     // columns have no admin write surface at all. Project images now live
     // in `project_media`, exercised by the dedicated T43.F step further
     // below. This T42 path therefore exercises the still-no-image public
-    // render branch; the image-bound branches (`ProjectMedia` `<img>` and
-    // `BeforeAfterMedia`) stay covered by their unit tests.
+    // render branch, which after T46 is the `.sb-noprev` empty frame.
     //
-    // Mobile assertions use a separate BrowserContext with the iPhone UA
-    // matched by `MOBILE_UA_TOKENS` in middleware.ts. Viewport size alone
-    // would NOT switch the variant — detection is UA-based.
+    // There is no mobile variant to assert any more. T46 deleted the
+    // server-side device split, so the public tree is one responsive render
+    // and the mobile check below is a viewport resize under 640px.
     // -------------------------------------------------------------------
 
-    await runStep(failures, 'T42: create project with all 6 new fields filled', async () => {
+    await runStep(failures, 'T42: create project with every content-model field filled', async () => {
       await page.goto('/admin/projects/new');
       await page.getByLabel('Title').fill(T42_PROJECT_TITLE);
       await page.getByLabel('Description').fill(T42_PROJECT_DESCRIPTION);
@@ -614,10 +664,12 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await page.getByLabel('Live URL').fill(T42_LIVE_URL);
       await page.getByLabel('Post URL').fill(T42_POST_URL);
       await page.getByLabel('Progress').fill(T42_PROGRESS_PERCENT);
-      await selectFormOption(page, 'Thumbnail', T42_THUMB_KIND_LABEL);
-      // T45.D Override 3: attach the published post created earlier so this
-      // project's detail page has a body the list card does not — which makes
-      // the `/projects` list title an active link (the "enriched" state).
+      // T46 replaced the `Thumbnail` select with these two plain text inputs.
+      await page.getByLabel('Subtitle').fill(T42_SUBTITLE);
+      await page.getByLabel('Tags').fill(T42_TAGS_INPUT);
+      // T45.B: attach the published post created earlier. After T46 that link
+      // is what renders the card's `Writeup` action, so a project with no
+      // linked post gets one fewer action.
       await selectFormOption(page, 'Linked writeup', POST_TITLE);
       await selectFormStatus(page, 'Published');
       await page.getByRole('button', { name: /^save$/i }).click();
@@ -630,140 +682,111 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
     const t42PublicAssertions = {
       githubUrl: T42_GITHUB_URL,
       liveUrl: T42_LIVE_URL,
-      postUrl: T42_POST_URL,
+      // T46: the Writeup action resolves from the linked post's slug, which
+      // is why this reads `postSlug` captured by the posts step above rather
+      // than the `post_url` column we also filled.
+      writeupHref: `/writing/${postSlug}`,
     };
     const t42TitleRe = new RegExp(T42_PROJECT_TITLE);
 
-    await runStep(failures, 'T42 desktop: home renders project row with ring + 3 links', async () => {
+    /** Locate one `article.sb-card` on `/projects` by its `h2` title text. */
+    const cardByTitle = (titleRe: RegExp) => {
+      const title = page.locator('h2.sb-card-title', { hasText: titleRe });
+      return page.locator('article.sb-card', { has: title }).first();
+    };
+
+    // Home no longer carries a project region. T46 turned `/` into a static
+    // fake chat: a canned question, the bio answer, three nav pills, the
+    // reach-out row, and an input whose only job is to echo itself back.
+    await runStep(failures, 'T46 home: static chat renders and echoes a submitted question', async () => {
       await page.goto('/');
-      const heading = page.getByRole('heading', { level: 3, name: t42TitleRe });
-      await expect(heading.first()).toBeVisible();
-      const article = page.locator('article', { has: heading });
-      await assertProgressRingDone(article.first());
-      await assertT42LinkRow(article.first(), t42PublicAssertions);
+      await expect(page.locator('.h-qbubble').first()).toBeVisible();
+      await expect(page.locator('.h-avatar').first()).toBeVisible();
+      await expect(page.locator('.h-bio')).toBeVisible();
+      // Projects / Writing / Other.
+      await expect(page.locator('.h-btn')).toHaveCount(3);
+      await expect(page.locator('.h-find')).toBeVisible();
 
-      // Regression guard: TypoIcon previously called `preventDefault`
-      // unconditionally, making every link visibly clickable but inert.
-      // Synthesise a primary click on the `{ } code` link and assert the
-      // event was NOT default-prevented. Use `evaluate` so we don't trigger
-      // a real cross-origin navigation in the test runner.
-      const githubLink = article
-        .first()
-        .getByRole('link', { name: TYPO_ICON_GITHUB_TEXT })
-        .first();
-      const wasDefaultPrevented = await githubLink.evaluate((el) => {
-        const evt = new MouseEvent('click', { bubbles: true, cancelable: true });
-        el.dispatchEvent(evt);
-        return evt.defaultPrevented;
-      });
-      expect(
-        wasDefaultPrevented,
-        'TypoIcon primary click must NOT preventDefault for real URLs',
-      ).toBe(false);
+      // Submitting is client-only: no model, no API route, no navigation.
+      // The echoed second bubble is the only proof the handler ran, so it is
+      // what we assert rather than any network effect.
+      await page.locator('.h-input').fill(HOME_FOLLOWUP);
+      await page.locator('.h-send').click();
+      await expect(page.locator('.h-qbubble')).toHaveCount(2);
+      await expect(page.locator('.h-qbubble').nth(1)).toHaveText(HOME_FOLLOWUP);
+      await expect(page.locator('.h-reply')).toBeVisible();
+      await expect(page.locator('.h-reply')).not.toBeEmpty();
     });
 
-    await runStep(failures, 'T42 desktop: /projects renders card with ring + 3 links', async () => {
+    await runStep(failures, 'T46 desktop: /projects renders the card body + actions', async () => {
       await page.goto('/projects');
-      const heading = page.getByRole('heading', { level: 3, name: t42TitleRe });
-      await expect(heading.first()).toBeVisible();
-      const article = page.locator('article', { has: heading });
-      await assertProgressRingDone(article.first());
-      await assertT42LinkRow(article.first(), t42PublicAssertions);
-    });
-
-    // T45.D Override 3 — title-link gating on the public /projects list.
-    //   - Enriched card (T42 project: has an attached post)  → title IS a link.
-    //   - Bare card (PROJECT_TITLE_EDITED: published, no post, no media) →
-    //     title is an inert label (no anchor).
-    // The bare card never carries TypoIcon links either, so scoping the
-    // title-link assertion to the article's <h3> keeps it unambiguous.
-    await runStep(failures, 'T45.D desktop: /projects title-link gating (enriched vs bare)', async () => {
-      await page.goto('/projects');
-
-      // Enriched: T42 card title resolves as a link with the project title.
-      const enrichedHeading = page.getByRole('heading', { level: 3, name: t42TitleRe });
-      await expect(enrichedHeading.first()).toBeVisible();
-      const enrichedArticle = page.locator('article', { has: enrichedHeading }).first();
       await expect(
-        enrichedArticle.getByRole('link', { name: T42_PROJECT_TITLE }),
+        page.locator('h2.sb-card-title', { hasText: t42TitleRe }).first(),
       ).toBeVisible();
+      const card = cardByTitle(t42TitleRe);
 
-      // Bare: PROJECT_TITLE_EDITED card title is present as a heading but is
-      // NOT a link (no anchor inside the <h3>).
+      // Every field we submitted on the admin form, in the order the card
+      // draws them. `.sb-card-title--empty` is the untitled fallback, so its
+      // absence confirms the title came from the row.
+      await expect(card.locator('h2.sb-card-title')).toHaveText(T42_PROJECT_TITLE);
+      await expect(card.locator('h2.sb-card-title--empty')).toHaveCount(0);
+      await expect(card.locator('p.sb-subtitle')).toHaveText(T42_SUBTITLE);
+      await expect(card.locator('p.sb-desc')).toHaveText(T42_PROJECT_DESCRIPTION);
+      await expect(card.locator('span.sb-tag')).toHaveText([...T42_TAG_PILLS]);
+
+      // Zero `project_media` rows (see the section note above), so the frame
+      // draws its empty state and mounts no carousel track.
+      await expect(card.locator('.sb-frame .sb-noprev')).toHaveText(NO_PREVIEW_TEXT);
+      await expect(card.locator('.sb-track')).toHaveCount(0);
+
+      await assertT42ActionRow(card, t42PublicAssertions);
+    });
+
+    // T46 retired the T45.D title-link gating: with the detail route gone, no
+    // card title is ever a link. The enriched-vs-bare contrast survives one
+    // element lower, in the actions row.
+    //   - Enriched (T42 project: live URL + repo + linked writeup) → three
+    //     `.sb-action` anchors.
+    //   - Bare (PROJECT_TITLE_EDITED: published, no links, no linked post) →
+    //     the `.sb-soon` placeholder instead.
+    await runStep(failures, 'T46 desktop: /projects actions gating (enriched vs bare)', async () => {
+      await page.goto('/projects');
+
+      const enrichedCard = cardByTitle(t42TitleRe);
+      await expect(enrichedCard.locator('.sb-action')).toHaveCount(3);
+      await expect(enrichedCard.locator('.sb-soon')).toHaveCount(0);
+      // Titles are inert headings on every card now, enriched or not.
+      await expect(enrichedCard.locator('h2.sb-card-title a')).toHaveCount(0);
+
       const bareRe = new RegExp(PROJECT_TITLE_EDITED);
-      const bareHeading = page.getByRole('heading', { level: 3, name: bareRe });
-      await expect(bareHeading.first()).toBeVisible();
-      const bareArticle = page.locator('article', { has: bareHeading }).first();
       await expect(
-        bareArticle.getByRole('link', { name: bareRe }),
-      ).toHaveCount(0);
+        page.locator('h2.sb-card-title', { hasText: bareRe }).first(),
+      ).toBeVisible();
+      const bareCard = cardByTitle(bareRe);
+      await expect(bareCard.locator('.sb-action')).toHaveCount(0);
+      await expect(bareCard.locator('.sb-soon')).toHaveText(ACTION_EMPTY_TEXT);
+      await expect(bareCard.locator('h2.sb-card-title a')).toHaveCount(0);
     });
 
-    await runStep(failures, 'T42 desktop: /projects/[slug] renders detail with ring + 3 links', async () => {
-      // Slug derives from the title via the create flow; titles round-trip
-      // to slugs via lib/slug.ts (lowercased, spaced→`-`, special-stripped).
-      await page.goto('/admin/projects');
-      const slugCell = page
-        .getByRole('row', { name: t42TitleRe })
-        .locator('td')
-        .nth(1);
-      const t42Slug = ((await slugCell.textContent()) ?? '').trim();
-      expect(t42Slug, 'T42 project slug must be derivable').not.toBe('');
-      await page.goto(`/projects/${t42Slug}`);
-      const heading = page.getByRole('heading', { level: 3, name: t42TitleRe });
-      await expect(heading.first()).toBeVisible();
-      const article = page.locator('article', { has: heading });
-      await assertProgressRingDone(article.first());
-      await assertT42LinkRow(article.first(), t42PublicAssertions);
-    });
-
-    await runStep(failures, 'T42 mobile: /projects + /projects/[slug] via iPhone UA context', async () => {
-      const browser = context.browser();
-      if (!browser) {
-        throw new Error('T42 mobile: BrowserContext has no browser reference');
-      }
-      // Look up the slug from the admin list before swapping contexts —
-      // the mobile context is unauthenticated by design.
-      await page.goto('/admin/projects');
-      const slugCell = page
-        .getByRole('row', { name: t42TitleRe })
-        .locator('td')
-        .nth(1);
-      const t42Slug = ((await slugCell.textContent()) ?? '').trim();
-      expect(t42Slug, 'T42 project slug must be derivable for mobile').not.toBe('');
-
-      const mobileContext: BrowserContext = await browser.newContext({
-        userAgent: T42_MOBILE_USER_AGENT,
-      });
+    // Mobile is a resize, not a second context: T46 deleted the UA-based
+    // device split, so the same tree has to hold up under 640px.
+    await runStep(failures, 'T46 mobile viewport: /projects card holds under the 640px breakpoint', async () => {
+      await page.setViewportSize({ ...MOBILE_VIEWPORT });
       try {
-        const mobilePage = await mobileContext.newPage();
-        // Mobile /projects — MobileProjectCard surface.
-        await mobilePage.goto('/projects');
-        const mobileHeading = mobilePage.getByRole('heading', {
-          level: 3,
-          name: t42TitleRe,
-        });
-        await expect(mobileHeading.first()).toBeVisible();
-        const mobileArticle = mobilePage.locator('article', { has: mobileHeading });
-        await assertProgressRingDone(mobileArticle.first());
-        await assertT42LinkRow(mobileArticle.first(), t42PublicAssertions);
-
-        // Mobile /projects/[slug] — MobileProjectCard rendered by the
-        // detail page's MobileDetail branch.
-        await mobilePage.goto(`/projects/${t42Slug}`);
-        const detailHeading = mobilePage.getByRole('heading', {
-          level: 3,
-          name: t42TitleRe,
-        });
-        await expect(detailHeading.first()).toBeVisible();
-        const detailArticle = mobilePage.locator('article', { has: detailHeading });
-        await assertProgressRingDone(detailArticle.first());
-        await assertT42LinkRow(detailArticle.first(), t42PublicAssertions);
-        // Mobile Home is skipped by design: the bundle's MobileHome has no
-        // project-card region (deferred `@designer` consult, post-launch).
+        await page.goto('/projects');
+        await expect(
+          page.locator('h2.sb-card-title', { hasText: t42TitleRe }).first(),
+        ).toBeVisible();
+        const card = cardByTitle(t42TitleRe);
+        await expect(card.locator('p.sb-subtitle')).toBeVisible();
+        await expect(card.locator('span.sb-tag')).toHaveCount(T42_TAG_PILLS.length);
+        await expect(card.locator('.sb-frame .sb-noprev')).toBeVisible();
+        await assertT42ActionRow(card, t42PublicAssertions);
       } finally {
-        // Loud cleanup (EH-01) — surface close failures rather than swallow.
-        await mobileContext.close();
+        // Restore the runner default so the admin steps below lay out wide.
+        // Loud by design (EH-01): a failed restore throws rather than leaving
+        // every later step silently narrow.
+        await page.setViewportSize({ ...DESKTOP_VIEWPORT });
       }
     });
 

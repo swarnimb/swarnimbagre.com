@@ -62,6 +62,8 @@ const PUBLISHED_PROJECT: Project = {
   image_after_id: null,
   post_id: null,
   sort_order: 0,
+  subtitle: null,
+  tags: null,
 };
 
 const DRAFT_PROJECT: Project = {
@@ -81,6 +83,8 @@ const DRAFT_PROJECT: Project = {
   image_after_id: null,
   post_id: null,
   sort_order: 0,
+  subtitle: null,
+  tags: null,
 };
 
 /** Published posts offered by the "Linked writeup" picker (T45.B). */

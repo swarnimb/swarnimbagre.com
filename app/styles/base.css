@@ -5,7 +5,7 @@ button:focus-visible, a:focus-visible {
   outline-offset: 3px;
   border-radius: 2px;
 }
-/* Slim scrollbar that respects the warm dark palette */
+/* Slim scrollbar that respects the warm cream palette */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 0; }

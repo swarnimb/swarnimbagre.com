@@ -20,12 +20,21 @@ import type { Stat } from './types';
 /**
  * Column projection for the admin stats list. Matches the public-site
  * projection in `lib/db.ts::STAT_COLUMNS` because stats has no body column
- * to omit from list views.
+ * to omit from list views. `aside` and `sort_order` were added in T46
+ * (migration 014); both are list-visible so the operator can see the quip
+ * and the display rank without opening a row.
  */
-const STAT_LIST_COLUMNS = 'id, category, label, value, unit, created_at';
+const STAT_LIST_COLUMNS =
+  'id, category, label, value, unit, aside, sort_order, created_at';
 
 /**
- * Fetch stats for the admin list view, newest first, with pagination. Admin
+ * Fetch stats for the admin list view in DISPLAY order, with pagination.
+ *
+ * T46 changed the ordering from `created_at DESC` to `sort_order ASC` with
+ * `created_at DESC` as the tiebreaker, matching `lib/db.ts::getOrderedStats`
+ * exactly. The admin list previously showed a different order from the public
+ * page, so an operator setting `sort_order` could not see the result of their
+ * own edit without leaving admin. Admin
  * sees every row — RLS (`stats_admin_all` from migration 004) permits SELECT
  * for the `authenticated` role; the public read policy is unaffected.
  *
@@ -61,6 +70,7 @@ export async function getAllStats(
   const { data, error, count } = await supabase
     .from('stats')
     .select(STAT_LIST_COLUMNS, { count: 'exact' })
+    .order('sort_order', { ascending: true })
     .order('created_at', { ascending: false })
     .range(from, to);
   if (error) {
