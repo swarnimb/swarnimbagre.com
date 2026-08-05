@@ -102,7 +102,8 @@ export function Home() {
               AI tinkering by night.
               <br />
               None of it is a business: no revenue model, no growth strategy,
-              just answers to &ldquo;why not.&rdquo;
+              just answers to &ldquo;what if&rdquo; and &ldquo;why
+              not.&rdquo;
             </div>
 
             <div className="h-actions">
