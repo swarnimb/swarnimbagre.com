@@ -10,6 +10,34 @@
    bug rather than a detail.
    ============================================================ */
 
+/* Home page shell.
+
+   `svh`, deliberately — not `vh`, and not `dvh`.
+
+   Home is the only page that must show its top and bottom edges at the
+   same time: the wordmark up top, the reply bubble and nav pills down
+   below, no scrolling. Every other page only needs its top in view and
+   lets scrolling do the rest.
+
+   `vh` resolves to the LARGE viewport — the height the page would have if
+   the browser's toolbars were retracted. On Chrome for Android/iOS the
+   bars are usually showing, so a `100vh` box is taller than what you can
+   actually see, and `.h-conv`'s `margin: auto 0` then centres the
+   conversation inside that oversized box and pushes one end off screen.
+   Safari hides this because it collapses its bars far more eagerly.
+
+   `dvh` would track the bars as they move, which makes the centred content
+   slide while scrolling. `svh` is the height guaranteed visible WITH the
+   bars present, so the layout always fits and never shifts. The plain `vh`
+   line above it is the fallback for engines without `svh`. */
+.hpage {
+  min-height: 100vh;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding: var(--pad-home);
+}
+
 .h-word {
   font: 400 26px/1 var(--font-serif);
   color: var(--fg-strong);

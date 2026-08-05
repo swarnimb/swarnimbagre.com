@@ -78,14 +78,7 @@ export function Home() {
   const deflection = DEFLECTIONS[(Math.max(turn, 1) - 1) % DEFLECTIONS.length];
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        padding: 'var(--pad-home)',
-      }}
-    >
+    <div className="hpage">
       <header
         style={{
           display: 'flex',
@@ -106,8 +99,10 @@ export function Home() {
           <div style={{ flex: 1 }}>
             <div className="h-bio">
               <b>Yes, another one.</b> I do product and strategy at Dell by day,
-              AI tinkering by night. None of it is a business: no revenue model,
-              no growth strategy, just answers to &ldquo;why not.&rdquo;
+              AI tinkering by night.
+              <br />
+              None of it is a business: no revenue model, no growth strategy,
+              just answers to &ldquo;why not.&rdquo;
             </div>
 
             <div className="h-actions">
