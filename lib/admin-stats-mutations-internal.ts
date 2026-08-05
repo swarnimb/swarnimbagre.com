@@ -1,8 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { z } from 'zod';
 import { createServerClient } from './supabase';
 import { ServiceError } from './errors';
 import { logSupabaseError } from './admin-mutation-log';
+import { statInsertSchema } from './admin-stats-mutations-schemas';
 import type { Stat } from './types';
 
 /**
@@ -20,13 +20,16 @@ import type { Stat } from './types';
  * only Server Action surface.
  *
  * Pure types + consts shared with the client form live in a separate
- * `lib/admin-stats-mutations-types.ts` because this module transitively
- * imports `next/headers` via `createServerClient` from `./supabase`, which
- * is not allowed in a Client Component's module graph.
+ * `lib/admin-stats-mutations-types.ts`; the zod schemas and the bounds they
+ * bind live in `lib/admin-stats-mutations-schemas.ts`. Both are separate
+ * because this module transitively imports `next/headers` via
+ * `createServerClient` from `./supabase`, which is not allowed in a Client
+ * Component's module graph.
  *
  * This is the per-resource throwing-helpers module per `architecture.md`
  * §6.6.6 (per-resource pattern). Sibling files: `-types.ts` (client-safe
- * envelope) and `-mutations.ts` (`'use server'` wrappers).
+ * envelope), `-schemas.ts` (zod boundary) and `-mutations.ts` (`'use server'`
+ * wrappers).
  *
  * Differences from the project / post helpers:
  *   - No slug, no status, no edit. CONSTRAINT-10: stats are insert-or-delete
@@ -39,35 +42,14 @@ import type { Stat } from './types';
  *     respectively). The zod schema treats whitespace-only or empty
  *     submissions of either as absent and the insert payload writes explicit
  *     `null` for those cases (rather than an empty string) so the DB shape
- *     stays clean. The sixth field, `sort_order`, is numeric and never null.
- *   - No DB triggers fire on stats (no slug-lock equivalent). The whole
- *     write path is a single boundary-validated INSERT and a single
- *     id-validated DELETE.
+ *     stays clean. The sixth field, `sort_order`, is numeric and NOT NULL, so
+ *     an absent one is expressed by omitting the key rather than by writing
+ *     `null`.
+ *   - No slug-lock trigger fires on stats. The one trigger that does is
+ *     `stats_set_sort_order_default` (migration 016, mirroring the projects /
+ *     posts triggers from 012): a BEFORE INSERT hook that appends the row to
+ *     the end when `sort_order` arrives NULL.
  */
-
-/**
- * Maximum length per stat text field (category, label, value, unit). The DB
- * has no length CHECK on these columns (migration 001 enforces non-empty
- * only); 200 chars is an app-side cap that matches the project / post
- * `TITLE_MAX_LENGTH` for symmetry across the admin write surface and
- * prevents pathological inputs reaching Postgres.
- */
-const STAT_FIELD_MAX_LENGTH = 200;
-
-/**
- * Ceiling for the optional `aside` quip. Mirrors the `stats_aside_length`
- * CHECK in migration 014 exactly (`length(btrim(aside)) between 1 and 160`).
- * Unlike the four original text fields, this bound is NOT an app-side
- * invention: overshooting it is a DB-level rejection, so the app boundary
- * has to agree with it.
- */
-export const STAT_ASIDE_MAX_LENGTH = 160;
-
-/**
- * Lower bound for `sort_order`. Mirrors the `stats_sort_order_non_negative`
- * CHECK in migration 014.
- */
-export const STAT_SORT_ORDER_MIN = 0;
 
 /** Operation tag for stat insert-side logs and ServiceError instances. */
 const INSERT_STAT_OPERATION = 'insertStat';
@@ -77,64 +59,21 @@ const DELETE_STAT_OPERATION = 'deleteStat';
 const UPDATE_STAT_OPERATION = 'updateStat';
 
 /**
- * Zod schema for the insert-stat boundary.
+ * Build the `sort_order` fragment of a write payload.
  *
- * All four fields are read as text; `category`, `label`, and `value` are
- * required non-empty (matches the DB CHECKs in migration 001 — defense in
- * depth at the app boundary). `unit` is optional — empty strings and
- * whitespace-only inputs preprocess to `undefined` so the wrapper can write
- * an explicit `null` to the column (the migration declares `unit text null`).
- * Every field is capped at {@link STAT_FIELD_MAX_LENGTH} as an app-side
- * pathological-input bound.
+ * The column is NOT NULL with no default, so "the operator left the field
+ * blank" has to be expressed by the key being absent, not by an explicit
+ * `null`. On INSERT the absent key lets `stats_set_sort_order_default` append
+ * the row; on UPDATE it leaves the stored rank untouched.
  *
- * T46 (migration 014) added two more fields. `aside` is the optional italic
- * quip under the label: same empty-string-to-`undefined` preprocess as
- * `unit`, but capped at {@link STAT_ASIDE_MAX_LENGTH} because that bound is
- * a real DB CHECK, not an app-side convention. `sort_order` is the manual
- * display rank: a non-negative integer defaulting to `0`, matching the
- * column default and the `stats_sort_order_non_negative` CHECK.
+ * @param sortOrder Parsed rank, or `undefined` when the form field was blank.
+ * @returns `{ sort_order }` when a rank was given, otherwise an empty object.
  */
-export const statInsertSchema = z.object({
-  category: z
-    .string()
-    .trim()
-    .min(1, 'category is required')
-    .max(STAT_FIELD_MAX_LENGTH),
-  label: z
-    .string()
-    .trim()
-    .min(1, 'label is required')
-    .max(STAT_FIELD_MAX_LENGTH),
-  value: z
-    .string()
-    .trim()
-    .min(1, 'value is required')
-    .max(STAT_FIELD_MAX_LENGTH),
-  unit: z.preprocess(
-    (v) => (typeof v === 'string' && v.trim().length === 0 ? undefined : v),
-    z.string().trim().min(1).max(STAT_FIELD_MAX_LENGTH).optional(),
-  ),
-  aside: z.preprocess(
-    (v) => (typeof v === 'string' && v.trim().length === 0 ? undefined : v),
-    z
-      .string()
-      .trim()
-      .min(1)
-      .max(
-        STAT_ASIDE_MAX_LENGTH,
-        `must be at most ${STAT_ASIDE_MAX_LENGTH} characters`,
-      )
-      .optional(),
-  ),
-  sort_order: z
-    .number()
-    .int('sort_order must be a whole number')
-    .min(STAT_SORT_ORDER_MIN, 'sort_order cannot be negative')
-    .default(STAT_SORT_ORDER_MIN),
-}).strict();
-
-/** Inferred input shape for {@link insertStatInternal}. */
-export type StatInsertInput = z.infer<typeof statInsertSchema>;
+function sortOrderFragment(
+  sortOrder: number | undefined,
+): { sort_order?: number } {
+  return sortOrder === undefined ? {} : { sort_order: sortOrder };
+}
 
 /**
  * Insert a new stat row.
@@ -142,10 +81,12 @@ export type StatInsertInput = z.infer<typeof statInsertSchema>;
  * Boundary-validates the input with {@link statInsertSchema} (SEC-02) and
  * inserts via the Supabase query builder (SEC-03). `unit` is normalised to
  * an explicit `null` when absent so the column receives a clean NULL rather
- * than an empty string.
+ * than an empty string. `sort_order` goes the other way, via
+ * {@link sortOrderFragment}: a blank one is omitted so the trigger appends the
+ * row instead of every new stat tying at position 0.
  *
- * No slug derivation, no pre-fetch — stats are insert-only with no
- * relational integrity beyond the per-row CHECK constraints.
+ * No slug derivation, no pre-fetch — stats have no relational integrity
+ * beyond the per-row CHECK constraints.
  *
  * Throws freely — the public Server Action in `lib/admin-stats-mutations.ts`
  * catches and converts to the uniform state envelope so the wire shape is
@@ -170,7 +111,7 @@ export async function insertStatInternal(
     value: parsed.value,
     unit: parsed.unit ?? null,
     aside: parsed.aside ?? null,
-    sort_order: parsed.sort_order,
+    ...sortOrderFragment(parsed.sort_order),
   };
   const { data, error } = await supabase
     .from('stats')
@@ -204,6 +145,9 @@ export async function insertStatInternal(
  * paths. Throws freely; the public Server Action converts to the uniform
  * envelope.
  *
+ * `sort_order` is the one field that can drop out of the payload: a blank
+ * input means "do not change the rank" (see {@link sortOrderFragment}).
+ *
  * @param id     UUID of the stat to update. Must be a non-empty string.
  * @param input  Raw update payload. Validated before any DB call.
  * @param client Optional injected client (DI seam for tests).
@@ -230,7 +174,7 @@ export async function updateStatInternal(
     value: parsed.value,
     unit: parsed.unit ?? null,
     aside: parsed.aside ?? null,
-    sort_order: parsed.sort_order,
+    ...sortOrderFragment(parsed.sort_order),
   };
   const { data, error } = await supabase
     .from('stats')

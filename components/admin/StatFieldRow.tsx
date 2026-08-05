@@ -5,14 +5,14 @@ import { Label } from '@/components/ui/label';
 
 /**
  * Max input length for a plain stat text field. Mirrors
- * `STAT_FIELD_MAX_LENGTH` in `lib/admin-stats-mutations-internal.ts` so the
+ * `STAT_FIELD_MAX_LENGTH` in `lib/admin-stats-mutations-schemas.ts` so the
  * HTML `maxLength` attribute and the zod boundary agree.
  */
 export const FIELD_MAX_LENGTH = 200;
 
 /**
  * Max input length for the optional `aside` quip. Mirrors
- * `STAT_ASIDE_MAX_LENGTH` in `lib/admin-stats-mutations-internal.ts`, which
+ * `STAT_ASIDE_MAX_LENGTH` in `lib/admin-stats-mutations-schemas.ts`, which
  * in turn mirrors the `stats_aside_length` CHECK in migration 014.
  */
 export const ASIDE_MAX_LENGTH = 160;

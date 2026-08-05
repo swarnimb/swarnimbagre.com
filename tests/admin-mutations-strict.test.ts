@@ -8,7 +8,7 @@ import {
   postCreateSchema,
   postUpdateSchema,
 } from '@/lib/admin-posts-mutations-internal';
-import { statInsertSchema } from '@/lib/admin-stats-mutations-internal';
+import { statInsertSchema } from '@/lib/admin-stats-mutations-schemas';
 import { uploadImageSchema } from '@/lib/admin-images-mutations-internal';
 import { deleteOrphanImages } from '@/lib/admin-images-mutations';
 

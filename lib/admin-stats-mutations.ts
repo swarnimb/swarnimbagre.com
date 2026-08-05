@@ -65,18 +65,20 @@ function statZodErrorToFieldErrors(
 }
 
 /**
- * Read `sort_order` from FormData. Missing or empty resolves to `0`, matching
- * both the column default and the schema default. A parseable numeric string
+ * Read `sort_order` from FormData. Missing or empty resolves to `undefined`,
+ * which the zod schema accepts as absent and the internal helpers translate
+ * into an omitted payload key: on insert the DB trigger appends the row to the
+ * end, on update the stored rank is left alone. A parseable numeric string
  * resolves to a `number`. Anything else passes through as the raw trimmed
  * string so the zod number schema rejects it with a deterministic message
- * rather than the field being silently zeroed. Mirrors `readPercentField` in
+ * rather than the field being silently blanked. Mirrors `readPercentField` in
  * `lib/admin-projects-mutations.ts`.
  */
 function readSortOrderField(formData: FormData): unknown {
   const raw = formData.get('sort_order');
-  if (typeof raw !== 'string') return 0;
+  if (typeof raw !== 'string') return undefined;
   const trimmed = raw.trim();
-  if (trimmed.length === 0) return 0;
+  if (trimmed.length === 0) return undefined;
   const parsed = Number(trimmed);
   return Number.isNaN(parsed) ? trimmed : parsed;
 }
@@ -126,7 +128,7 @@ function readStatFormData(formData: FormData): unknown {
  * @param _prevState Previous `useActionState` state. Ignored — the action is
  *                   pure with respect to its inputs.
  * @param formData   Raw form data. Field reads are unvalidated; the zod
- *                   schema in `lib/admin-stats-mutations-internal.ts` is
+ *                   schema in `lib/admin-stats-mutations-schemas.ts` is
  *                   the single boundary.
  * @returns The new state envelope. Always resolves; never throws.
  */

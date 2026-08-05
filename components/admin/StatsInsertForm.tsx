@@ -30,9 +30,10 @@ export interface StatsInsertFormProps {
  * Admin insert form for a stat row.
  *
  * `category`, `label`, `value` are required; `unit` and `aside` are optional;
- * `sort_order` is a number defaulting to 0. The Save button is disabled until
- * all three required fields are non-empty (the controlled-state guard matches
- * the zod boundary's `.trim().min(1)`).
+ * `sort_order` is an optional non-negative integer, and leaving it blank
+ * appends the row to the end rather than filing it at rank 0. The Save button
+ * is disabled until all three required fields are non-empty (the
+ * controlled-state guard matches the zod boundary's `.trim().min(1)`).
  *
  * T46 (migration 014) added the last two fields: `aside` is the italic quip
  * the redesigned tile renders under the label, and `sort_order` is the manual

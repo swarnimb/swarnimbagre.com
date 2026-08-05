@@ -2,7 +2,6 @@
 
 import StatFieldRow, {
   ASIDE_MAX_LENGTH,
-  SORT_ORDER_MIN,
   type StatFormField,
 } from '@/components/admin/StatFieldRow';
 import type { StatMutationState } from '@/lib/admin-stats-mutations-types';
@@ -11,7 +10,8 @@ import type { StatMutationState } from '@/lib/admin-stats-mutations-types';
 const ASIDE_HINT = 'Optional. The small italic line under the label.';
 
 /** Hint under the `sort_order` input. */
-const SORT_ORDER_HINT = 'Lower numbers show first. Ties fall back to newest.';
+const SORT_ORDER_HINT =
+  'Lower numbers show first. Leave it blank and the row goes last.';
 
 /** The six fields a stat form owns, as controlled strings. */
 export interface StatFieldValues {
@@ -23,14 +23,21 @@ export interface StatFieldValues {
   sortOrder: string;
 }
 
-/** Blank values. Reused for the insert form's initial render and its reset. */
+/**
+ * Blank values. Reused for the insert form's initial render and its reset.
+ *
+ * `sortOrder` starts empty, not `'0'`. A pre-filled zero meant every stat the
+ * operator saved without touching the field landed at rank 0 and tied with
+ * every other one; an empty string reaches the boundary as "unspecified" and
+ * the DB trigger appends the row instead.
+ */
 export const EMPTY_STAT_VALUES: StatFieldValues = {
   category: '',
   label: '',
   value: '',
   unit: '',
   aside: '',
-  sortOrder: String(SORT_ORDER_MIN),
+  sortOrder: '',
 };
 
 /**

@@ -35,6 +35,14 @@ export const SORT_ORDER_MIN = 0;
  * Shared field shape. Notes has no lifecycle (no draft/published, no slug),
  * so create and update take the identical payload; the update path differs
  * only in carrying a row id alongside it.
+ *
+ * `sort_order` is `.optional()` rather than `.default(0)`. A blank input means
+ * "not specified", not "zero": on create the helper omits the key so the
+ * `notes_set_sort_order_default` BEFORE INSERT trigger (migration 016, mirroring
+ * 012) appends the row to the end, and on update the helper omits the key so
+ * the stored rank is left untouched. Defaulting to `0` here made every blank
+ * submission collide at position 0. The `undefined`-means-absent convention
+ * matches how the stats schema already models `unit` and `aside`.
  */
 const noteFields = {
   kicker: z
@@ -54,7 +62,7 @@ const noteFields = {
     .number()
     .int('sort_order must be a whole number')
     .min(SORT_ORDER_MIN, 'sort_order cannot be negative')
-    .default(SORT_ORDER_MIN),
+    .optional(),
 };
 
 /**

@@ -56,17 +56,19 @@ function noteZodErrorToFieldErrors(
 }
 
 /**
- * Read `sort_order` from FormData. Missing or empty resolves to `0`, matching
- * both the column default and the schema default. A parseable numeric string
+ * Read `sort_order` from FormData. Missing or empty resolves to `undefined`,
+ * which the zod schema accepts as absent and the internal helpers translate
+ * into an omitted payload key: on create the DB trigger appends the row to the
+ * end, on update the stored rank is left alone. A parseable numeric string
  * resolves to a `number`. Anything else passes through as the raw trimmed
  * string so the zod number schema rejects it with a deterministic message
- * rather than the field being silently zeroed.
+ * rather than the field being silently blanked.
  */
 function readSortOrderField(formData: FormData): unknown {
   const raw = formData.get('sort_order');
-  if (typeof raw !== 'string') return 0;
+  if (typeof raw !== 'string') return undefined;
   const trimmed = raw.trim();
-  if (trimmed.length === 0) return 0;
+  if (trimmed.length === 0) return undefined;
   const parsed = Number(trimmed);
   return Number.isNaN(parsed) ? trimmed : parsed;
 }

@@ -35,6 +35,11 @@ import type { Note } from './types';
  *     update, so the payload never carries it.
  *   - No nullable text columns: `kicker` and `line` are both NOT NULL with
  *     length CHECKs, so there is no empty-string-to-null normalisation step.
+ *   - The `notes_set_sort_order_default` BEFORE INSERT trigger (migration 016,
+ *     mirroring the projects / posts triggers from 012) appends a new row to
+ *     the end when `sort_order` arrives NULL. `sort_order` is NOT NULL with no
+ *     column default, so "leave it to the trigger" is expressed by omitting
+ *     the key from the payload, never by sending an explicit `null`.
  */
 
 /** Operation tag for note create-side logs and ServiceError instances. */
@@ -63,11 +68,32 @@ function assertNoteId(id: string, operation: string): void {
 }
 
 /**
+ * Build the `sort_order` fragment of a write payload.
+ *
+ * The column is NOT NULL with no default, so "the builder left the field
+ * blank" has to be expressed by the key being absent, not by an explicit
+ * `null`. On INSERT the absent key lets `notes_set_sort_order_default` append
+ * the row; on UPDATE it leaves the stored rank untouched.
+ *
+ * @param sortOrder Parsed rank, or `undefined` when the form field was blank.
+ * @returns `{ sort_order }` when a rank was given, otherwise an empty object.
+ */
+function sortOrderFragment(
+  sortOrder: number | undefined,
+): { sort_order?: number } {
+  return sortOrder === undefined ? {} : { sort_order: sortOrder };
+}
+
+/**
  * Insert a new note row.
  *
  * Boundary-validates the input with `noteCreateSchema` (SEC-02) and inserts
  * via the Supabase query builder (SEC-03). No slug derivation, no pre-fetch:
  * notes has no relational integrity beyond its per-row CHECK constraints.
+ *
+ * A blank `sort_order` is omitted from the payload rather than written as `0`,
+ * so the `notes_set_sort_order_default` trigger appends the row to the end
+ * instead of every new note tying at position 0.
  *
  * Throws freely: the public Server Action in `lib/admin-notes-mutations.ts`
  * catches and converts to the uniform state envelope so the wire shape is
@@ -91,7 +117,7 @@ export async function createNoteInternal(
     .insert({
       kicker: parsed.kicker,
       line: parsed.line,
-      sort_order: parsed.sort_order,
+      ...sortOrderFragment(parsed.sort_order),
     })
     .select()
     .single();
@@ -113,6 +139,10 @@ export async function createNoteInternal(
  * (SEC-03). The form re-submits every field, so this is a whole-row write
  * rather than a patch. `updated_at` is intentionally absent from the payload:
  * the `notes_set_updated_at` trigger owns it.
+ *
+ * `sort_order` is the one field that can drop out of the payload: a blank
+ * input means "do not change the rank", so the key is omitted rather than
+ * resetting the stored value to `0`.
  *
  * Throws freely: the public Server Action catches and converts.
  *
@@ -137,7 +167,7 @@ export async function updateNoteInternal(
     .update({
       kicker: parsed.kicker,
       line: parsed.line,
-      sort_order: parsed.sort_order,
+      ...sortOrderFragment(parsed.sort_order),
     })
     .eq('id', id)
     .select()

@@ -139,6 +139,74 @@ describe('deleteStat — Channel 2 (response body shape)', () => {
   });
 });
 
+/**
+ * The FormData reader half of the `sort_order` contract. The payload half (the
+ * key being omitted from the INSERT / UPDATE) lives in
+ * `tests/admin-stats-mutations.test.ts`; this covers the step before it, where
+ * the wrapper turns the raw form value into `undefined` for a blank field
+ * instead of the `0` it used to produce.
+ */
+describe('insertStat — sort_order reads blank as absent', () => {
+  it('passes sort_order: undefined when the input is submitted empty', async () => {
+    vi.mocked(internal.insertStatInternal).mockResolvedValue({} as never);
+    const p = insertStat(
+      { status: 'idle' },
+      buildFormData({ category: 'C', label: 'L', value: 'V', sort_order: '' }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    await p;
+    const payload = vi.mocked(internal.insertStatInternal).mock
+      .calls[0][0] as Record<string, unknown>;
+    expect(payload.sort_order).toBeUndefined();
+  });
+
+  it('passes sort_order: undefined when the field is absent from the form', async () => {
+    vi.mocked(internal.insertStatInternal).mockResolvedValue({} as never);
+    const p = insertStat(
+      { status: 'idle' },
+      buildFormData({ category: 'C', label: 'L', value: 'V' }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    await p;
+    const payload = vi.mocked(internal.insertStatInternal).mock
+      .calls[0][0] as Record<string, unknown>;
+    expect(payload.sort_order).toBeUndefined();
+  });
+
+  it('passes the parsed number when the input carries a value', async () => {
+    vi.mocked(internal.insertStatInternal).mockResolvedValue({} as never);
+    const p = insertStat(
+      { status: 'idle' },
+      buildFormData({ category: 'C', label: 'L', value: 'V', sort_order: '3' }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    await p;
+    const payload = vi.mocked(internal.insertStatInternal).mock
+      .calls[0][0] as Record<string, unknown>;
+    expect(payload.sort_order).toBe(3);
+  });
+
+  it('passes a non-numeric entry through as a string, for zod to reject', async () => {
+    vi.mocked(internal.insertStatInternal).mockResolvedValue({} as never);
+    const p = insertStat(
+      { status: 'idle' },
+      buildFormData({
+        category: 'C',
+        label: 'L',
+        value: 'V',
+        sort_order: 'abc',
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    await p;
+    const payload = vi.mocked(internal.insertStatInternal).mock
+      .calls[0][0] as Record<string, unknown>;
+    // Not silently blanked: the raw string reaches the boundary so the number
+    // schema produces its deterministic field error.
+    expect(payload.sort_order).toBe('abc');
+  });
+});
+
 describe('F-39 — admin session guard on the STAT wrappers', () => {
   it('resolves with the uniform error envelope and never reaches the internal helper', async () => {
     vi.mocked(assertAdminSession).mockRejectedValue(

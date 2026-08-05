@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import NoteFields, {
-  SORT_ORDER_MIN,
   type NoteFieldValues,
 } from '@/components/admin/NoteFields';
 import { createNote } from '@/lib/admin-notes-mutations';
@@ -17,11 +16,18 @@ import {
 /** Toast copy on success. CONSTRAINT-13: dry, no SaaS phrasing, no emoji. */
 const SAVE_SUCCESS_MESSAGE = 'Saved.';
 
-/** Blank field values. Reused for the initial render and the post-submit reset. */
+/**
+ * Blank field values. Reused for the initial render and the post-submit reset.
+ *
+ * `sortOrder` starts empty, not `'0'`. A pre-filled zero meant every note the
+ * operator saved without touching the field landed at rank 0 and tied with
+ * every other one; an empty string reaches the boundary as "unspecified" and
+ * the DB trigger appends the row instead.
+ */
 const EMPTY_VALUES: NoteFieldValues = {
   kicker: '',
   line: '',
-  sortOrder: String(SORT_ORDER_MIN),
+  sortOrder: '',
 };
 
 /** Props for {@link NotesInsertForm}. */
