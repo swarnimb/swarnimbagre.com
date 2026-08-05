@@ -1,17 +1,27 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { ServiceError } from '@/lib/errors';
 
 /**
- * Unit tests for `lib/session.ts::getServerSession`.
+ * Unit tests for `lib/session.ts::assertAdminSession` (F-39, audit 24).
  *
- * Covers SEC-09 (never-throw security invariant), EH-02 (operation-tagged
- * structured logging), and SEC-05 (no-token-leak in logs). The production
- * function MUST return null for every failure mode and MUST NOT leak token
- * material into stdout/stderr.
+ * This replaces the old `getServerSession` suite wholesale. That function was
+ * dead code and has been deleted; its "never throw, return null" contract does
+ * NOT carry over. `assertAdminSession` is a guard: it returns void on success
+ * and throws `ServiceError` on every failure mode, deliberately, so that a
+ * forgotten `if` at a call site cannot silently degrade into a no-op.
  *
- * Mocking strategy: stub `@/lib/supabase::createServerClient` so the
- * `auth.getSession()` shape is configurable per test. This is the same module
- * path the existing `tests/auth.test.ts` mocks, keeping import-path style
- * consistent across the suite.
+ * Covers the four branches (verified user / Supabase error / absent user /
+ * network throw), EH-02 (operation-tagged structured logging), and SEC-05
+ * (no token, email or raw error message in any log line) — the same no-leak
+ * discipline as L1 in `tests/middleware.test.ts`.
+ *
+ * Mocking strategy: the injected-client DI seam (`assertAdminSession(client)`)
+ * for every branch test — it is the seam the production signature exists to
+ * provide, and it needs no module mock. `@/lib/supabase` is mocked only for
+ * the one test that proves the default (no-argument) path actually builds a
+ * request-scoped server client. Stub-builder idiom mirrors
+ * `tests/admin-stats-mutations.test.ts`.
  */
 
 vi.mock('@/lib/supabase', () => ({
@@ -19,22 +29,43 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 const { createServerClient } = await import('@/lib/supabase');
-const { getServerSession } = await import('@/lib/session');
+const { assertAdminSession } = await import('@/lib/session');
 
 /**
- * Build a Supabase client stub whose `auth.getSession` resolves with the given
- * shape (or rejects with the given cause when `throws` is provided).
+ * Build a stub Supabase client whose `auth.getUser()` resolves with the given
+ * `{ data: { user }, error }` shape, or rejects with `throws`.
+ *
+ * Fixtures carry `leak-canary-*` token-shaped fields on the user and on the
+ * error/cause. `getUser()` returns no session, so there is no natural token
+ * field to plant them in; the objects the production code could plausibly
+ * serialize are the next best thing. Every no-leak assertion below is checking
+ * that none of them survived into a log payload.
  */
 function makeAuthStub(opts: {
-  result?: { data: { session: unknown }; error: unknown };
+  result?: { data: { user: unknown }; error: unknown };
   throws?: unknown;
-}) {
+}): { client: SupabaseClient; getUser: ReturnType<typeof vi.fn> } {
+  const getUser = opts.throws
+    ? vi.fn().mockRejectedValue(opts.throws)
+    : vi.fn().mockResolvedValue(opts.result);
   return {
-    auth: {
-      getSession: opts.throws
-        ? vi.fn().mockRejectedValue(opts.throws)
-        : vi.fn().mockResolvedValue(opts.result),
+    client: { auth: { getUser } } as unknown as SupabaseClient,
+    getUser,
+  };
+}
+
+/** A verified-user response, with token-shaped canaries riding along. */
+function verifiedUserResult() {
+  return {
+    data: {
+      user: {
+        id: 'user-1',
+        email: 'admin@example.test',
+        access_token: 'leak-canary-access',
+        refresh_token: 'leak-canary-refresh',
+      },
     },
+    error: null,
   };
 }
 
@@ -49,177 +80,274 @@ afterEach(() => {
   consoleErrorSpy?.mockRestore();
 });
 
-describe('getServerSession — happy path', () => {
-  it('returns the session object when Supabase resolves with a non-null session', async () => {
+describe('assertAdminSession — happy path', () => {
+  it('resolves (void) and logs nothing when getUser returns a verified user', async () => {
     /**
-     * Proves the trivial pass-through case. If the cookie store contains a
-     * valid session, the caller receives the same `Session` object Supabase
-     * decoded — no wrapping, no transformation.
+     * The whole success contract: no return value to inspect, no log line to
+     * emit. If this ever starts throwing, every admin Server Action breaks
+     * closed — which is the correct direction to fail, but still a regression.
      */
-    const session = {
-      access_token: 'redacted-for-test',
-      refresh_token: 'redacted-for-test',
-      user: { id: 'user-1' },
-    };
-    const stub = makeAuthStub({ result: { data: { session }, error: null } });
+    const { client, getUser } = makeAuthStub({ result: verifiedUserResult() });
+
+    await expect(assertAdminSession(client)).resolves.toBeUndefined();
+
+    expect(getUser).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it('uses the injected client and never constructs a request-scoped one', async () => {
+    /**
+     * Proves the DI seam is a real seam rather than a decorative parameter:
+     * when a client is passed, `createServerClient` is not called at all.
+     */
+    const { client } = makeAuthStub({ result: verifiedUserResult() });
+
+    await assertAdminSession(client);
+
+    expect(vi.mocked(createServerClient)).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the request-scoped server client when no client is injected', async () => {
+    /**
+     * The production call path. Server Actions call `assertAdminSession()` with
+     * no argument, so the default must resolve a client that reads the SSR auth
+     * cookie — otherwise the guard would only ever work in tests.
+     */
+    const { client, getUser } = makeAuthStub({ result: verifiedUserResult() });
     vi.mocked(createServerClient).mockResolvedValueOnce(
-      stub as unknown as Awaited<ReturnType<typeof createServerClient>>,
+      client as unknown as Awaited<ReturnType<typeof createServerClient>>,
     );
 
-    const result = await getServerSession();
+    await expect(assertAdminSession()).resolves.toBeUndefined();
 
-    expect(result).toBe(session);
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
+    expect(vi.mocked(createServerClient)).toHaveBeenCalledTimes(1);
+    expect(getUser).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('getServerSession — Supabase returns an error', () => {
-  it('returns null AND logs the operation-tagged failure (EH-02 + SEC-05)', async () => {
+describe('assertAdminSession — Supabase returns an error', () => {
+  it('throws ServiceError and logs the rejected branch with errorName only (EH-02 + SEC-05)', async () => {
     /**
-     * Proves the error-result branch: when Supabase returns an `AuthError`
-     * shape, the function logs `[auth] getServerSession failed` with the
-     * `errorName` tag only — never the raw error object, the session, or
-     * any token material. Covers EH-02 (structured logging) + SEC-05
-     * (no-token-leak).
+     * An `AuthApiError` result means the token was presented and refused —
+     * forged signature, expired JWT, revoked user. The guard must throw, and
+     * the log line must carry the operation tag and the error *kind* only:
+     * never the raw message (which can echo submitted input) and never token
+     * material.
      */
-    const supabaseError = {
-      name: 'AuthApiError',
-      message: 'jwt expired',
-      // Token-shaped fields the production code MUST NOT forward to logs:
-      access_token: 'leak-canary-access',
-      refresh_token: 'leak-canary-refresh',
-    };
-    const stub = makeAuthStub({
-      result: { data: { session: null }, error: supabaseError },
+    const { client } = makeAuthStub({
+      result: {
+        data: { user: null },
+        error: {
+          name: 'AuthApiError',
+          message: 'jwt expired',
+          access_token: 'leak-canary-access',
+          refresh_token: 'leak-canary-refresh',
+        },
+      },
     });
-    vi.mocked(createServerClient).mockResolvedValueOnce(
-      stub as unknown as Awaited<ReturnType<typeof createServerClient>>,
+
+    await expect(assertAdminSession(client)).rejects.toBeInstanceOf(
+      ServiceError,
     );
 
-    const result = await getServerSession();
-
-    expect(result).toBeNull();
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
-
     const call = consoleErrorSpy!.mock.calls[0];
-    expect(call[0]).toBe('[auth] getServerSession failed');
+    expect(call[0]).toBe('[auth] assertAdminSession rejected');
     const payloadString = JSON.stringify(call[1]);
-    expect(payloadString).toContain('"errorName"');
+    expect(payloadString).toContain('"operation":"assertAdminSession"');
     expect(payloadString).toContain('AuthApiError');
-    // Token-leak guard (SEC-05): no raw error, no session, no token fields.
     expect(payloadString).not.toContain('access_token');
     expect(payloadString).not.toContain('refresh_token');
     expect(payloadString).not.toContain('leak-canary');
     expect(payloadString).not.toContain('jwt expired');
   });
 
-  it('does not throw when Supabase returns an error (SEC-09 never-throw invariant)', async () => {
+  it('tags the thrown ServiceError with the assertAdminSession operation', async () => {
     /**
-     * Proves the SEC-09 contract: callers (route handlers, server components)
-     * MUST be able to treat `getServerSession` as a total function that always
-     * resolves. A throw here would force every caller into try/catch with the
-     * same "treat as logged-out" fallback.
+     * The wrappers catch everything non-Zod and convert it to the uniform
+     * GENERIC_FORM_ERROR envelope, so the `operation` tag is the only thing
+     * that makes an auth rejection distinguishable in the server log.
      */
-    const stub = makeAuthStub({
+    const { client } = makeAuthStub({
       result: {
-        data: { session: null },
+        data: { user: null },
         error: { name: 'AuthApiError', message: 'bad cookie' },
       },
     });
-    vi.mocked(createServerClient).mockResolvedValueOnce(
-      stub as unknown as Awaited<ReturnType<typeof createServerClient>>,
-    );
 
-    await expect(getServerSession()).resolves.not.toThrow();
+    await expect(assertAdminSession(client)).rejects.toMatchObject({
+      name: 'ServiceError',
+      operation: 'assertAdminSession',
+    });
   });
 });
 
-describe('getServerSession — Supabase throws (network failure)', () => {
-  it('returns null AND logs the threw-tagged failure (EH-02 + SEC-05)', async () => {
+describe('assertAdminSession — no user present (unauthenticated caller)', () => {
+  it('throws ServiceError and logs the absent branch (EH-02)', async () => {
     /**
-     * Proves the catch branch: when `auth.getSession()` rejects (a network
-     * exception, a transport-level failure, etc.), the function logs
-     * `[auth] getServerSession threw` with `errorName` only. Same no-leak
-     * guarantee as the error-result branch.
+     * The load-bearing case for F-39: an anonymous POST to a lifted Server
+     * Action ID. `getUser()` returns `{ user: null }` with no error, and the
+     * old code would have treated a falsy return as "carry on". It must throw.
+     *
+     * Unlike the retired `getServerSession`, this branch DOES log: it is not
+     * ambient anonymous traffic, it is an unauthenticated caller reaching an
+     * admin mutation, which is worth a line.
+     */
+    const { client } = makeAuthStub({
+      result: { data: { user: null }, error: null },
+    });
+
+    await expect(assertAdminSession(client)).rejects.toBeInstanceOf(
+      ServiceError,
+    );
+
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    const call = consoleErrorSpy!.mock.calls[0];
+    expect(call[0]).toBe('[auth] assertAdminSession absent');
+    expect(JSON.stringify(call[1])).toContain(
+      '"operation":"assertAdminSession"',
+    );
+  });
+
+  it('throws when the user object is present but carries no id', async () => {
+    /**
+     * The guard keys off `data.user?.id`, not `data.user`. A malformed
+     * response that yields an id-less object must not read as authenticated.
+     */
+    const { client } = makeAuthStub({
+      result: { data: { user: { email: 'admin@example.test' } }, error: null },
+    });
+
+    await expect(assertAdminSession(client)).rejects.toBeInstanceOf(
+      ServiceError,
+    );
+  });
+});
+
+describe('assertAdminSession — getUser rejects (network failure)', () => {
+  it('throws ServiceError — not the raw cause — and logs the threw branch (EH-02 + SEC-05)', async () => {
+    /**
+     * A transport failure must not surface as a `FetchError` to the caller:
+     * the wrappers key on ServiceError, and a leaked raw rejection would carry
+     * its message (and anything attached to it) straight into the response
+     * path. Fail closed, in the project's own error type.
      */
     const cause = Object.assign(new Error('network down'), {
       name: 'FetchError',
-      // Token-shaped fields the production code MUST NOT forward to logs:
       access_token: 'leak-canary-access',
       refresh_token: 'leak-canary-refresh',
     });
-    const stub = makeAuthStub({ throws: cause });
-    vi.mocked(createServerClient).mockResolvedValueOnce(
-      stub as unknown as Awaited<ReturnType<typeof createServerClient>>,
-    );
+    const { client } = makeAuthStub({ throws: cause });
 
-    const result = await getServerSession();
+    const rejection = await assertAdminSession(client).catch((e: unknown) => e);
 
-    expect(result).toBeNull();
+    expect(rejection).toBeInstanceOf(ServiceError);
+    expect(rejection).not.toBe(cause);
+
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
-
     const call = consoleErrorSpy!.mock.calls[0];
-    expect(call[0]).toBe('[auth] getServerSession threw');
+    expect(call[0]).toBe('[auth] assertAdminSession threw');
     const payloadString = JSON.stringify(call[1]);
-    expect(payloadString).toContain('"errorName"');
+    expect(payloadString).toContain('"operation":"assertAdminSession"');
     expect(payloadString).toContain('FetchError');
-    // Token-leak guard (SEC-05): no raw cause, no token fields, no message.
     expect(payloadString).not.toContain('access_token');
     expect(payloadString).not.toContain('refresh_token');
     expect(payloadString).not.toContain('leak-canary');
     expect(payloadString).not.toContain('network down');
   });
 
-  it('does not throw when Supabase rejects (SEC-09 never-throw invariant)', async () => {
-    /**
-     * Proves SEC-09 for the catch branch — symmetric to the error-result test.
-     */
-    const stub = makeAuthStub({ throws: new Error('boom') });
-    vi.mocked(createServerClient).mockResolvedValueOnce(
-      stub as unknown as Awaited<ReturnType<typeof createServerClient>>,
-    );
-
-    await expect(getServerSession()).resolves.not.toThrow();
-  });
-
   it('logs "unknown" errorName when the rejection is not an Error instance', async () => {
     /**
      * Proves the `cause instanceof Error` fallback. A non-Error rejection
-     * (e.g. a string thrown from a misbehaving lib) yields `errorName:
-     * 'unknown'` rather than throwing on property access.
+     * (a string thrown from a misbehaving lib) must yield
+     * `errorName: 'unknown'` rather than throwing on property access inside
+     * the handler — which would replace a clean ServiceError with a TypeError.
      */
-    const stub = makeAuthStub({ throws: 'string-rejection' });
-    vi.mocked(createServerClient).mockResolvedValueOnce(
-      stub as unknown as Awaited<ReturnType<typeof createServerClient>>,
+    const { client } = makeAuthStub({ throws: 'string-rejection' });
+
+    await expect(assertAdminSession(client)).rejects.toBeInstanceOf(
+      ServiceError,
     );
 
-    const result = await getServerSession();
-
-    expect(result).toBeNull();
     const payloadString = JSON.stringify(
       consoleErrorSpy!.mock.calls[0]?.[1] ?? {},
     );
     expect(payloadString).toContain('"errorName":"unknown"');
   });
-});
 
-describe('getServerSession — no session present (normal logged-out)', () => {
-  it('returns null and writes NO log line (logging would be noise)', async () => {
+  it('does not double-log or re-wrap the ServiceError raised by the error branch', async () => {
     /**
-     * Proves that the normal "no cookie, no session" case is silent. Logging
-     * here would flood the log stream on every anonymous public-route hit
-     * that touches `getServerSession`. Only error and throw branches log.
+     * The error branch throws from inside the same `try` the catch guards, so
+     * without the `cause instanceof ServiceError` re-throw the failure would be
+     * logged twice and wrapped twice. One rejection, one log line.
      */
-    const stub = makeAuthStub({
-      result: { data: { session: null }, error: null },
+    const { client } = makeAuthStub({
+      result: {
+        data: { user: null },
+        error: { name: 'AuthApiError', message: 'jwt expired' },
+      },
     });
-    vi.mocked(createServerClient).mockResolvedValueOnce(
-      stub as unknown as Awaited<ReturnType<typeof createServerClient>>,
+
+    await expect(assertAdminSession(client)).rejects.toBeInstanceOf(
+      ServiceError,
     );
 
-    const result = await getServerSession();
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy!.mock.calls[0][0]).toBe(
+      '[auth] assertAdminSession rejected',
+    );
+  });
+});
 
-    expect(result).toBeNull();
-    expect(consoleErrorSpy).not.toHaveBeenCalled();
+describe('assertAdminSession — SEC-05 aggregate no-leak', () => {
+  it('emits no token, email or raw error message across every failure mode', async () => {
+    /**
+     * Mirrors L1 in `tests/middleware.test.ts`: run every branch, aggregate
+     * every `console.error` payload this module produced, and assert against
+     * the whole string at once. A future contributor who adds a `cause` or a
+     * spread `...error` to any log line fails here rather than in production.
+     */
+    const stubs = [
+      makeAuthStub({
+        result: {
+          data: { user: null },
+          error: {
+            name: 'AuthApiError',
+            message: 'jwt expired for admin@example.test',
+            access_token: 'leak-canary-access',
+            refresh_token: 'leak-canary-refresh',
+          },
+        },
+      }),
+      makeAuthStub({ result: { data: { user: null }, error: null } }),
+      makeAuthStub({
+        throws: Object.assign(
+          new Error('network down reaching sb-auth-endpoint'),
+          {
+            name: 'FetchError',
+            access_token: 'leak-canary-access',
+            refresh_token: 'leak-canary-refresh',
+          },
+        ),
+      }),
+    ];
+
+    for (const { client } of stubs) {
+      await expect(assertAdminSession(client)).rejects.toBeInstanceOf(
+        ServiceError,
+      );
+    }
+
+    const aggregate = JSON.stringify(consoleErrorSpy!.mock.calls);
+
+    expect(aggregate).not.toContain('access_token');
+    expect(aggregate).not.toContain('refresh_token');
+    expect(aggregate).not.toContain('leak-canary');
+    expect(aggregate).not.toContain('sb-');
+    expect(aggregate).not.toContain('jwt expired');
+    expect(aggregate).not.toContain('network down');
+    expect(aggregate).not.toMatch(
+      /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/,
+    );
   });
 });

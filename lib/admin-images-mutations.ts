@@ -8,6 +8,7 @@ import type {
   OrphanCleanupState,
 } from './admin-images-mutations-types';
 import { GENERIC_FORM_ERROR } from './auth-constants';
+import { assertAdminSession } from './session';
 import { padToFloor } from './timing';
 
 /**
@@ -86,6 +87,8 @@ function imageZodErrorToFieldErrors(
  * export. The throwing helper is imported from a sibling non-`'use server'`
  * module so it does not become a second endpoint.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param _prevState Previous `useActionState` state. Ignored — the action is
  *                   pure with respect to its inputs.
  * @param formData   Raw form data. Field reads are unvalidated; the zod
@@ -100,6 +103,7 @@ export async function uploadImage(
 ): Promise<ImageMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     const file = formData.get('file');
     const parentType = formData.get('parentType');
     const parentId = formData.get('parentId');
@@ -146,11 +150,14 @@ export async function uploadImage(
  * this export. The throwing helper is imported from a sibling
  * non-`'use server'` module so it does not become a second endpoint.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @returns The new state envelope. Always resolves; never throws.
  */
 export async function deleteOrphanImages(): Promise<OrphanCleanupState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     const result = await deleteOrphanImagesInternal();
     return {
       status: 'ok',

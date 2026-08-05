@@ -8,6 +8,7 @@ import {
 } from './admin-posts-mutations-internal';
 import type { PostMutationState } from './admin-posts-mutations-types';
 import { GENERIC_FORM_ERROR } from './auth-constants';
+import { assertAdminSession } from './session';
 import { padToFloor } from './timing';
 
 /**
@@ -118,6 +119,8 @@ function readPostUpdateFormData(formData: FormData): unknown {
  * No HTML conversion, no rendering at write time. The T12 client renderer
  * handles read-time rendering and sanitization.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param _prevState Previous `useActionState` state. Ignored — the action is
  *                   pure with respect to its inputs.
  * @param formData   Raw form data. Field reads are unvalidated; the zod
@@ -131,6 +134,7 @@ export async function createPost(
 ): Promise<PostMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     await createPostInternal(readPostCreateFormData(formData));
     return { status: 'ok' };
   } catch (err) {
@@ -155,6 +159,8 @@ export async function createPost(
  * trigger `posts_prevent_slug_change` raises and the wrapper swallows the
  * throw to the same uniform `{ status: 'error', formError }` shape.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param _prevState Previous `useActionState` state. Ignored.
  * @param formData   Raw form data. Must include a hidden `id` field with the
  *                   post's UUID.
@@ -166,6 +172,7 @@ export async function updatePost(
 ): Promise<PostMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     const rawId = formData.get('id');
     const id = typeof rawId === 'string' ? rawId : '';
     await updatePostInternal(id, readPostUpdateFormData(formData));
@@ -204,6 +211,8 @@ export async function updatePost(
  * export. The throwing helper is imported from a sibling non-`'use server'`
  * module so it does not become a second endpoint.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param id UUID of the post to delete. Validated downstream — anything
  *           non-string or empty resolves to the generic-error envelope after
  *           the timing floor.
@@ -214,6 +223,7 @@ export async function deletePost(
 ): Promise<PostMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     await deletePostInternal(id);
     return { status: 'ok' };
   } catch {

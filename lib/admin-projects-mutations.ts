@@ -6,11 +6,14 @@ import {
   deleteProjectInternal,
   updateProjectInternal,
 } from './admin-projects-mutations-internal';
-import type {
-  ProjectMutationFieldName,
-  ProjectMutationState,
-} from './admin-projects-mutations-types';
+import {
+  projectZodErrorToFieldErrors,
+  readProjectCreateFormData,
+  readProjectUpdateFormData,
+} from './admin-projects-mutations-formdata';
+import type { ProjectMutationState } from './admin-projects-mutations-types';
 import { GENERIC_FORM_ERROR } from './auth-constants';
+import { assertAdminSession } from './session';
 import { padToFloor } from './timing';
 
 /**
@@ -23,7 +26,11 @@ import { padToFloor } from './timing';
  * bounded — exactly the actions the UI calls, no co-located helpers. The
  * throwing helpers (zod parse, Supabase calls, slug checks) live in
  * `lib/admin-projects-mutations-internal.ts`, which does NOT carry
- * `'use server'`.
+ * `'use server'`. The FormData readers and the zod-error field mapper live in
+ * `lib/admin-projects-mutations-formdata.ts` for the same reason — they were
+ * split out at audit 24 when this module crossed the CQ-02 300-line cap, and
+ * a directive-free module keeps them off the public action surface exactly as
+ * module-privacy did before.
  *
  * SEC-09 allowlist (enforced by `tests/server-actions-manifest.test.ts`)
  * IDs landed by this module: `createProject`, `updateProject`,
@@ -34,155 +41,6 @@ import { padToFloor } from './timing';
  * This is the per-resource Server Action entry-point module per
  * `architecture.md` §6.6.6.
  */
-
-/**
- * Allowlist of zod-error keys we surface to the form. Anything outside this
- * set is dropped to avoid leaking shape information through Channel 1.
- *
- * Updated in T42 to cover the six new content-model fields. Kept as a Set
- * (not a switch) so adding fields touches data, not control flow.
- */
-const ALLOWED_FIELD_KEYS: ReadonlySet<ProjectMutationFieldName> = new Set([
-  'title',
-  'description',
-  'status',
-  'github_url',
-  'live_url',
-  'post_url',
-  'progress_percent',
-  'subtitle',
-  'tags',
-  'image_after_id',
-  'post_id',
-]);
-
-/** Type guard: narrow an unknown zod-path key into the allowed-fields union. */
-function isAllowedFieldKey(value: unknown): value is ProjectMutationFieldName {
-  return (
-    typeof value === 'string' &&
-    ALLOWED_FIELD_KEYS.has(value as ProjectMutationFieldName)
-  );
-}
-
-/**
- * Convert a `ZodError` into the per-field state shape. Only the fields in
- * {@link ALLOWED_FIELD_KEYS} are surfaced; any other key in the error tree
- * is ignored — Channel 1 (UI text) requires we leak no shape information
- * beyond the form's declared fields.
- */
-function projectZodErrorToFieldErrors(
-  err: ZodError,
-): ProjectMutationState['fieldErrors'] {
-  const fieldErrors: ProjectMutationState['fieldErrors'] = {};
-  for (const issue of err.issues) {
-    const key = issue.path[0];
-    if (isAllowedFieldKey(key)) {
-      // Keep the first message per field; later issues for the same field are
-      // less informative for the user (zod emits them in order).
-      if (!fieldErrors[key]) fieldErrors[key] = issue.message;
-    }
-  }
-  return fieldErrors;
-}
-
-/**
- * Read a FormData field as a trimmed non-empty string, or `null` if empty
- * or missing. Used for every nullable text field — URLs, image FK ids,
- * `subtitle`. Mirrors the empty-string-to-null convention that the zod
- * schemas (`.nullable()`) expect at the boundary.
- */
-function readNullableTrimmed(formData: FormData, key: string): string | null {
-  const raw = formData.get(key);
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  return trimmed.length === 0 ? null : trimmed;
-}
-
-/**
- * Read the comma-separated `tags` field into a trimmed string array, or
- * `null` when the field is empty or missing.
- *
- * The form submits one comma-separated text input rather than a repeated
- * field, because a handful of short tags is faster to type than it is to
- * manage as a widget. Blank segments are dropped here so a trailing comma
- * ("a, b,") does not produce an empty tag; the zod schema still rejects
- * whitespace-only entries that survive, which is the case the DB CHECK
- * cannot catch on its own.
- */
-function readTagsField(formData: FormData): string[] | null {
-  const raw = formData.get('tags');
-  if (typeof raw !== 'string') return null;
-  const tags = raw
-    .split(',')
-    .map((tag) => tag.trim())
-    .filter((tag) => tag.length > 0);
-  return tags.length > 0 ? tags : null;
-}
-
-/**
- * Read `progress_percent` from FormData. Empty/missing → `null`. A parseable
- * numeric string → `number`. A non-numeric string passes through as the raw
- * trimmed string so the zod number schema rejects with a deterministic
- * message rather than the field being silently nulled.
- */
-function readPercentField(formData: FormData): unknown {
-  const raw = formData.get('progress_percent');
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) return null;
-  const parsed = Number(trimmed);
-  return Number.isNaN(parsed) ? trimmed : parsed;
-}
-
-/**
- * Read FormData into the raw create payload. The cast is intentional:
- * unknown raw values flow through to the zod parser at the boundary, which
- * is the authoritative validator. Create does NOT carry `image_id` or
- * `image_after_id`: image upload requires the parent's UUID, which only
- * exists after the project row has been inserted. Images are attached on
- * the subsequent edit. The five non-image content-model fields (URLs,
- * progress, subtitle, tags) are included so a publish-on-create flow can land
- * a complete row in one round-trip.
- */
-function readProjectCreateFormData(formData: FormData): unknown {
-  return {
-    title: formData.get('title'),
-    description: formData.get('description'),
-    status: formData.get('status'),
-    github_url: readNullableTrimmed(formData, 'github_url'),
-    live_url: readNullableTrimmed(formData, 'live_url'),
-    post_url: readNullableTrimmed(formData, 'post_url'),
-    progress_percent: readPercentField(formData),
-    subtitle: readNullableTrimmed(formData, 'subtitle'),
-    tags: readTagsField(formData),
-    post_id: readNullableTrimmed(formData, 'post_id'),
-  };
-}
-
-/**
- * Read FormData into the raw update payload, including both image FK fields
- * (`image_id` from T26, `image_after_id` from T42). The form sends an empty
- * string when no image is attached and the UUID string when one is. The zod
- * schema accepts `z.string().uuid().nullable()`, so the empty-string case
- * is normalized to `null` HERE rather than via `.transform()` — the
- * authoritative validator stays a strict shape parser, not a coercion layer.
- */
-function readProjectUpdateFormData(formData: FormData): unknown {
-  return {
-    title: formData.get('title'),
-    description: formData.get('description'),
-    status: formData.get('status'),
-    image_id: readNullableTrimmed(formData, 'image_id'),
-    github_url: readNullableTrimmed(formData, 'github_url'),
-    live_url: readNullableTrimmed(formData, 'live_url'),
-    post_url: readNullableTrimmed(formData, 'post_url'),
-    progress_percent: readPercentField(formData),
-    subtitle: readNullableTrimmed(formData, 'subtitle'),
-    tags: readTagsField(formData),
-    image_after_id: readNullableTrimmed(formData, 'image_after_id'),
-    post_id: readNullableTrimmed(formData, 'post_id'),
-  };
-}
 
 /**
  * Server Action — create a new project from a `useActionState` form submit.
@@ -204,6 +62,8 @@ function readProjectUpdateFormData(formData: FormData): unknown {
  * export. The throwing helper is imported from a sibling non-`'use server'`
  * module so it does not become a second endpoint.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param _prevState Previous `useActionState` state. Ignored — the action is
  *                   pure with respect to its inputs.
  * @param formData   Raw form data. Field reads are unvalidated; the zod
@@ -217,6 +77,7 @@ export async function createProject(
 ): Promise<ProjectMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     await createProjectInternal(readProjectCreateFormData(formData));
     return { status: 'ok' };
   } catch (err) {
@@ -241,6 +102,8 @@ export async function createProject(
  * trigger raises and the wrapper swallows the throw to the same uniform
  * `{ status: 'error', formError }` shape.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param _prevState Previous `useActionState` state. Ignored.
  * @param formData   Raw form data. Must include a hidden `id` field with the
  *                   project's UUID.
@@ -252,6 +115,7 @@ export async function updateProject(
 ): Promise<ProjectMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     const rawId = formData.get('id');
     const id = typeof rawId === 'string' ? rawId : '';
     await updateProjectInternal(id, readProjectUpdateFormData(formData));
@@ -289,6 +153,8 @@ export async function updateProject(
  * export. The throwing helper is imported from a sibling non-`'use server'`
  * module so it does not become a second endpoint.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param id UUID of the project to delete. Validated downstream — anything
  *           non-string or empty resolves to the generic-error envelope after
  *           the timing floor.
@@ -299,6 +165,7 @@ export async function deleteProject(
 ): Promise<ProjectMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     await deleteProjectInternal(id);
     return { status: 'ok' };
   } catch {

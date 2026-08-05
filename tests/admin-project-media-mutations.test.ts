@@ -1,8 +1,36 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ZodError } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { GENERIC_FORM_ERROR } from '@/lib/auth-constants';
 import { ServiceError } from '@/lib/errors';
+import { assertAdminSession } from '@/lib/session';
 import { saveProjectMediaInternal } from '@/lib/admin-project-media-mutations-internal';
+import { saveProjectMedia } from '@/lib/admin-project-media-mutations';
+import { PROJECT_MEDIA_MUTATION_INITIAL_STATE } from '@/lib/admin-project-media-mutations-types';
+
+// F-39: the wrapper now calls the real `assertAdminSession`, which resolves a
+// request-scoped Supabase client via `next/headers` and throws outside a
+// request context. Stubbed to a resolved session by default; the F-39 case
+// below overrides it.
+vi.mock('@/lib/session', async () => {
+  const real = await vi.importActual<typeof import('@/lib/session')>(
+    '@/lib/session',
+  );
+  return { ...real, assertAdminSession: vi.fn().mockResolvedValue(undefined) };
+});
+
+// The internal helper stays real (the block below exercises it directly through
+// the DI seam); it is wrapped in a spy only so the F-39 case can assert the
+// wrapper never reaches it.
+vi.mock('@/lib/admin-project-media-mutations-internal', async () => {
+  const real = await vi.importActual<
+    typeof import('@/lib/admin-project-media-mutations-internal')
+  >('@/lib/admin-project-media-mutations-internal');
+  return {
+    ...real,
+    saveProjectMediaInternal: vi.fn(real.saveProjectMediaInternal),
+  };
+});
 
 /**
  * T43.E acceptance — admin PROJECT MEDIA save throwing helper.
@@ -133,5 +161,30 @@ describe('saveProjectMediaInternal', () => {
     const svc = thrown as ServiceError;
     expect(svc.operation).toBe('saveProjectMedia');
     expect(svc.cause).toBe(rpcError);
+  });
+});
+
+describe('saveProjectMedia — F-39 admin session guard', () => {
+  it('resolves with the uniform error envelope and never reaches the internal helper', async () => {
+    vi.mocked(saveProjectMediaInternal).mockClear();
+    vi.mocked(assertAdminSession).mockRejectedValueOnce(
+      new ServiceError('no admin session', {
+        operation: 'assertAdminSession',
+      }),
+    );
+    const fd = new FormData();
+    fd.set('project_id', VALID_PROJECT_UUID);
+    fd.set(
+      'rows',
+      JSON.stringify([
+        { image_id: VALID_UUID_A, image_after_id: null, caption: null },
+      ]),
+    );
+    const state = await saveProjectMedia(
+      PROJECT_MEDIA_MUTATION_INITIAL_STATE,
+      fd,
+    );
+    expect(state).toEqual({ status: 'error', formError: GENERIC_FORM_ERROR });
+    expect(saveProjectMediaInternal).not.toHaveBeenCalled();
   });
 });

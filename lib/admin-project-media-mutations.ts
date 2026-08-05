@@ -7,6 +7,7 @@ import type {
   ProjectMediaMutationState,
 } from './admin-project-media-mutations-types';
 import { GENERIC_FORM_ERROR } from './auth-constants';
+import { assertAdminSession } from './session';
 import { padToFloor } from './timing';
 
 /**
@@ -145,6 +146,8 @@ function readSaveProjectMediaFormData(formData: FormData): unknown {
  * from migration 010a — DELETE + INSERT in one Postgres transaction. The
  * Server Action is a thin uniformity wrapper around that RPC.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param _prevState Previous `useActionState` state. Ignored — the action
  *                   is pure with respect to its inputs.
  * @param formData   Raw form data. Must include hidden `project_id` (UUID)
@@ -157,6 +160,7 @@ export async function saveProjectMedia(
 ): Promise<ProjectMediaMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     await saveProjectMediaInternal(readSaveProjectMediaFormData(formData));
     return { status: 'ok' };
   } catch (err) {

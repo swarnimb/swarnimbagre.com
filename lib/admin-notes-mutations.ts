@@ -8,6 +8,7 @@ import {
 } from './admin-notes-mutations-internal';
 import type { NoteMutationState } from './admin-notes-mutations-types';
 import { GENERIC_FORM_ERROR } from './auth-constants';
+import { assertAdminSession } from './session';
 import { padToFloor } from './timing';
 
 /**
@@ -104,6 +105,8 @@ function readNoteFormData(formData: FormData): unknown {
  * export. The throwing helper is imported from a sibling non-`'use server'`
  * module so it does not become a second endpoint.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param _prevState Previous `useActionState` state. Ignored: the action is
  *                   pure with respect to its inputs.
  * @param formData   Raw form data. Field reads are unvalidated; the zod
@@ -117,6 +120,7 @@ export async function createNote(
 ): Promise<NoteMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     await createNoteInternal(readNoteFormData(formData));
     return { status: 'ok' };
   } catch (err) {
@@ -138,6 +142,8 @@ export async function createNote(
  * slug-lock analogue to guard: notes has no slug and no published state, so
  * an update is an unconditional whole-row write.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param _prevState Previous `useActionState` state. Ignored.
  * @param formData   Raw form data. Must include a hidden `id` field with the
  *                   note's UUID.
@@ -149,6 +155,7 @@ export async function updateNote(
 ): Promise<NoteMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     const rawId = formData.get('id');
     const id = typeof rawId === 'string' ? rawId : '';
     await updateNoteInternal(id, readNoteFormData(formData));
@@ -177,6 +184,8 @@ export async function updateNote(
  * internal throw (including the SEC-02 id-validation guard in the internal
  * helper).
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param id UUID of the note to delete. Validated downstream: anything
  *           non-string or empty resolves to the generic-error envelope after
  *           the timing floor.
@@ -185,6 +194,7 @@ export async function updateNote(
 export async function deleteNote(id: string): Promise<NoteMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     await deleteNoteInternal(id);
     return { status: 'ok' };
   } catch {

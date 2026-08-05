@@ -24,7 +24,18 @@ vi.mock('@/lib/admin-stats-mutations-internal', async () => {
   };
 });
 
+// F-39: the wrappers now call the real `assertAdminSession`, which resolves a
+// request-scoped Supabase client via `next/headers` and throws outside a
+// request context. Stubbing it keeps these cases about the timing floor.
+vi.mock('@/lib/session', async () => {
+  const real = await vi.importActual<typeof import('@/lib/session')>(
+    '@/lib/session',
+  );
+  return { ...real, assertAdminSession: vi.fn() };
+});
+
 const internal = await import('@/lib/admin-stats-mutations-internal');
+const { assertAdminSession } = await import('@/lib/session');
 const { insertStat, deleteStat } = await import(
   '@/lib/admin-stats-mutations'
 );
@@ -35,6 +46,7 @@ afterEach(() => {
 
 beforeEach(() => {
   // Default stubs — overridden per case below.
+  vi.mocked(assertAdminSession).mockResolvedValue(undefined);
   vi.mocked(internal.insertStatInternal).mockResolvedValue({} as never);
   vi.mocked(internal.deleteStatInternal).mockResolvedValue(undefined);
 });

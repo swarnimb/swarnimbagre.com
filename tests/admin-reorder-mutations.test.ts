@@ -1,7 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ZodError } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { GENERIC_FORM_ERROR } from '@/lib/auth-constants';
 import { ServiceError } from '@/lib/errors';
+import { assertAdminSession } from '@/lib/session';
 import { saveOrderInternal } from '@/lib/admin-reorder-mutations-internal';
 import {
   saveProjectOrder,
@@ -10,6 +12,27 @@ import {
 import { REORDER_MUTATION_INITIAL_STATE } from '@/lib/admin-reorder-mutations-types';
 import { reorderRows } from '@/lib/admin-project-media-form-state';
 import { serializeOrder } from '@/components/admin/ResourceListReorder';
+
+// F-39: the wrappers now call the real `assertAdminSession`, which resolves a
+// request-scoped Supabase client via `next/headers` and throws outside a
+// request context. Stubbed to a resolved session by default; the F-39 case
+// below overrides it.
+vi.mock('@/lib/session', async () => {
+  const real = await vi.importActual<typeof import('@/lib/session')>(
+    '@/lib/session',
+  );
+  return { ...real, assertAdminSession: vi.fn().mockResolvedValue(undefined) };
+});
+
+// The internal helper stays real (the `saveOrderInternal` block below exercises
+// it directly through the DI seam); it is wrapped in a spy only so the F-39
+// case can assert the wrapper never reaches it.
+vi.mock('@/lib/admin-reorder-mutations-internal', async () => {
+  const real = await vi.importActual<
+    typeof import('@/lib/admin-reorder-mutations-internal')
+  >('@/lib/admin-reorder-mutations-internal');
+  return { ...real, saveOrderInternal: vi.fn(real.saveOrderInternal) };
+});
 
 /**
  * T44.C acceptance — admin REORDER save surface.
@@ -149,6 +172,21 @@ describe('saveProjectOrder / savePostOrder (wrapper, non-DB paths)', () => {
     expect(state.status).toBe('error');
     // Malformed JSON leaves `rows` undefined -> top-level zod rejection.
     expect(state.fieldErrors).toBeDefined();
+  });
+
+  it('F-39: a rejected session guard yields the uniform error envelope and never reaches the internal helper', async () => {
+    vi.mocked(saveOrderInternal).mockClear();
+    vi.mocked(assertAdminSession).mockRejectedValueOnce(
+      new ServiceError('no admin session', {
+        operation: 'assertAdminSession',
+      }),
+    );
+    const state = await saveProjectOrder(
+      REORDER_MUTATION_INITIAL_STATE,
+      formDataWithRows([{ id: VALID_UUID_A }]),
+    );
+    expect(state).toEqual({ status: 'error', formError: GENERIC_FORM_ERROR });
+    expect(saveOrderInternal).not.toHaveBeenCalled();
   });
 });
 

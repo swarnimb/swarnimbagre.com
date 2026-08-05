@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ZodError, type ZodIssue } from 'zod';
+import { GENERIC_FORM_ERROR } from '@/lib/auth-constants';
 import { ServiceError } from '@/lib/errors';
 import type { ImageRecord } from '@/lib/types';
 
@@ -29,7 +30,18 @@ vi.mock('@/lib/admin-images-mutations-internal', async () => {
   };
 });
 
+// F-39: the wrappers now call the real `assertAdminSession`, which resolves a
+// request-scoped Supabase client via `next/headers` and throws outside a
+// request context. Stubbing it keeps these cases about the envelope shape.
+vi.mock('@/lib/session', async () => {
+  const real = await vi.importActual<typeof import('@/lib/session')>(
+    '@/lib/session',
+  );
+  return { ...real, assertAdminSession: vi.fn() };
+});
+
 const internal = await import('@/lib/admin-images-mutations-internal');
+const { assertAdminSession } = await import('@/lib/session');
 const { uploadImage } = await import('@/lib/admin-images-mutations');
 
 function buildFormData(entries: Record<string, string | Blob>): FormData {
@@ -66,6 +78,8 @@ beforeEach(() => {
   // floor without consuming real wall time (the timing floor itself is
   // covered by `tests/admin-images-mutations.timing.test.ts`).
   vi.useFakeTimers({ toFake: ['setTimeout', 'performance'] });
+  // Default: the caller holds an admin session. Overridden in the F-39 case.
+  vi.mocked(assertAdminSession).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -136,5 +150,27 @@ describe('uploadImage — Channel 2 (response body shape)', () => {
     expect(lowered).not.toContain('storage');
     expect(lowered).not.toContain('svg');
     expect(lowered).not.toContain('size limit');
+  });
+});
+
+describe('F-39 — admin session guard on the IMAGE wrappers', () => {
+  it('resolves with the uniform error envelope and never reaches the internal helper', async () => {
+    vi.mocked(assertAdminSession).mockRejectedValue(
+      new ServiceError('no admin session', {
+        operation: 'assertAdminSession',
+      }),
+    );
+    const p = uploadImage(
+      { status: 'idle' },
+      buildFormData({
+        parentType: 'projects',
+        parentId: SAMPLE_IMAGE.parent_id ?? '',
+        altText: 'kitten',
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = await p;
+    expect(result).toEqual({ status: 'error', formError: GENERIC_FORM_ERROR });
+    expect(internal.uploadImageInternal).not.toHaveBeenCalled();
   });
 });

@@ -4,6 +4,7 @@ import { ZodError } from 'zod';
 import { saveOrderInternal } from './admin-reorder-mutations-internal';
 import type { ReorderMutationState } from './admin-reorder-mutations-types';
 import { GENERIC_FORM_ERROR } from './auth-constants';
+import { assertAdminSession } from './session';
 import { padToFloor } from './timing';
 
 /**
@@ -99,6 +100,8 @@ function toReorderErrorState(err: unknown): ReorderMutationState {
  * Channel 4: exactly one action ID is added by this export; the throwing
  * helper is imported from a sibling non-`'use server'` module.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param _prevState Previous `useActionState` state. Ignored — the action is
  *                   pure with respect to its inputs.
  * @param formData   Raw form data. Must include hidden `rows` (JSON-serialized
@@ -111,6 +114,7 @@ export async function saveProjectOrder(
 ): Promise<ReorderMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     await saveOrderInternal('projects', readReorderFormData(formData));
     return { status: 'ok' };
   } catch (err) {
@@ -125,6 +129,8 @@ export async function saveProjectOrder(
  * {@link saveProjectOrder} against the `save_post_order` RPC (migration
  * 012a). Same six-channel uniformity contract.
  *
+ * F-39: {@link assertAdminSession} runs first, inside the `try`.
+ *
  * @param _prevState Previous `useActionState` state. Ignored.
  * @param formData   Raw form data. Must include hidden `rows` (JSON-serialized
  *                   ordered array of `{ id }`).
@@ -136,6 +142,7 @@ export async function savePostOrder(
 ): Promise<ReorderMutationState> {
   const start = performance.now();
   try {
+    await assertAdminSession();
     await saveOrderInternal('posts', readReorderFormData(formData));
     return { status: 'ok' };
   } catch (err) {

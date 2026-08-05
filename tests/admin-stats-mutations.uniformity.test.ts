@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ZodError, type ZodIssue } from 'zod';
+import { GENERIC_FORM_ERROR } from '@/lib/auth-constants';
+import { ServiceError } from '@/lib/errors';
 
 /**
  * T24 acceptance — Channel 2 (response body shape) uniformity for the
@@ -24,7 +26,18 @@ vi.mock('@/lib/admin-stats-mutations-internal', async () => {
   };
 });
 
+// F-39: the wrappers now call the real `assertAdminSession`, which resolves a
+// request-scoped Supabase client via `next/headers` and throws outside a
+// request context. Stubbing it keeps these cases about the envelope shape.
+vi.mock('@/lib/session', async () => {
+  const real = await vi.importActual<typeof import('@/lib/session')>(
+    '@/lib/session',
+  );
+  return { ...real, assertAdminSession: vi.fn() };
+});
+
 const internal = await import('@/lib/admin-stats-mutations-internal');
+const { assertAdminSession } = await import('@/lib/session');
 const { insertStat, deleteStat } = await import(
   '@/lib/admin-stats-mutations'
 );
@@ -53,6 +66,8 @@ beforeEach(() => {
   // without consuming real wall time (the timing floor itself is covered by
   // `tests/admin-stats-mutations.timing.test.ts`).
   vi.useFakeTimers({ toFake: ['setTimeout', 'performance'] });
+  // Default: the caller holds an admin session. Overridden in the F-39 case.
+  vi.mocked(assertAdminSession).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -121,5 +136,23 @@ describe('deleteStat — Channel 2 (response body shape)', () => {
     expect(result.formError).toBeDefined();
     expect(result.formError).not.toContain('permission');
     expect(result.fieldErrors).toBeUndefined();
+  });
+});
+
+describe('F-39 — admin session guard on the STAT wrappers', () => {
+  it('resolves with the uniform error envelope and never reaches the internal helper', async () => {
+    vi.mocked(assertAdminSession).mockRejectedValue(
+      new ServiceError('no admin session', {
+        operation: 'assertAdminSession',
+      }),
+    );
+    const p = insertStat(
+      { status: 'idle' },
+      buildFormData({ category: 'C', label: 'L', value: 'V' }),
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    const result = await p;
+    expect(result).toEqual({ status: 'error', formError: GENERIC_FORM_ERROR });
+    expect(internal.insertStatInternal).not.toHaveBeenCalled();
   });
 });

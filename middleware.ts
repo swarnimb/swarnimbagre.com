@@ -94,13 +94,19 @@ async function runAdminGate(request: NextRequest): Promise<NextResponse> {
       },
     );
 
-    const { data, error } = await supabase.auth.getSession();
+    // `getUser()`, NOT `getSession()` (F-40, audit 24). `getSession()` only
+    // decodes the cookie and checks `exp` locally -- it never verifies the JWT
+    // signature, so a hand-forged cookie with a future `exp` passed this gate
+    // and rendered the admin shell. `getUser()` round-trips to Supabase and
+    // validates the token server-side. Cost is one request per gated page load;
+    // that is the correct price for the only check standing in front of /admin.
+    const { data, error } = await supabase.auth.getUser();
     if (error) {
       console.info(`[auth] ${REDIRECT_OUTCOME_EXPIRED}`, { path: pathname });
       await padToFloor(start);
       return buildLoginRedirect(request);
     }
-    if (!data.session) {
+    if (!data.user) {
       console.info(`[auth] ${REDIRECT_OUTCOME_NO_SESSION}`, { path: pathname });
       await padToFloor(start);
       return buildLoginRedirect(request);
