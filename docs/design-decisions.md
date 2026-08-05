@@ -17,7 +17,15 @@
 - **One breakpoint: 640px.** Single responsive tree. No mobile component fork, no server-side device split. Both were deleted at T46.
 - If a needed pattern does NOT exist in the export, stop and consult `@designer` before improvising.
 
-**Deliberate deviations from the export** (design as built, not drift): no blinking caret; no fourth "Email him" pill (replaced by a "Find me here:" row of three branded marks); no footers; `/writing/[slug]` retained; hand-rolled carousel instead of embla; first-person copy throughout.
+**Deliberate deviations from the export** (design as built, not drift): no blinking caret; no fourth "Email him" pill (replaced by a "Find me here:" row of three branded marks); no footers; `/writing/[slug]` retained; hand-rolled carousel instead of embla; first-person copy throughout; the home page root (`.hpage`) is sized in `svh`, not `vh`.
+
+**Why `svh` on the home root** (2026-08-04, Session 52): the export's intent for Home is exactly one screen with no scroll. `vh` implements that intent incorrectly on a browser with dynamic toolbars — it resolves to the LARGE viewport, the height the page would have with the bars retracted. On Chrome for Android/iOS the bars are usually showing, so the box was taller than the visible area, and `.h-conv`'s `margin: auto 0` then centred the conversation inside that oversized box and pushed one end off screen. Safari masked it by collapsing its bars far more eagerly. `svh` is the height guaranteed visible WITH the bars present, so the layout always fits and never shifts. `dvh` was rejected deliberately: it tracks the toolbars as they move, which would make the centred content slide during scroll. This is a defect fix, not a design change — the intent is preserved — but it is a deviation and is recorded here rather than left implicit.
+
+**The two `min-height` declarations in `.hpage` are a deliberate fallback pair.** `min-height: 100vh` sits directly above `min-height: 100svh` in `app/styles/public-home.css`; the first line serves engines without `svh` and the second overrides it everywhere else. Do not "tidy away" the duplicate — removing either line reintroduces the bug on one class of browser.
+
+**Scope: Home only.** `app/styles/base.css` (`min-height: 100vh` on `html, body`) and `app/styles/public-other.css` (`.cpage { height: 100vh; overflow: hidden }`) were deliberately NOT changed. Home is the only page that must show its top and bottom edges simultaneously; every other page only needs its top in view and lets scrolling handle the rest.
+
+**Known latent issue — surfaced, not fixed (2026-08-04, Session 52):** `.cpage` in `public-other.css` releases its height lock to `height: auto` only at `max-width: 640px`. A phone in landscape is usually wider than 640px, so the lock plus `overflow: hidden` stays active and content can be clipped with no scroll to recover it. Surfaced to the builder and deliberately not acted on this session.
 
 **Why this rule:** the design was developed through long iteration on claude.ai/design and represents finished, locked decisions. Re-interpretation invalidates that work and produces drift.
 

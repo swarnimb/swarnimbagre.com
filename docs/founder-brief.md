@@ -37,7 +37,7 @@ This file is the plain-language record of every architectural decision. The audi
 | 23 | Defer Sentry pre-launch — manual log review until launch (T32 Option B) | [`monitoring.md`](monitoring.md) + CONSTRAINT-05 |
 | 24 | Admin query modules split per resource + shared `logQueryError` (T37) | [§6.6.8](architecture.md#668-admin-query-surface--per-resource-split--shared-query-error-helper-t37-cq-02cq-07) |
 | 25 | Image-bucket size/MIME limits codified in migration 008 (F-30) | [§2.4](architecture.md#24-images) + [§5.2](architecture.md#52-supabase) |
-| 26 | `/api/admin/*` route handlers self-gate via `getServerSession()` (F-17) | [§6.6.4](architecture.md#664-apiadmin-route-handler-gate-f-17-audit-pass-5) |
+| 26 | `/api/admin/*` route handlers self-gate via `assertAdminSession()` (F-17; helper replaced at audit 24b) | [§6.6.4](architecture.md#664-apiadmin-route-handler-gate-f-17-audit-pass-5) |
 | 27 | Admin theming tokens declared at `:root` to survive Radix portal escape | [§4.2](architecture.md#42-tailwind-scoping-decision-3--resolves-assumption-04) |
 | 28 | Project content-model expansion — 6 nullable columns + Override 1 (T42) | [§2.1](architecture.md#21-projects) + `design-decisions.md` Override 1 |
 | 29 | Override 2 — embla-carousel-react opens public-site JS-library posture with byte budget (T43.B) | [§1.2](architecture.md#12-frontend-libraries) + `design-decisions.md` Override 2 |
@@ -46,6 +46,9 @@ This file is the plain-language record of every architectural decision. The audi
 | 32 | Project↔post link — embedded writeup FK (`projects.post_id`, T45) | [§2.1](architecture.md#21-projects) + `design-decisions.md` Override 3 + `prd.md` §3.8 |
 | 33 | Admin manual reorder — `sort_order` column + atomic RPC (T44) | [§2.1](architecture.md#21-projects) + §2.2 + `supabase/migrations/012_sort_order.sql` + `012a_save_sort_order_rpc.sql` |
 | 34 | Public-site redesign: one responsive tree, one fewer route, zero JS deps (T46) | [§4.10](architecture.md#410-public-render-architecture-one-responsive-tree-t46) + §2.1 + §2.3 + §2.6 + §4.9 + `constraints.md` CONSTRAINT-05 |
+| 35 | Admin actions check who is calling before they act — `assertAdminSession()` (F-39 / F-40, audit 24b) | [§6.6.10](architecture.md#6610-application-layer-auth-guard-on-admin-mutations--assertadminsession-f-39-audit-24b) + §6.2 + §6.6.4 + §6.6.6 |
+| 36 | New Other-page rows land at the end of the list, not on top of each other (migration 016) | [§2.3](architecture.md#23-stats) + §2.6 + `supabase/migrations/016_stats_notes_sort_order_append.sql` |
+| 37 | A Supabase-installed database function was left callable from the internet; revoked (F-41, migration 015) | [§6.1](architecture.md#61-rls-policies--per-table) + `supabase/migrations/015_revoke_rls_auto_enable_execute.sql` |
 
 ---
 
@@ -579,6 +582,8 @@ wall-clock proves the wrapper ran end-to-end).
 
 **Implemented in:** Standing rule from security audit pass 5 (F-17); no code yet — guardrail only. Founder Brief entry added at T38, 2026-05-15, to close the architecture.md §6.6.4 / brief coverage gap.
 
+**Amended 2026-08-04 (audit 24b).** The rule stands; the function it names changed. Previously: call `getServerSession()`. Now: call `assertAdminSession()`. `getServerSession()` returned a session object if one appeared to be present, and its own documentation argued that presence was enough — which is exactly the reasoning F-39 retired. It had no callers, so it was deleted rather than fixed. Its replacement verifies the login server-side and throws when there is nobody there. See entry 35.
+
 ---
 
 ## 2026-05-19 — Admin theming tokens declared at `:root` to survive Radix portal escape
@@ -724,6 +729,70 @@ wall-clock proves the wrapper ran end-to-end).
 **What this closes off:** A separate mobile design. Anything the site does at narrow widths must now be expressible in one tree at one breakpoint, which is a real constraint on layouts that want to be structurally different on phones. Also closed: the project detail page as a place to put content. Long-form project writing goes through the posts system and lives at `/writing/<slug>`; there is no longer a URL that is "the project's own page". And the tag list on a project is capped at 8 short labels by a database constraint, so tags cannot quietly become a taxonomy.
 
 **Implementation note:** Migrations `013_project_card_fields.sql` and `014_other_page_model.sql` are applied to production. `getStatsByCategory` was replaced by `getOrderedStats()`; `getNotes()` and `lib/post-summary.ts` are new. The `x-device-variant` branch was removed from `middleware.ts` and the matcher narrowed to `/admin/:path*`, so middleware no longer executes on public requests at all. One bug worth remembering: the `next/font` variable classes were first placed on `<body>`, and because a CSS custom property is substituted where it is declared rather than where it is used, every composed font family at `:root` resolved to an invalid value. Every `font:` shorthand on the site silently fell back to Times New Roman with nothing in the console. Moving the classes to `<html>` fixed it, and the comment in `app/layout.tsx` exists so nobody moves them back.
+
+---
+
+## 35. Admin actions check who is calling before they act — `assertAdminSession()` (F-39 / F-40, audit 24b)
+
+**Date:** 2026-08-04
+**Architecture link:** [`architecture.md` §6.6.10](architecture.md#6610-application-layer-auth-guard-on-admin-mutations--assertadminsession-f-39-audit-24b) + §6.2 + §6.6.4 + §6.6.6 + `security-report.md` audit 24b
+
+**Decided:** Every admin action that changes data — all 17 of them, across projects, posts, stats, notes, images, project media and reordering — now starts by asking Supabase "is there a real logged-in admin behind this request?" and refuses if the answer is no. The check is a single shared function, `assertAdminSession()`, in `lib/session.ts`. The admin page gate in `middleware.ts` was changed at the same time to verify the login token with Supabase rather than just reading the expiry date off the browser cookie. Sign-in and sign-out are deliberately not guarded — putting a login check in front of the login would lock you out of your own site.
+
+**What this means for your product:** Until now, the only thing stopping a stranger from writing to your database was the database's own permission rules. Those rules are good, but they were the *only* layer, and the whole point of two layers is that the first one catches the day the second one has a typo in it. Now there are two. Nothing about how you use the admin panel changes; you will not notice this at all beyond a fractional pause on each admin page load, which is the cost of asking Supabase to verify the token properly instead of trusting the cookie.
+
+The specific hole this closes is worth understanding, because it is not obvious. Next.js admin actions are addressed by an ID that ships inside the public JavaScript your site sends to every visitor. Whoever holds that ID can trigger the action by sending it to *any* address on the site — including addresses like the homepage, where the admin door-check does not run, because at T46 we correctly narrowed that check to `/admin/*` only. So the door was locked and the window next to it was not. The guard is the window lock.
+
+**Check before approving:**
+- An unauthenticated attempt now looks exactly like any other failure from the outside: same generic error text, same 750 ms response floor, no clue that authentication specifically is what failed. That was designed in, not incidental — a distinguishable "you are not logged in" response is itself a probe someone can use.
+- The guard *throws* rather than returning a yes/no. A yes/no answer is one forgotten `if` away from being decoration. If it fails, the action stops; there is no path where it fails quietly.
+- It deliberately lives in a plain file, not one of the files that publish actions to the browser. Publishing it would have created a public "is Swarnim logged in right now?" endpoint, which is a small but real information leak.
+- Database permission rules are unchanged and still authoritative. This did not replace them and must not be treated as licence to loosen them.
+- The dead `getServerSession()` helper was deleted in the same pass — it had no callers and its documentation argued that merely *having* a cookie was proof of login, which is the belief this change exists to correct.
+
+**What this closes off:** Adding an admin action without an auth check. Any new mutation that skips `assertAdminSession()` is a security regression, and it is now written into the code-review checklist that way. It also settles a question that could otherwise be re-litigated per action: the check goes on the outer, browser-reachable wrapper — not on the inner helper functions, which nothing outside the server can address, and not before the error-handling block, because sitting inside it is what makes an unauthenticated attempt indistinguishable from every other failure.
+
+**Implementation note:** Two files were split in the same pass to stay inside the 300-line service-file budget the guard pushed them over: `lib/admin-projects-mutations-formdata.ts` (form-field reading, extracted from a wrapper that had reached 319 lines — now 176 + 198) and `lib/admin-stats-mutations-schemas.ts` (validation rules, 321 → 238 + 114), which also brings the stats surface onto the same four-file shape notes already used.
+
+---
+
+## 36. New Other-page rows land at the end of the list, not on top of each other (migration 016)
+
+**Date:** 2026-08-04
+**Architecture link:** [`architecture.md` §2.3](architecture.md#23-stats) + §2.6 + `supabase/migrations/016_stats_notes_sort_order_append.sql`
+
+**Decided:** The `sort_order` column on `stats` and `notes` no longer starts every new row at position 0. The database now works out the next free position at the moment a row is inserted and puts the row at the end of the list — the same behaviour `projects` and `posts` have had since T44.
+
+**What this means for your product:** This was a live bug shipped at T46, not a refinement. Every stat tile and every note you added without typing a position number was given position 0, so they all tied and the Other page fell back to ordering by creation date. The manual ordering control you were promised on that page silently did nothing. It works now: add a tile, it appears last, and you drag or renumber it to where you want it. Both tables were empty when the fix went in, so there was nothing to repair.
+
+**Check before approving:**
+- The fix required removing the "start at 0" default, not just adding the position-calculating rule on top of it. The database applies defaults *before* it runs that kind of rule, so with the default still in place the rule would have had nothing to do and the bug would have looked fixed while remaining entirely present. This is the sort of thing that produces a confident "verified" and a still-broken page.
+- Typing an explicit position still wins — the automatic placement only fills in a position you left blank.
+- Verified by inserting real rows into both tables: omitted position gave 0 then 1, an explicitly-typed position was honoured, and the next omitted one continued from there. The probe rows were deleted afterwards.
+- The database change had to ship *before* the app change, and that order is not interchangeable. The app as deployed always sent a position, which the new rule ignores, so the database going first was harmless. App first would have meant the app omitting the position while the database still required one — every insert would have failed outright.
+
+**What this closes off:** "Add the rule, keep the default" as a way to introduce database-computed values. Any future column where the database is meant to compute a value on insert must have its column default removed in the same migration, or the computation is dead code. Also closed: the assumption that a column default and an insert-time rule are interchangeable ways of saying the same thing. They are not, and the ordering between them is fixed by Postgres, not by us.
+
+---
+
+## 37. A Supabase-installed database function was left callable from the internet; revoked (F-41, migration 015)
+
+**Date:** 2026-08-04
+**Architecture link:** [`architecture.md` §6.1](architecture.md#61-rls-policies--per-table) + `supabase/migrations/015_revoke_rls_auto_enable_execute.sql`
+
+**Decided:** Permission to run `rls_auto_enable()` — a database function Supabase installed on your project, not one we wrote — was revoked from anonymous visitors, logged-in users, and the catch-all "everyone" grant. Only the database owner and Supabase's own service account retain it.
+
+**What this means for your product:** Nothing visible changes, and nothing was ever at risk. The function's job is to switch on row-level security automatically whenever a new table is created, and it still does that: Postgres does not consult run permission when it fires that kind of automatic rule. What it also had, until now, was a public web address anyone on the internet could call. Calling it did nothing — the first thing it tries to do only works while a table is being created, so it errors out immediately — so the practical exposure was zero.
+
+The reason to fix a zero-exposure finding is that the function runs with elevated privileges, and the thing keeping it harmless is one line of its body that we do not control. Supabase can rewrite that body in a platform update without telling us, and if the rewrite ever removes that first line, the project inherits an anonymous, elevated-privilege entry point with no review step in between. Removing the grant makes that future update a non-event.
+
+**Check before approving:**
+- Auto-enabling of row-level security on new tables still works — confirmed after applying by creating a throwaway table, checking that security came back on, and dropping it again.
+- Both the "everyone" grant and the individually-named ones had to be removed. Supabase grants directly to `anon` and `authenticated` on setup, and those survive removing the general grant — a partial revoke would have looked done and changed nothing.
+- Supabase's own security warnings dropped from five to three as a result.
+- This function appears in no migration in the repository and carries no creation date, so it could not have been found by reading our own code. It surfaced through the security audit.
+
+**What this closes off:** The assumption that the project's security surface is only what the project authored. Anything the platform installs into the database is in scope for review, and the standing rule is now explicit: an elevated-privilege function that anonymous or logged-in callers can run needs either a written justification or a revoke, no matter who put it there. Reversing this is one line, and the migration records it, but there is no known reason to.
 
 ---
 

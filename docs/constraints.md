@@ -1,7 +1,7 @@
 # Constraints: swarnimbagre.com
 
 **Date seeded:** 2026-05-06 (by `@plan` Phase 4)
-**Last updated:** 2026-08-04 (T46 redesign: CONSTRAINT-05 re-baselined, 03/15/16/22 amended)
+**Last updated:** 2026-08-04 (Session 52: CONSTRAINT-23 added — admin Server Action auth guard; CONSTRAINT-05 amended with the `100svh` home-root deviation. Earlier the same day, T46 redesign: CONSTRAINT-05 re-baselined, 03/15/16/22 amended)
 
 > Loaded by `@session-start` every session. Active binding decisions only — not history, not options considered. New constraints are added when `@plan`, `@cto`, or the builder makes a binding decision. A constraint is removed only when the decision is explicitly reversed, with the reversal noted in `docs/session-log.md`.
 
@@ -76,6 +76,9 @@
 - `/writing/[slug]` exists. The export pointed every list row back at the list itself, which would have left post bodies unreachable.
 - The carousel is hand-rolled, not embla-backed. See the CONSTRAINT-22 note below.
 - Copy is first person throughout, including the home bio, which the export wrote in third person.
+- The home page root (`.hpage` in `app/styles/public-home.css`) is sized in `svh`, not `vh`. `vh` resolves to the LARGE viewport — the height the page would have with the browser's toolbars retracted — so on Chrome for Android/iOS, where the bars are usually showing, the box was taller than the visible area and `.h-conv`'s `margin: auto 0` centred the conversation inside that oversized box, pushing one end off screen. Safari masked it by collapsing its bars far more eagerly. `svh` is the height guaranteed visible WITH the bars present, so the layout always fits and never shifts; `dvh` was rejected because it tracks the toolbars as they move and would slide the centred content during scroll. The export's intent ("exactly one screen, no scroll") is preserved — `vh` simply implemented that intent incorrectly — so this is a defect fix rather than a design change, but it is still a deviation and is recorded rather than left implicit. **The two `min-height` declarations in `.hpage` are a deliberate fallback pair:** `min-height: 100vh` sits directly above `min-height: 100svh` to serve engines without `svh`. Do not tidy the duplicate away. Scope is Home only — `app/styles/base.css` (`min-height: 100vh` on `html, body`) and `app/styles/public-other.css` (`.cpage { height: 100vh; overflow: hidden }`) were deliberately not changed, because Home is the only page that must show its top and bottom edges simultaneously; every other page only needs its top in view and lets scrolling handle the rest. Added 2026-08-04, Session 52.
+
+**Known latent issue — surfaced, not fixed (2026-08-04, Session 52):** `.cpage` in `app/styles/public-other.css` releases its height lock to `height: auto` only at `max-width: 640px`. A phone in landscape is usually wider than 640px, so the lock plus `overflow: hidden` stays active and content can be clipped with no scroll to recover it. Surfaced to the builder and deliberately not acted on this session.
 
 **Overrides:** none active. Overrides 1, 2 and 3 were retired with the bundle they amended.
 
@@ -308,6 +311,22 @@ or a re-evaluation of header uniformity under PKCE.
 
 ---
 
+### [CONSTRAINT-23] Admin Server Actions call `assertAdminSession()` first, inside the `try`
+
+**Decision:** Every Server Action that mutates admin-owned data calls `assertAdminSession()` (from `lib/session.ts`) as the first statement inside its `try` block — before any FormData read, zod parse, or database call. Authorization is two-layered: this application-layer check plus Postgres RLS. Neither layer alone is sufficient.
+
+**What it means in practice:** Before this, admin authorization was single-layered on RLS. SEC-04 requires both an authentication check and a resource-level authorization check; RLS supplies only the second. It matters because Next.js dispatches a Server Action on the `Next-Action` header against whatever URL is POSTed. T46 narrowed the middleware matcher to `/admin/:path*`, so an action ID lifted from the client bundle could be POSTed to `/` — a path middleware never sees — and the action body would run with only RLS refusing it. Applies to all 17 admin mutation actions across 7 modules as of Session 52. A new admin mutation action is not finished until the call is in place.
+
+**Placement is load-bearing.** The call goes INSIDE the existing `try`. Outside it, the rejection escapes `finally { await padToFloor(start) }` and becomes distinguishable by response time (SEC-09 Channel 3), and escapes the `catch` that produces the uniform envelope (Channel 2). The guard throws rather than returning a boolean, so a caller cannot silently ignore its result. It lives in a directive-free module so it does not itself become a Server Action, and therefore a wire-level "is an admin session present?" oracle (SEC-08). It uses `getUser()` — server-side signature verification — never `getSession()`, which only decodes the local cookie and checks `exp`; the same substitution was made at the `middleware.ts` gate.
+
+**Exemption:** `lib/auth.ts` (`signInWithMagicLink`, `signOut`) is the single, deliberate exception. Guarding sign-in would lock the single user out of their own login.
+
+**Who decided and when:** `@security` audit 24 finding F-39, Session 52, 2026-08-04.
+
+**What this closes off:** Relying on middleware plus RLS alone to authorize admin mutations. Reversing means accepting that an action ID lifted from the client bundle can be invoked on a path middleware does not cover, with RLS as the only thing between the request and the write.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -334,3 +353,4 @@ or a re-evaluation of header uniformity under PKCE.
 | 20 | Storage bucket RLS policies accompany table FK migrations | Every bucket gets a `storage.objects` policy scoped to `bucket_id` (USING + WITH CHECK); default-deny applies to Storage | `@supabase` + T28 | 2026-05-14 |
 | 21 | Canonical domain = apex `swarnimbagre.com` (no `www`) | All origin config (Vercel/Supabase/env/email) resolves to apex; `www` redirects to it | Main thread on builder behalf, confirmed by builder | 2026-05-16 |
 | 22 | Public-site JS libraries require a named Override + ≤15 KB gzip route-chunk budget | Every public-site npm dep gets a Surface boundary doc and a measured route-chunk delta. **Zero consumers as of T46**: embla was uninstalled and the carousel hand-rolled, so the public site has no runtime JS dependencies | `@cto` S34, codified at T43.I | 2026-05-20 / codified 2026-05-23 / zeroed 2026-08-04 |
+| 23 | Admin Server Actions call `assertAdminSession()` first, inside the `try` | Two-layer authorization (app check + RLS) on all 17 admin mutation actions; `lib/auth.ts` sign-in/sign-out exempt | `@security` audit 24 (F-39) | 2026-08-04 |
