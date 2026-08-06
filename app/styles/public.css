@@ -55,10 +55,19 @@
 
 /* ------------------------------------------------------------
    Burger + mobile menu
-   Both are display:none until the breakpoint.
+
+   The wrapper is what hides on desktop, not the burger, and it is also the
+   positioning context the dropdown anchors to. Hiding the wrapper keeps the
+   header at two laid-out children on desktop, so `space-between` still pins
+   the nav to the right edge — an empty third child would centre it instead.
    ------------------------------------------------------------ */
-.burger {
+.menu-wrap {
   display: none;
+  position: relative;
+}
+
+.burger {
+  display: inline-flex;
   width: 44px;
   height: 44px;
   align-items: center;
@@ -78,20 +87,30 @@
   background: var(--fg-strong);
 }
 
+/* A layer, not a row in the document. It used to be a full-width block in
+   normal flow after the header, so opening it pushed the page title and
+   everything below it down the page. Absolutely positioned against
+   .menu-wrap it overlays instead, and sized to its content rather than the
+   container it no longer belongs to. */
 .mmenu {
   display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 50;
   flex-direction: column;
-  gap: 2px;
-  margin: -8px 0 28px;
+  min-width: 200px;
   border: var(--border);
   border-radius: var(--r-menu);
   background: var(--surface);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.13);
   overflow: hidden;
 }
 
 .mmenu-item {
-  padding: 14px 18px;
+  padding: 11px 16px;
   font-size: 15px;
+  white-space: nowrap;
   color: var(--fg-muted);
   border-bottom: var(--border);
 }
@@ -131,8 +150,8 @@
     display: none;
   }
 
-  .burger {
-    display: inline-flex;
+  .menu-wrap {
+    display: flex;
   }
 
   .mmenu.open {
