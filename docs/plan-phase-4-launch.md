@@ -232,7 +232,7 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 
 ---
 
-## T38 — Documentation audit
+## [x] T38 — Documentation audit
 
 **Files:** all `docs/*.md` and `README.md`.
 
@@ -269,7 +269,7 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 
 ---
 
-## T39 — Production deploy + DNS cutover
+## [x] T39 — Production deploy + DNS cutover
 
 **Files:** all code from prior tasks; Vercel production settings; DNS.
 
@@ -376,7 +376,7 @@ The builder picks A or B at task start. Either choice is valid; record the choic
 
 ---
 
-## T42 — Project content-model expansion + public-card redesign
+## [x] T42 — Project content-model expansion + public-card redesign
 
 **Status:** Sessions A + B + C complete 2026-05-19 (Sessions 29 + 30 + 31). Migration 009 to prod (S29), public render desktop (S30), public render mobile + Override 1 docs + Playwright admin smoke + `@security` audit 18 CLEAR (S31). `@code-review` APPROVED WITH MINOR (2 MAJOR CQ-02 carry-forwards, 3 new MINOR all under Override 1 scope or scaffold). 3 mid-session production bug fixes shipped via Targeted Fix Mode (ProjectImageField duplicate-id, Footer SSR hydration, TypoIcon dead-links). 304/304 vitest. Build clean. Supersedes the parked `docs/content-model-expansion.md` (which proposed a heavier Option C schema with new tables + JSONB — T42 ships a lighter "6 nullable columns, zero new tables" variant after Session 28 brainstorm closed scope; @cto pre-migration consult on 2026-05-19 confirmed Shape A over Shape C).
 
@@ -500,7 +500,7 @@ If a session ends mid-task, the schema migration (Session A) must complete befor
 
 ---
 
-## T43 — Project media multi-image carousel
+## [x] T43 — Project media multi-image carousel
 
 **Status:** Sub-tasks T43.A through T43.I complete 2026-05-20 → 2026-05-23 (Sessions 32 → 40). T43.A `@designer` consult Override 2 draft (S33); T43.B `embla-carousel-react` install + ~11.7 KB gzip baseline (S34); T43.C migration 010 `project_media` to prod (S34); T43.D types + queries + signed-URL resolver (S35); T43.E `saveProjectMedia` Server Action + atomic RPC migration 010a (S36); T43.F admin `ProjectMediaField` + `ProjectMediaRow` + `ImageUpload` CQ-02 split (S37); T43.G public `ProjectMediaCarousel` + `ProjectMediaCarouselParts` + `BeforeAfterMedia` CQ-02 split (S38); T43.H wire carousel into `ProjectMedia` + `ProjectCard` + `MobileProjectCard` + the two `pages/Projects.tsx` page-body components + `app/projects/[slug]/page.tsx` (S39); T43.I Override 2 docs finalized + CONSTRAINT-22 codified + T43 close-out (S40, 2026-05-23). Production migration ledger `[007, 009, 010, 010a]`. Vitest 411/411 at T43.H baseline (re-verified at T43.I). `next build` exit 0; embla added +8 KB First Load JS on `/projects` + `/projects/[slug]` — inside the 15 KB CONSTRAINT-22 budget. `@security` audits 18 → 22 all CLEAR; T43.I docs-only audit 23 CLEAR. `@code-review` PASS at every sub-task gate; two CQ-02 MAJOR splits landed (`ImageUpload.tsx` at T43.F, `BeforeAfterMedia.tsx` at T43.G) and one MINOR CQ-07 test-helper duplication decided CARRY FORWARD at T43.I re-sweep (no `tests/_fixtures/` pattern exists yet; first-mover decision deliberately deferred from a docs-only commit). Override 2 Surface boundary finalized at T43.I to record the actual 12-entry surface (11 files + the dep); the plan's pre-build "exactly 2" criterion was understated and revised in-place per `@cto` S40 consult (see strike-through under T43.I acceptance criteria). Plan-doc divergence on T43.H file list reconciled in this closure: the actual edits were the two `components/public/pages/Projects.tsx` + `components/public/mobile/pages/Projects.tsx` page-body components, not `app/projects/page.tsx` + `lib/public-projects.ts` (T43.D already returned `media` from `loadPublicProjects`); `lib/db.ts` untouched (resolves S35 284/300 watchpoint). Commits: `efa294b` (T43.B), `f96b6f8` (T43.C), `ade9484` (T43.D + S34 framework recovery), `6fea8c6` (T43.E), `3373682` (T43.F), `5afac09` (T43.G), `0029072` + `30bdf35` (T43.H feat + docs), `9b21162` (T43.I docs close-out — Override 2 finalized + CONSTRAINT-22 codified + T43 closed). Override 2 binds the project media carousel surface only; everything outside that named boundary remains bundle-verbatim under CONSTRAINT-05.
 
@@ -983,7 +983,7 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 
 ---
 
-## T44 — Manual drag-reorder for projects & posts
+## [x] T44 — Manual drag-reorder for projects & posts
 
 **Status:** Planned 2026-05-28 (Session 43) via `@create-plan`. Source: `docs/prd.md` §3.7. Queued behind T40 — do not start until the T40 placeholder projects are published. Mirrors the T43 project-media drag-reorder pattern (four-file mutation + `WITH ORDINALITY` RPC), but uses `UPDATE … FROM` (not delete-insert) because `projects` / `posts` rows carry content + FKs.
 
@@ -1130,7 +1130,7 @@ Suggested session slicing (mirrors T42 Session A/B/C precedent):
 
 ---
 
-## T45 — Embedded project writeup (linked post on the detail page)
+## [x] T45 — Embedded project writeup (linked post on the detail page)
 
 **Status:** Done 2026-05-28 (Session 44) — built ahead of T44 per builder-approved resequence (T45 defines the project-detail structure before content authoring). All four sub-tasks `[x]`. Planned 2026-05-28 (Session 43) via `@designer` (Override 3) + `@cpo` (PRD §3.8) + `@create-plan`. Source: `docs/prd.md` §3.8 + `docs/design-decisions.md` Override 3. Reuses the `/writing` post-body rendering on the project detail page; does NOT add a project-only body field.
 
