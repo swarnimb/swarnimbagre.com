@@ -10,7 +10,7 @@
 - **Header-tick caveat (do not silently fix):** the task headers for T38, T39, T42, T43, T44 and T45 carry no `[x]`, even though each of those tasks' own Status / Closed blocks describes the work as complete. Left unticked deliberately rather than ticked on inference — logged under the tick-hygiene entry in `docs/framework-issues.md`.
 
 **Status detail (historical, Sessions 27 → 37 — superseded by the summary above and by each task's own Status / Closed block; retained as the record, not as current state):** T32–T39 done (T38 doc audit complete; 9/10 criteria met, only the DS-05 fresh-clone manual run outstanding — tracked separately. T39 closed 2026-05-19, Session 27: deploy live on apex canonical `swarnimbagre.com`, admin verified end-to-end including CRUD round-trip); **T42 Session A done 2026-05-19, Session 29** (schema + admin write surface — migration 009 applied to prod, zod + Server Actions + ProjectForm wired, 24 new tests); **T42 Session B done 2026-05-19, Session 30** (public render desktop — ProgressRing + ProjectRow/Card/Media + Home + Projects, 259/259 vitest, @code-review APPROVED WITH MINOR); **T42 Session C done 2026-05-19, Session 31** (mobile mirrors + Override 1 docs + Playwright admin smoke + @security audit 18 CLEAR, 304/304 vitest, @code-review APPROVED WITH MINOR; 3 mid-session production bug fixes via Targeted Fix Mode); **T43.A done 2026-05-20** (@designer consult — Override 2 drafted in design-decisions.md, all 6 criteria checked); **T43.B done 2026-05-20** (embla-carousel-react ^8 installed clean; baseline ~11.7 KB gzip across 3 packages — embla-carousel, embla-carousel-react, embla-carousel-reactive-utils — measured against published ESM; budget raised 10→15 KB gzip per @cto S34 consult; architecture.md §1.2 + design-decisions.md Override 2 + plan v8 naming reconciled; npm run build clean, 13 routes); **T43.C done 2026-05-20** (migration 010 `project_media` applied to prod via mcp__supabase__apply_migration, ledger now `[007, 009, 010]`; 7/7 acceptance criteria PASS; @cto pre-apply review APPROVE w/ 2 MINOR landed in-file — UPDATE-of-project_id trigger scope + before/after distinctness CHECK; RLS verified empirically via DO-block role-switch — service=2 anon=1 authenticated=2; row-cap trigger verified — 20-insert OK + 21st raises + bulk-21 rolls back to 0; advisor security delta: 1 NEW WARN search_path FIXED in-session via CREATE OR REPLACE w/ `set search_path = ''`, 1 NEW WARN admin_all-USING-true ACCEPTED (matches 4-table pattern per CONSTRAINT-09 single-admin), 2 NEW INFO unindexed-FK ACCEPTED (matches 3-table pattern)); **T43.D done 2026-05-20, Session 35** (types + queries + signed-URL resolver — 6 lib files mod/created + 4 test files mod/created; 7/7 acceptance criteria PASS; 322/322 vitest, +18 new tests; longest new fn ~24 lines, lib/db.ts 284/300; loadPublicProjects extended with `media: PublicProjectMediaItem[]` + per-project failure isolation; deprecation JSDoc on Project.image_id / image_after_id ref T43 + CONSTRAINT-22 T43.I codification; no specialist consult needed — existing patterns covered the shape); **T43.E done 2026-05-20, Session 36** (Server Action `saveProjectMedia` + zod schemas + atomic DB-side RPC — 4 lib files created + 2 test files created + 1 migration applied; 7/9 acceptance criteria PASS, 2 deferred with reason (allowlist → T43.F per build-invariant gating, voice check → T43.F per scope); 342/342 vitest (+20 new); migration ledger `[007, 009, 010] → [007, 009, 010, 010a]` via `save_project_media(p_project_id uuid, p_rows jsonb)` RPC — SECURITY INVOKER + `search_path=''` + WITH ORDINALITY-derived `order_index` + NULL/array-type guard + EXECUTE granted only to `authenticated`; @supabase consult APPROVE WITH MINOR landed 4 edits pre-apply; Option A RPC chosen over Option B sequential — true Postgres-transaction atomicity beats application-layer rollback; longest source 173 lines, longest function ~17 lines; advisor delta zero new lints); **T43.F done 2026-05-21, Session 37** (admin component — `ProjectMediaField` + `ProjectMediaRow` + `ImageUpload.tsx` CQ-02 MAJOR split closed; 10 files in scope + `lib/admin-project-media-form-state.ts` helper extraction + 4 new test files; all acceptance criteria PASS; 385/385 vitest, +43 from S36; `next build` clean 13/13; server-action manifest allowlist 12→13, `saveProjectMedia` now reachable; Playwright admin-smoke green incl. new create→upload→drag-reorder→save→reload round-trip; 2 real bugs caught by the e2e and fixed — `draggingIndex` `useState`→`useRef` stale-closure + `crypto.randomUUID()` SSR hydration mismatch; `@security` audit 20 CLEAR + `@code-review` PASS after 3 minor fixes); T40 content-addition criteria UNLOCKED but other T40 criteria still open (24h log review, voice-check, launch-checklist post-launch section, DS-03 launch entry); T41 trigger-gated
-**Tasks:** T32–T46 (15 tasks; T41 is trigger-gated and does not block Phase 4 exit — same pattern as Phase 3's T29/T31 operator-gated deferrals; T42 added 2026-05-19 as a pre-T40 schema + render expansion to make the public project card meaningfully render real DB content; T43 added 2026-05-20, T44 + T45 added 2026-05-28, T46 added 2026-08-04)
+**Tasks:** T32–T47 (16 tasks; T47 added 2026-08-06, Session 54 — reliable e2e teardown, opened by the first Playwright run; T41 is trigger-gated and does not block Phase 4 exit — same pattern as Phase 3's T29/T31 operator-gated deferrals; T42 added 2026-05-19 as a pre-T40 schema + render expansion to make the public project card meaningfully render real DB content; T43 added 2026-05-20, T44 + T45 added 2026-05-28, T46 added 2026-08-04)
 **Predecessor:** [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md)
 **Successor:** none — final phase
 
@@ -22,7 +22,7 @@ End state: site is live at `swarnimbagre.com`, monitored, the post-launch checkl
 
 Read this before running a "find the first incomplete `[ ]`" sweep. Three pieces of real outstanding work do **not** surface as an open `[ ]` inside a live task, because the tasks that produced them are closed. Listed here so they are impossible to miss.
 
-**1. The Playwright suite is rewritten but has never been run — run it before the next deploy.**
+**1. ~~The Playwright suite is rewritten but has never been run~~ — RESOLVED 2026-08-06, Session 54.** Run for the first time; **15/15 green** after six stale specs were fixed and one real production bug (`post_id` missing from `PROJECT_COLUMNS`) was found and fixed. **It did not resolve cleanly, though:** the run exposed that `admin-smoke` leaks live rows even when green, which is now **T47**. The historical framing below is retained as the record.
 
 T46 rewrote `admin-smoke.spec.ts` for the new markup and re-pointed `pages.spec.ts` / `admin-font.spec.ts`. All type-correct, none executed (S51 had no live Supabase fixture and no authenticated session). The historical record is the `[~]` line under T46 → **Tests required**, and because that line is `[~]` a first-`[ ]` sweep skips it and never shows the instruction it ends on. Restated here as live work, plus a live `[ ]` in the T46 block:
 
@@ -1294,9 +1294,64 @@ Plus: no footer anywhere, blinking cursor removed, email corrected to `bagreswar
 
 ---
 
+## T47 — Reliable e2e teardown: stop leaking production rows [ ]
+
+**Added 2026-08-06, Session 54, via `@create-plan`.** Opened by the first-ever Playwright run (the T46 "Outstanding after close" criterion above).
+
+**Not a PRD feature.** This is a test-harness defect, so it has no `docs/prd.md` entry and `@cpo` was not consulted. `@create-plan`'s rule is "feature must be specced in `docs/prd.md`"; the governing precedent for an infra task without a product spec is **T10.5** (testing infrastructure, inserted 2026-05-07). Recorded here rather than left as an unexplained bypass.
+
+**The defect.** `tests/e2e/admin-smoke.spec.ts` writes to the PRODUCTION database — CONSTRAINT-02 means there is no staging project, so every test row is a live row — and deletes its rows at the end by driving the admin UI. That cleanup is unreliable AND does not verify itself:
+
+- `Locator.count()` is an immediate read and does not auto-wait. The admin list resolves to **0 rows** mid-`router.refresh()`, so a pass reads 0, concludes "already deleted", returns success, and leaves live rows behind.
+- Observed at Session 54: a **fully green** run left 3 projects in production, one of them `published` and therefore rendering on the live `/projects` page beside the builder's real six.
+- A first fix attempt (settle before counting, sweep by `RUN_ID`, assert zero survivors) surfaced a second problem — a delete that does not decrement the row count — and blew the 20s step budget. It was reverted rather than left half-finished. `deleteRowsMatching` and the cleanup step both carry `KNOWN DEFECT` comments with this diagnosis.
+- `images` rows and Storage objects have **never** been cleaned up by anything, by any run, ever.
+
+**Fix direction:** stop doing hygiene through the UI. Teardown talks to Postgres directly with the service role. Keep one UI delete as a *test* of the delete button; it just stops being what the suite relies on for cleanup.
+
+**Files:**
+- `tests/e2e/global-teardown.ts` (create) — Playwright `globalTeardown` entry point. None exists today.
+- `tests/e2e/fixtures/cleanup.ts` (create) — service-role client + the sweep. Must import nothing that reaches `next/headers`.
+- `playwright.config.ts` (modify) — register `globalTeardown`. `loadDotEnvLocal` already primes the runner's `process.env` at config load, so `SUPABASE_SERVICE_ROLE_KEY` is available without new plumbing.
+- `tests/e2e/admin-smoke.spec.ts` (modify) — drop the two cleanup `runStep` blocks as hygiene; remove the `KNOWN DEFECT` comments once true.
+- `package.json` (modify) — declare `@supabase/supabase-js` in `devDependencies`.
+- `tests/e2e-cleanup.test.ts` (create) — unit tests for the pure helpers.
+
+**Functions to implement:**
+- `createServiceRoleClient(): SupabaseClient` — reads `NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` from `process.env`, throws a named error naming the missing variable if absent (EH-05). Mirrors the existing shape in `scripts/seed-test-fixture.ts:148`.
+- `findTestProjectIds(client): Promise<{ id: string }[]>` — matches on **`title`**, not slug.
+- `sweepTestArtifacts(client): Promise<CleanupReport>` — orchestrates the ordered deletion, returns per-table counts.
+
+**Acceptance criteria:**
+- [ ] Teardown runs in Node via the service role and imports **no** module that reaches `next/headers` — 19 `lib/` modules are transitively disqualified through `lib/supabase.ts`.
+- [ ] Match is on **`title`**, not slug prefix. The four test projects carry three different slug prefixes (`t28-`, `t42-`, `t43f-`), so a `t28-%` slug sweep silently misses the T42 and T43F rows; every title embeds `RUN_ID`.
+- [ ] `images` rows are located by `parent_id IN (test project ids)` **captured before the projects are deleted**. No column on `images` carries a run marker, and `images.parent_id` has no FK (polymorphic, `001_create_schema.sql:69`), so the rows dangle rather than cascade.
+- [ ] Deletion order respects the FKs: `projects` first — which cascades `project_media` (`010_project_media.sql`, `on delete cascade`) and thereby releases the `on delete restrict` those rows hold on `images` — then `images`, then Storage objects, then `posts` and `stats`.
+- [ ] Storage objects are removed from bucket `images` using each row's `bucket_path` (CONSTRAINT-07 path scheme). Nothing has ever deleted these.
+- [ ] Sweep is **self-healing**: it removes pre-existing debris from earlier crashed runs, not only the current run. This absorbs the ~23 orphaned `images` rows tracked as cleanup task #7 / handoff carry-forward #12. These are invisible to `lib/admin-images-cleanup.ts`, whose orphan predicate is `parent_id IS NULL AND parent_type IS NULL`.
+- [ ] Teardown runs even when the spec fails partway — that is the case that leaks today.
+- [ ] Given a green run, when the teardown finishes, then `projects` / `posts` / `stats` / `images` contain zero test rows and the `images` bucket contains zero test objects. **Verified by querying the database, not by the suite reporting success** — reporting success while leaving rows behind is the defect.
+- [ ] The suite fails loudly if teardown cannot complete (EH-01: no silent catch; EH-02: error names what failed, which table, and how many rows remained).
+- [ ] SEC-01: the service-role key is read from `process.env` and never hardcoded, including in test files.
+- [ ] CQ-01: no function exceeds 50 lines. CQ-05: no `console.log` debug aids left in.
+- [ ] **`sort_order` side effect addressed.** The T44.D step clicks "Save order", which rewrites `sort_order` on **every** project row including the builder's real six. Either snapshot and restore the real rows' `sort_order`, or scope the reorder step so it cannot touch non-test rows. Folded into T47 by builder decision, Session 54.
+
+**Tests required:**
+- `test-title pattern matches all four project titles` (TS-01 happy).
+- `test-title pattern rejects a real project title` (TS-01 error) — guards against a sweep that could delete real content.
+- DB-dependent verification is manual per the acceptance criterion above; the pure pattern builders are unit-tested (TS-03: DB-touching tests stay out of the pure-function files).
+
+**Depends on:** none.
+
+**Specialist:** `@supabase`
+
+**Until this is fixed:** check the database for test rows after every Playwright run. A green result does not mean the run cleaned up after itself.
+
+---
+
 ## Phase 4 Exit Criteria
 
-- T32–T40 + T42 + T43 + T44 + T45 + T46 complete (T41 is a trigger-gated deferred follow-up and does not block Phase 4 exit, same pattern as Phase 3's T29/T31 OpenClaw-operator-gated deferrals). **As of Session 52 the only incomplete task here is T40** — 2 content-gated criteria open.
+- T32–T40 + T42 + T43 + T44 + T45 + T46 + T47 complete (T41 is a trigger-gated deferred follow-up and does not block Phase 4 exit, same pattern as Phase 3's T29/T31 OpenClaw-operator-gated deferrals). **As of Session 54 the incomplete tasks here are T40** — 2 content-gated criteria open — **and T47**, the e2e teardown defect opened by the first Playwright run. T47 blocks deploys in practice: the suite that gates them currently leaks live rows.
 - Site is live at `swarnimbagre.com`, monitored, with content rendering against the expanded project schema.
 - All security and code review findings closed.
 - Mark Phase 4 row Done in [`plan-index.md`](plan-index.md). The `@plan` cycle is complete; future work happens via individual `@plan` follow-up tasks against the same docs.
