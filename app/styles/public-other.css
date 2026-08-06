@@ -91,6 +91,12 @@
   padding: var(--pad-tile);
   display: flex;
   flex-direction: column;
+  /* The export centres tile content in the available height
+     (`template.extracted.html:447` and `:463`). Omitting this let it default
+     to flex-start, which pinned every block to the top of a tile several
+     times its own height — only visible once the grid had real rows in it,
+     which is why it survived T46. */
+  justify-content: center;
   overflow: hidden;
 }
 
