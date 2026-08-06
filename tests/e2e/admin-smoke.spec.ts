@@ -32,7 +32,7 @@
  *     the duration of the test; asserted empty at the end.
  */
 
-import { test, expect, type ConsoleMessage, type Page } from '@playwright/test';
+import { test, expect, type ConsoleMessage, type Locator, type Page } from '@playwright/test';
 import { loginAsAdmin } from './fixtures/auth';
 
 // --- Constants (CQ-04) -----------------------------------------------------
@@ -53,6 +53,8 @@ const STAT_LABEL = `T28 stat ${RUN_ID}`;
 const STAT_VALUE = '42';
 /** Second value, used to prove the T46 `updateStat` edit path persists. */
 const STAT_VALUE_EDITED = '43';
+/** Success toast text from `StatRow`. Mirrors its `SAVE_SUCCESS_MESSAGE`. */
+const STAT_SAVE_TOAST = 'Saved.';
 
 // --- T42 end-to-end path constants (CQ-04) --------------------------------
 
@@ -92,6 +94,25 @@ const T43F_MEDIA_TITLE = `T43F media project ${RUN_ID}`;
 /** T43.F captions used as stable identifiers for post-reload row assertions. */
 const T43F_CAPTION_SINGLE = `T43F single caption ${RUN_ID}`;
 const T43F_CAPTION_PAIR = `T43F pair caption ${RUN_ID}`;
+
+/**
+ * The project form's title input, addressed by id rather than by label.
+ *
+ * `getByLabel('Title')` matches on case-insensitive SUBSTRING, so once T46
+ * added the "Subtitle" field it resolved to both `#project-title` and
+ * `#project-subtitle` and every project-create step died on a strict-mode
+ * violation — taking the whole downstream flow (edit, publish/slug-lock,
+ * image upload, media round-trip, and all three T46 public-render steps)
+ * with it, because no project ever got created.
+ *
+ * This is the same fix already applied to the stats surface further down
+ * (see the `getByLabel('Category')` note above the stats step); the project
+ * form simply never received it.
+ *
+ * The posts form deliberately still uses `getByLabel('Title')`: `PostForm`
+ * has no Subtitle field, so the label is unambiguous there.
+ */
+const PROJECT_TITLE_INPUT = '#project-title';
 
 /**
  * T46 public card action labels. Exact visible text on the `.sb-action`
@@ -253,6 +274,16 @@ async function selectFormStatus(
   await expect(listbox).toBeHidden();
 }
 
+/**
+ * Delete every admin list row whose accessible name matches `nameRe`.
+ *
+ * KNOWN DEFECT — do not trust this to have deleted anything. `Locator.count()`
+ * is an IMMEDIATE read and does not auto-wait, while the admin list resolves
+ * to 0 rows mid-`router.refresh()`. A pass can therefore read `0`, return as
+ * though the rows were already gone, and leave live rows in the PRODUCTION
+ * database. See the comment on the `cleanup: delete test projects` step for
+ * the full diagnosis and the reverted first fix attempt.
+ */
 async function deleteRowsMatching(
   page: Page,
   nameRe: RegExp,
@@ -318,11 +349,48 @@ async function selectFormOption(
   triggerName: string,
   optionName: string,
 ): Promise<void> {
-  await page.getByRole('combobox', { name: triggerName }).click();
+  const trigger = page.getByRole('combobox', { name: triggerName });
+  await trigger.click();
   const listbox = page.getByRole('listbox');
   await expect(listbox).toBeVisible();
-  await page.getByRole('option', { name: optionName }).click({ force: true });
+  const option = page.getByRole('option', { name: optionName });
+  // Radix renders the listbox in a portal and scrolls it once the option
+  // count grows. `click({ force: true })` skipped actionability, so an
+  // off-viewport option could be "clicked" at a coordinate that dismissed the
+  // menu without selecting anything — and the old `toBeHidden()` check passed
+  // either way, because a dismissed menu is also a hidden one. Scroll first,
+  // click for real, then assert the trigger actually took the value.
+  await option.scrollIntoViewIfNeeded();
+  await option.click();
   await expect(listbox).toBeHidden();
+  await expect(
+    trigger,
+    `"${triggerName}" did not take the option "${optionName}"`,
+  ).toContainText(optionName);
+}
+
+/**
+ * Read one cell out of an admin list row, addressed by its column HEADER text
+ * rather than by a hard-coded index.
+ *
+ * T44.D prepended a drag-handle column to every admin list, which shifted
+ * every cell index by one. The posts step had been reading the slug from
+ * `td.nth(1)` and silently started returning the TITLE instead, so the
+ * downstream `/writing/[slug]` navigation requested a title-as-slug and 404'd.
+ * Resolving the index from the header row keeps this correct the next time a
+ * column is inserted.
+ */
+async function readCellByHeader(
+  page: Page,
+  row: Locator,
+  headerText: string,
+): Promise<string> {
+  const headers = await page.locator('thead th').allInnerTexts();
+  const index = headers.findIndex(
+    (header) => header.trim().toLowerCase() === headerText.toLowerCase(),
+  );
+  expect(index, `no "${headerText}" column in the admin list header`).toBeGreaterThan(-1);
+  return (await row.locator('td').nth(index).textContent()) ?? '';
 }
 
 /**
@@ -414,7 +482,7 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
     await runStep(failures, 'projects: create (+XSS title)', async () => {
       await page.goto('/admin/projects/new');
       const xssTitle = `${PROJECT_TITLE} ${XSS_SCRIPT_PAYLOAD}`;
-      await page.getByLabel('Title').fill(xssTitle);
+      await page.locator(PROJECT_TITLE_INPUT).fill(xssTitle);
       await page.getByLabel('Description').fill(PROJECT_DESCRIPTION);
       await page.getByRole('button', { name: /^save$/i }).click();
       await page.waitForURL(/\/admin\/projects(\?[^/]*)?$/);
@@ -433,7 +501,7 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
         .getByRole('link', { name: /^edit$/i })
         .click();
       await page.waitForURL(/\/admin\/projects\/[0-9a-f-]+$/);
-      await page.getByLabel('Title').fill(PROJECT_TITLE_EDITED);
+      await page.locator(PROJECT_TITLE_INPUT).fill(PROJECT_TITLE_EDITED);
       await page.getByRole('button', { name: /^save$/i }).click();
       await page.waitForURL(/\/admin\/projects(\?[^/]*)?$/);
       await expect(
@@ -473,7 +541,7 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
     // to add a row; nothing mounts the upload widget on a fresh edit page.
     await runStep(failures, 'images: upload via project edit form (T43.F rewired)', async () => {
       await page.goto('/admin/projects/new');
-      await page.getByLabel('Title').fill(IMAGE_PROJECT_TITLE);
+      await page.locator(PROJECT_TITLE_INPUT).fill(IMAGE_PROJECT_TITLE);
       await page.getByLabel('Description').fill(`Image upload smoke ${RUN_ID}`);
       await page.getByRole('button', { name: /^save$/i }).click();
       await page.waitForURL(/\/admin\/projects(\?[^/]*)?$/);
@@ -574,7 +642,7 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await page.waitForURL(/\/admin\/posts(\?[^/]*)?$/, { timeout: SHORT_WAIT_MS });
       const postRow = page.getByRole('row', { name: new RegExp(POST_TITLE) });
       await expect(postRow).toBeVisible();
-      postSlug = ((await postRow.locator('td').nth(1).textContent()) ?? '').trim();
+      postSlug = (await readCellByHeader(page, postRow, 'Slug')).trim();
       expect(postSlug, 'post slug must be derived').not.toBe('');
     });
 
@@ -618,9 +686,21 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
 
       // T46 edit path (`updateStat`). Stats were insert-or-delete only until
       // the redesign made the Other-page tiles hand-maintained and long-lived.
+      // `StatsInsertForm` toasts the SAME string as `StatRow` on success, so
+      // the insert's toast must clear before the edit, or the wait below
+      // matches the stale one and reloads mid-flight again.
+      await expect(page.getByText(STAT_SAVE_TOAST, { exact: true })).toHaveCount(0);
+
       const valueField = statCard.locator('input[name="value"]');
       await valueField.fill(STAT_VALUE_EDITED);
       await statCard.getByRole('button', { name: /^save$/i }).click();
+      // Wait for the write to land before reloading. `click()` resolves as
+      // soon as the event is dispatched, so the original `click(); reload();`
+      // pair navigated away mid-flight and aborted the Server Action POST —
+      // the row kept its old value and the assertion below read it back.
+      // `StatRow` toasts only from its success effect, so a toast appearing
+      // now is this save completing.
+      await expect(page.getByText(STAT_SAVE_TOAST, { exact: true }).first()).toBeVisible();
       await page.reload();
       await expect(
         page
@@ -658,7 +738,7 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
 
     await runStep(failures, 'T42: create project with every content-model field filled', async () => {
       await page.goto('/admin/projects/new');
-      await page.getByLabel('Title').fill(T42_PROJECT_TITLE);
+      await page.locator(PROJECT_TITLE_INPUT).fill(T42_PROJECT_TITLE);
       await page.getByLabel('Description').fill(T42_PROJECT_DESCRIPTION);
       await page.getByLabel('GitHub URL').fill(T42_GITHUB_URL);
       await page.getByLabel('Live URL').fill(T42_LIVE_URL);
@@ -806,7 +886,7 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
 
     await runStep(failures, 'T43.F: media-field create + reorder + save round-trip', async () => {
       await page.goto('/admin/projects/new');
-      await page.getByLabel('Title').fill(T43F_MEDIA_TITLE);
+      await page.locator(PROJECT_TITLE_INPUT).fill(T43F_MEDIA_TITLE);
       await page.getByLabel('Description').fill(`T43.F media smoke ${RUN_ID}`);
       await page.getByRole('button', { name: /^save$/i }).click();
       await page.waitForURL(/\/admin\/projects(\?[^/]*)?$/, { timeout: SHORT_WAIT_MS });
@@ -940,6 +1020,17 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await page.goto('/admin/posts');
       await deleteRowsMatching(page, new RegExp(POST_TITLE));
     });
+    // KNOWN DEFECT — cleanup does not verify itself, and does not reliably
+    // delete. A fully green run has been observed leaving three projects in
+    // the PRODUCTION database, one of them `published` and therefore live on
+    // `/projects` (CONSTRAINT-02: there is no staging project). Diagnosis so
+    // far: the admin list resolves to 0 rows mid-`router.refresh()`, and
+    // `Locator.count()` does not auto-wait, so a pass can conclude "nothing
+    // to delete" while rows remain. A first fix attempt (wait for the row
+    // set to settle, sweep by RUN_ID, assert zero rows survive) surfaced a
+    // further problem — a delete that does not decrement the row count — and
+    // was reverted rather than left half-finished. Until this is fixed,
+    // CHECK THE DATABASE FOR `t28-` / `t42-` / `t43f-` ROWS AFTER EVERY RUN.
     await runStep(failures, 'cleanup: delete test projects', async () => {
       await page.goto('/admin/projects');
       await deleteRowsMatching(page, new RegExp(PROJECT_TITLE_EDITED));

@@ -1,31 +1,69 @@
 import { test, expect } from '@playwright/test';
 
+/**
+ * `/writing/[slug]` — renders a real published post through the sanitizing
+ * Markdown path (CONSTRAINT-06: marked → DOMPurify → DOM).
+ *
+ * This spec used to hard-code the slug `hello-world` and assert that fixture's
+ * exact body (`**bold**`, `*italic*`, a link to example.com, a code span).
+ * That post was removed by the S42 production-fixture purge, so the route
+ * 404'd. It also read the body out of `page.locator('main')`, and this route
+ * renders no `<main>` element at all — the body container is `.post-body` —
+ * so the assertion could not have passed even with a live fixture.
+ *
+ * Rather than reintroduce a fixture row into production (CONSTRAINT-02: there
+ * is no staging project, so every test row is a live row), the slug is derived
+ * from the `/writing` list at run time. The trade-off is deliberate and worth
+ * knowing: because real post bodies are arbitrary prose, this can no longer
+ * assert that a specific Markdown construct rendered. It asserts the invariants
+ * that hold for any body — it rendered as HTML rather than raw text, and the
+ * sanitizer stripped every script vector.
+ */
+
+/** Block-level tags `marked` emits; at least one must be present in a body. */
+const RENDERED_BLOCK_SELECTOR = 'p, h2, h3, h4, ul, ol, blockquote, pre';
+
 test.describe('/writing/[slug]', () => {
-  test('hello-world renders sanitized markdown body', async ({ page }) => {
-    const response = await page.goto('/writing/hello-world');
-    expect(response, 'no response for /writing/hello-world').not.toBeNull();
-    expect(response!.status(), 'non-200 status for /writing/hello-world').toBe(200);
+  test('a published post renders sanitized markdown', async ({ page }) => {
+    await page.goto('/writing');
 
-    // Wait for MarkdownContent to hydrate (renderMarkdown runs in useEffect)
-    await expect(page.getByRole('heading', { level: 2, name: /Hello/i })).toBeVisible();
+    const firstRow = page.locator('a.lrow').first();
+    await expect(firstRow, 'no published posts on /writing to exercise').toBeVisible();
 
-    // Sanitized DOM elements present
-    await expect(page.locator('strong', { hasText: /^bold$/ })).toBeVisible();
-    await expect(page.locator('em', { hasText: /^italic$/ })).toBeVisible();
-    await expect(page.locator('a[href="https://example.com"]')).toBeVisible();
-    await expect(page.locator('code').first()).toBeVisible();
+    const href = await firstRow.getAttribute('href');
+    expect(href, 'post row is missing an href').toBeTruthy();
 
-    // Security: assert raw markdown markers do NOT appear in the body text
-    const bodyText = await page.locator('main').innerText();
-    expect(bodyText).not.toContain('**bold**');
-    expect(bodyText).not.toContain('## Hello');
-    expect(bodyText).not.toContain('[link]');
+    // The list heading carries a decorative `<span class="larrow">→</span>`.
+    // It is `aria-hidden`, but `innerText()` still returns it, which would
+    // append a stray arrow to the title and break the match against the
+    // detail page's `<h1>`. Strip aria-hidden nodes before reading the text.
+    const title = await firstRow.locator('h2.ltitle').evaluate((el) => {
+      const clone = el.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll('[aria-hidden="true"]').forEach((node) => node.remove());
+      return (clone.textContent ?? '').trim();
+    });
 
-    // Security: no script tags, no inline event handlers in the rendered tree
-    const bodyHtml = await page.locator('main').innerHTML();
+    const response = await page.goto(href!);
+    expect(response, `no response for ${href}`).not.toBeNull();
+    expect(response!.status(), `non-200 status for ${href}`).toBe(200);
+
+    // The same title heads the detail page.
+    await expect(page.locator('h1.page-title')).toContainText(title);
+
+    // MarkdownContent renders in a useEffect — wait for real HTML, not raw text.
+    const body = page.locator('.post-body');
+    await expect(body).toBeVisible();
+    await expect(
+      body.locator(RENDERED_BLOCK_SELECTOR).first(),
+      'post body produced no block-level HTML — markdown did not render',
+    ).toBeVisible();
+
+    // SEC: sanitizer stripped every script vector (CONSTRAINT-06 whitelist).
+    const bodyHtml = await body.innerHTML();
     expect(bodyHtml).not.toMatch(/<script/i);
-    expect(bodyHtml).not.toMatch(/onerror=/i);
+    expect(bodyHtml).not.toMatch(/\son\w+=/i);
     expect(bodyHtml).not.toMatch(/href="javascript:/i);
+    expect(bodyHtml).not.toMatch(/<iframe/i);
   });
 
   test('non-existent slug returns 404', async ({ page }) => {

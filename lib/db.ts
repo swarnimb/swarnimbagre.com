@@ -32,11 +32,22 @@ export {
  * the row via `lib/public-projects.ts`. `thumb_kind` is dead as of T46: the
  * redesigned card renders photographic media only, so nothing reads it, but
  * the column is retained so historical values survive.
+ *
+ * `post_id` (T45, migration 011) was MISSING from this projection until the
+ * first full Playwright run caught it. `Project` declares the field, so
+ * TypeScript was satisfied, but PostgREST only returns the columns named
+ * here — so `row.post_id` was always `undefined` at runtime,
+ * `loadPublicProjects` mapped `postId: undefined`, and `buildWriteupHrefs`
+ * in `app/projects/page.tsx` skipped every project on its `if (!postId)`
+ * guard. The upshot was that the card's `Writeup` action could never render
+ * for anyone, on any project: T45's entire feature was inert in production.
+ * A projection is a runtime contract that the type system cannot check —
+ * adding a column to `Project` does not add it here.
  */
 const PROJECT_COLUMNS =
   'id, title, slug, description, status, image_id, created_at, updated_at, ' +
   'github_url, live_url, post_url, progress_percent, thumb_kind, image_after_id, ' +
-  'sort_order, subtitle, tags';
+  'sort_order, subtitle, tags, post_id';
 
 /** Column projection for stat queries. Extended in T46 (migration 014). */
 const STAT_COLUMNS =
