@@ -187,13 +187,24 @@
   background: var(--surface);
 }
 
+/* 16px, not the export's 15px, and NOT reduced at the mobile breakpoint.
+   WebKit force-zooms the page whenever a focused form control computes to
+   under 16px, and every iOS browser is WebKit — Chrome for iOS included.
+   At 15px that is a 1.07x zoom; at the 14px this rule used to drop to on
+   mobile, 1.14x, which pushed the send button outside the visual viewport
+   and scrolled the wordmark off the top. Chrome for iOS then fails to
+   restore the scale on blur, so the page stayed zoomed after the keyboard
+   closed. There is no CSS that undoes the zoom once triggered and no
+   viewport meta worth using — `maximum-scale=1` would block pinch-zoom for
+   everyone. Not triggering it is the whole fix, so this floor is load
+   bearing: do not take it below 16px. */
 .h-input {
   flex: 1;
   min-width: 0;
   border: none;
   outline: none;
   background: transparent;
-  font: 400 15px/1 var(--font-sans);
+  font: 400 16px/1 var(--font-sans);
   color: var(--fg);
 }
 .h-input::placeholder {
@@ -268,7 +279,8 @@
     border-radius: 24px;
   }
 
-  .h-input { font-size: 14px; }
+  /* No font-size override here on purpose — see .h-input above. Anything
+     below 16px reintroduces the iOS focus zoom. */
 
   .h-send {
     width: 32px;
