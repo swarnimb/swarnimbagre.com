@@ -1,5 +1,18 @@
-html, body { margin: 0; padding: 0; background: var(--bg); min-height: 100vh; }
-#root { min-height: 100vh; }
+/* `svh`, matching .hpage in public-home.css — see the long note there.
+   These were left on plain `vh` when that fix landed, which undid it: `vh`
+   is the LARGE viewport (browser toolbars retracted) and `svh` the small one
+   (toolbars showing), so on mobile the body floor sat ~120px taller than the
+   home page's own 100svh box. That gap is dead scrollable space, which is
+   why home could scroll off its baseline at zoom 1 despite being designed
+   not to scroll at all. `min-height` only sets a floor, so taller pages
+   still scroll normally. The plain `vh` line is the pre-`svh` fallback. */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  min-height: 100vh;
+  min-height: 100svh;
+}
 button:focus-visible, a:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
