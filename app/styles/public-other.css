@@ -203,3 +203,37 @@
     min-height: 96px;
   }
 }
+
+/* ============================================================
+   Short viewports — phone held sideways
+
+   The height lock above is released on WIDTH, and width is the wrong
+   question to ask about it. A phone in landscape is 852x393: wide enough to
+   clear the 640px breakpoint, so it keeps the one-screen-tall layout, but
+   only ~390px tall, which a full grid of tiles cannot fit into. Paired with
+   `overflow: hidden` that clipped the bottom rows off with no way to scroll
+   to them.
+
+   So this asks about height instead. Same release as the mobile block, and
+   the row `flex: none` is not optional: the rows divide a fixed height with
+   `flex: 1`, so once the height goes auto there is no free space to divide
+   and a `flex-basis: 0` row collapses to nothing. Widths are untouched —
+   landscape keeps the desktop row structure and simply scrolls.
+
+   This fires on any short viewport, so a desktop window under 600px tall
+   gets it too. That is the same bug for the same reason, so it is the
+   behaviour we want there as well. Normal desktop heights are far clear of
+   the threshold.
+   ============================================================ */
+@media (max-height: 600px) {
+  .cpage {
+    height: auto;
+    overflow: visible;
+  }
+
+  .cgrid,
+  .crow,
+  .trow {
+    flex: none;
+  }
+}
