@@ -44,6 +44,14 @@ loadDotEnvLocal(resolve(process.cwd(), '.env.local'));
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // T47 — the suite writes to the production database (CONSTRAINT-02: no
+  // staging project). Setup snapshots the builder's project ordering; teardown
+  // sweeps every fixture row and storage object with the service role and then
+  // verifies against a fresh read. Both run in plain Node and must not import
+  // anything reaching `next/headers`. `loadDotEnvLocal` above has already primed
+  // `process.env` by the time either executes.
+  globalSetup: './tests/e2e/global-setup.ts',
+  globalTeardown: './tests/e2e/global-teardown.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

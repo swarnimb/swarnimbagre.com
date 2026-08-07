@@ -36,6 +36,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
+    "@supabase/supabase-js": "^2.105.3",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/dompurify": "^3.0.5",

@@ -275,33 +275,6 @@ async function selectFormStatus(
 }
 
 /**
- * Delete every admin list row whose accessible name matches `nameRe`.
- *
- * KNOWN DEFECT — do not trust this to have deleted anything. `Locator.count()`
- * is an IMMEDIATE read and does not auto-wait, while the admin list resolves
- * to 0 rows mid-`router.refresh()`. A pass can therefore read `0`, return as
- * though the rows were already gone, and leave live rows in the PRODUCTION
- * database. See the comment on the `cleanup: delete test projects` step for
- * the full diagnosis and the reverted first fix attempt.
- */
-async function deleteRowsMatching(
-  page: Page,
-  nameRe: RegExp,
-): Promise<void> {
-  for (let safety = 0; safety < 20; safety += 1) {
-    const rows = page.getByRole('row', { name: nameRe });
-    const count = await rows.count();
-    if (count === 0) return;
-    await rows
-      .first()
-      .getByRole('button', { name: /^delete$/i })
-      .click();
-    await confirmDeleteInDialog(page);
-    await expect(rows).toHaveCount(count - 1);
-  }
-}
-
-/**
  * Run a named sub-flow under a bounded wall-clock timeout. Failures are
  * captured into `failures[]` and the test continues. Lets the QA report
  * surface every broken surface in one run rather than masking later
@@ -973,6 +946,12 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
     //
     // Capture the first two row titles, drag row 1 onto row 2, Save order,
     // assert the toast, reload, and assert the two titles swapped position.
+    //
+    // "Save order" rewrites `sort_order` on EVERY project row, including the
+    // builder's real ones, not just the fixture rows this spec created.
+    // `tests/e2e/global-setup.ts` snapshots the ordering before the run and
+    // `global-teardown.ts` writes it back afterwards, which is what keeps this
+    // step from permanently reshuffling the live `/projects` page.
     // -------------------------------------------------------------------
     await runStep(failures, 'T44.D: projects list drag-reorder + save round-trip', async () => {
       await page.goto('/admin/projects');
@@ -1015,30 +994,10 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await expect(reloadedRows.nth(1).locator('td').nth(1)).toHaveText(firstTitle);
     });
 
-    // Cleanup — best effort; swallows individual delete failures.
-    await runStep(failures, 'cleanup: delete test post', async () => {
-      await page.goto('/admin/posts');
-      await deleteRowsMatching(page, new RegExp(POST_TITLE));
-    });
-    // KNOWN DEFECT — cleanup does not verify itself, and does not reliably
-    // delete. A fully green run has been observed leaving three projects in
-    // the PRODUCTION database, one of them `published` and therefore live on
-    // `/projects` (CONSTRAINT-02: there is no staging project). Diagnosis so
-    // far: the admin list resolves to 0 rows mid-`router.refresh()`, and
-    // `Locator.count()` does not auto-wait, so a pass can conclude "nothing
-    // to delete" while rows remain. A first fix attempt (wait for the row
-    // set to settle, sweep by RUN_ID, assert zero rows survive) surfaced a
-    // further problem — a delete that does not decrement the row count — and
-    // was reverted rather than left half-finished. Until this is fixed,
-    // CHECK THE DATABASE FOR `t28-` / `t42-` / `t43f-` ROWS AFTER EVERY RUN.
-    await runStep(failures, 'cleanup: delete test projects', async () => {
-      await page.goto('/admin/projects');
-      await deleteRowsMatching(page, new RegExp(PROJECT_TITLE_EDITED));
-      await deleteRowsMatching(page, new RegExp(PROJECT_TITLE));
-      await deleteRowsMatching(page, new RegExp(IMAGE_PROJECT_TITLE));
-      await deleteRowsMatching(page, t42TitleRe);
-      await deleteRowsMatching(page, new RegExp(T43F_MEDIA_TITLE));
-    });
+    // Row hygiene is not this spec's job. `tests/e2e/global-teardown.ts`
+    // sweeps every fixture row and storage object with the service role after
+    // the run, whether or not the run passed, and verifies against a fresh
+    // read that nothing survived.
 
     // Logout + back-button non-restoration.
     await runStep(failures, 'logout → /admin/login; back-button does not restore', async () => {

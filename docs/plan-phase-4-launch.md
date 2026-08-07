@@ -3,7 +3,7 @@
 **Date:** 2026-05-06 — **last updated 2026-08-04 (Session 52).**
 **Status:** Active — **current as of Session 52 (2026-08-04):**
 
-- **Closed:** T32, T33, T34, T35, T36, T37, T38, T39, T42, T43, T44, T45, T46. Most recent: **T46 — full public-site redesign, closed 2026-08-04, Session 51** (see the T46 block at the end of this file).
+- **Closed:** T32, T33, T34, T35, T36, T37, T38, T39, T42, T43, T44, T45, T46, T47. Most recent: **T47 — reliable e2e teardown, closed 2026-08-06, Session 55** (see the T47 block at the end of this file).
 - **Open:** **T40** — 2 acceptance criteria remain `[ ]`: the voice check on all live copy (re-scoped at T46 to cover the new UI copy) and the `docs/launch-checklist.md` post-launch section. Both are gated on builder content, not on code.
 - **Deferred:** **T41** — trigger-gated; not a Phase 4 exit blocker.
 - **Outstanding but owned by no open task:** the Playwright suite is rewritten-but-unrun, and the redesign is blocked on builder content. Neither is represented by an open `[ ]` in a live task. See **"Outstanding work not tracked by any open task"** immediately below the end-state paragraph.
@@ -1294,7 +1294,7 @@ Plus: no footer anywhere, blinking cursor removed, email corrected to `bagreswar
 
 ---
 
-## T47 — Reliable e2e teardown: stop leaking production rows [ ]
+## T47 — Reliable e2e teardown: stop leaking production rows [x]
 
 **Added 2026-08-06, Session 54, via `@create-plan`.** Opened by the first-ever Playwright run (the T46 "Outstanding after close" criterion above).
 
@@ -1323,18 +1323,18 @@ Plus: no footer anywhere, blinking cursor removed, email corrected to `bagreswar
 - `sweepTestArtifacts(client): Promise<CleanupReport>` — orchestrates the ordered deletion, returns per-table counts.
 
 **Acceptance criteria:**
-- [ ] Teardown runs in Node via the service role and imports **no** module that reaches `next/headers` — 19 `lib/` modules are transitively disqualified through `lib/supabase.ts`.
-- [ ] Match is on **`title`**, not slug prefix. The four test projects carry three different slug prefixes (`t28-`, `t42-`, `t43f-`), so a `t28-%` slug sweep silently misses the T42 and T43F rows; every title embeds `RUN_ID`.
-- [ ] `images` rows are located by `parent_id IN (test project ids)` **captured before the projects are deleted**. No column on `images` carries a run marker, and `images.parent_id` has no FK (polymorphic, `001_create_schema.sql:69`), so the rows dangle rather than cascade.
-- [ ] Deletion order respects the FKs: `projects` first — which cascades `project_media` (`010_project_media.sql`, `on delete cascade`) and thereby releases the `on delete restrict` those rows hold on `images` — then `images`, then Storage objects, then `posts` and `stats`.
-- [ ] Storage objects are removed from bucket `images` using each row's `bucket_path` (CONSTRAINT-07 path scheme). Nothing has ever deleted these.
-- [ ] Sweep is **self-healing**: it removes pre-existing debris from earlier crashed runs, not only the current run. This absorbs the ~23 orphaned `images` rows tracked as cleanup task #7 / handoff carry-forward #12. These are invisible to `lib/admin-images-cleanup.ts`, whose orphan predicate is `parent_id IS NULL AND parent_type IS NULL`.
-- [ ] Teardown runs even when the spec fails partway — that is the case that leaks today.
-- [ ] Given a green run, when the teardown finishes, then `projects` / `posts` / `stats` / `images` contain zero test rows and the `images` bucket contains zero test objects. **Verified by querying the database, not by the suite reporting success** — reporting success while leaving rows behind is the defect.
-- [ ] The suite fails loudly if teardown cannot complete (EH-01: no silent catch; EH-02: error names what failed, which table, and how many rows remained).
-- [ ] SEC-01: the service-role key is read from `process.env` and never hardcoded, including in test files.
-- [ ] CQ-01: no function exceeds 50 lines. CQ-05: no `console.log` debug aids left in.
-- [ ] **`sort_order` side effect addressed.** The T44.D step clicks "Save order", which rewrites `sort_order` on **every** project row including the builder's real six. Either snapshot and restore the real rows' `sort_order`, or scope the reorder step so it cannot touch non-test rows. Folded into T47 by builder decision, Session 54.
+- [x] Teardown runs in Node via the service role and imports **no** module that reaches `next/headers` — 19 `lib/` modules are transitively disqualified through `lib/supabase.ts`.
+- [x] Match is on **`title`**, not slug prefix. The four test projects carry three different slug prefixes (`t28-`, `t42-`, `t43f-`), so a `t28-%` slug sweep silently misses the T42 and T43F rows; every title embeds `RUN_ID`.
+- [x] `images` rows are located by `parent_id IN (test project ids)` **captured before the projects are deleted**. No column on `images` carries a run marker, and `images.parent_id` has no FK (polymorphic, `001_create_schema.sql:69`), so the rows dangle rather than cascade.
+- [x] Deletion order respects the FKs: `projects` first — which cascades `project_media` (`010_project_media.sql`, `on delete cascade`) and thereby releases the `on delete restrict` those rows hold on `images` — then `images`, then Storage objects, then `posts` and `stats`.
+- [x] Storage objects are removed from bucket `images` using each row's `bucket_path` (CONSTRAINT-07 path scheme). Nothing has ever deleted these.
+- [x] Sweep is **self-healing**: it removes pre-existing debris from earlier crashed runs, not only the current run. This absorbs the ~23 orphaned `images` rows tracked as cleanup task #7 / handoff carry-forward #12. These are invisible to `lib/admin-images-cleanup.ts`, whose orphan predicate is `parent_id IS NULL AND parent_type IS NULL`.
+- [x] Teardown runs even when the spec fails partway — that is the case that leaks today.
+- [x] Given a green run, when the teardown finishes, then `projects` / `posts` / `stats` / `images` contain zero test rows and the `images` bucket contains zero test objects. **Verified by querying the database, not by the suite reporting success** — reporting success while leaving rows behind is the defect.
+- [x] The suite fails loudly if teardown cannot complete (EH-01: no silent catch; EH-02: error names what failed, which table, and how many rows remained).
+- [x] SEC-01: the service-role key is read from `process.env` and never hardcoded, including in test files.
+- [x] CQ-01: no function exceeds 50 lines. CQ-05: no `console.log` debug aids left in.
+- [x] **`sort_order` side effect addressed.** The T44.D step clicks "Save order", which rewrites `sort_order` on **every** project row including the builder's real six. Either snapshot and restore the real rows' `sort_order`, or scope the reorder step so it cannot touch non-test rows. Folded into T47 by builder decision, Session 54.
 
 **Tests required:**
 - `test-title pattern matches all four project titles` (TS-01 happy).
@@ -1351,7 +1351,7 @@ Plus: no footer anywhere, blinking cursor removed, email corrected to `bagreswar
 
 ## Phase 4 Exit Criteria
 
-- T32–T40 + T42 + T43 + T44 + T45 + T46 + T47 complete (T41 is a trigger-gated deferred follow-up and does not block Phase 4 exit, same pattern as Phase 3's T29/T31 OpenClaw-operator-gated deferrals). **As of Session 54 the incomplete tasks here are T40** — 2 content-gated criteria open — **and T47**, the e2e teardown defect opened by the first Playwright run. T47 blocks deploys in practice: the suite that gates them currently leaks live rows.
+- T32–T40 + T42 + T43 + T44 + T45 + T46 + T47 complete (T41 is a trigger-gated deferred follow-up and does not block Phase 4 exit, same pattern as Phase 3's T29/T31 OpenClaw-operator-gated deferrals). **As of Session 55 the only incomplete task here is T40** — 2 content-gated criteria open. T47 closed 2026-08-06, Session 55: teardown now sweeps with the service role and verifies against the database, so the suite no longer leaks live rows.
 - Site is live at `swarnimbagre.com`, monitored, with content rendering against the expanded project schema.
 - All security and code review findings closed.
 - Mark Phase 4 row Done in [`plan-index.md`](plan-index.md). The `@plan` cycle is complete; future work happens via individual `@plan` follow-up tasks against the same docs.
