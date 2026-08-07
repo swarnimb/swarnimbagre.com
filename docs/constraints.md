@@ -39,7 +39,7 @@
 
 ### [CONSTRAINT-03] Tailwind scoped to admin only
 
-**Decision:** Tailwind CSS is imported in exactly one file (`styles/admin.css`), which is imported only by `app/(admin)/layout.tsx`. Tailwind's Preflight reset is scoped under `.admin-root` via `tailwindcss-scoped-preflight`. The public site bundle never sees Tailwind.
+**Decision:** Tailwind CSS is imported in exactly one file (`app/styles/admin.css`), which is imported only by `app/(admin)/layout.tsx`. Tailwind's Preflight reset is scoped under `.admin-root` via `tailwindcss-scoped-preflight`. The public site bundle never sees Tailwind.
 
 **What it means in practice:** No `className="px-4 text-lg"` style usage in any public component. Public styling is exclusively tokens from `app/styles/colors_and_type.css` plus the hand-written component classes in `app/styles/public*.css`. Admin pages are wrapped in `<div className="admin-root">`. Tailwind's `content` glob in `tailwind.config.ts` lists only `app/(admin)/**`, `components/admin/**` and `components/ui/**`; `corePlugins.preflight` is off and the reset is re-applied under `.admin-root` by `scopedPreflightStyles` + `isolateInsideOfContainer`.
 
