@@ -21,10 +21,51 @@ import { NextRequest } from 'next/server';
  * outcomes (no-session B / error C / throw D) — S1 timing, S2 body, S3
  * status, S4 location, S5 cookies, S6 preserved-target rejection, plus L1
  * log-payload hygiene.
+ *
+ * Token-refresh focus (TS-04): the stubs drive the `cookies.setAll` callback
+ * the gate hands `createServerClient`, which is how a real mid-request token
+ * refresh reaches the adapter at `middleware.ts:82-92`. Without that, the
+ * adapter is never executed by any test and the in-file warning about
+ * "silently dropping refreshed tokens" has no detector behind it.
  */
 
 const MIN_DURATION_MS = 750;
 const ORIGIN = 'http://localhost:3000';
+
+/** One cookie as `@supabase/ssr` hands it to the adapter's `setAll`. */
+type CookieToSet = {
+  name: string;
+  value: string;
+  options?: { path?: string; httpOnly?: boolean };
+};
+
+/** The subset of the SSR client options the gate builds that these tests read. */
+type SSRClientOptions = {
+  auth?: { flowType?: string };
+  cookies: {
+    getAll: () => Array<{ name: string; value: string }>;
+    setAll: (cookiesToSet: CookieToSet[]) => void;
+  };
+};
+
+/**
+ * Cookies standing in for what a real Supabase token refresh hands `setAll`
+ * partway through `getUser()`. Two entries because `@supabase/ssr` chunks a
+ * session cookie that exceeds the 4KB browser limit, and the adapter has to
+ * carry every chunk. Values are obvious fakes — never real token material.
+ */
+const REFRESHED_COOKIES: CookieToSet[] = [
+  {
+    name: 'sb-stub-auth-token.0',
+    value: 'fake-refreshed-chunk-0',
+    options: { path: '/', httpOnly: true },
+  },
+  {
+    name: 'sb-stub-auth-token.1',
+    value: 'fake-refreshed-chunk-1',
+    options: { path: '/', httpOnly: true },
+  },
+];
 
 const supabaseCreateServerClient = vi.fn();
 vi.mock('@supabase/ssr', () => ({
@@ -45,9 +86,14 @@ const { middleware } = await import('@/middleware');
  * they ride on whichever object the gate could plausibly serialize into a log
  * line: the user, the returned error, and the thrown cause. L1 asserts none of
  * them ever reaches `console.info` / `console.error`.
+ *
+ * Pass `refreshedCookies` to make `getUser` invoke the `cookies.setAll`
+ * callback the gate supplied before it resolves or rejects — the sequence a
+ * real token refresh produces. Omit it for the no-refresh case.
  */
 function mockSupabaseUser(
   behavior: 'present' | 'none' | 'error' | 'throw',
+  refreshedCookies?: CookieToSet[],
 ) {
   const make = (): ReturnType<typeof vi.fn> => {
     if (behavior === 'present') {
@@ -85,8 +131,23 @@ function mockSupabaseUser(
       }),
     );
   };
-  const stub = { auth: { getUser: make() } };
-  supabaseCreateServerClient.mockImplementationOnce(() => stub);
+  const respond = make();
+  const stub = { auth: { getUser: vi.fn() } };
+  supabaseCreateServerClient.mockImplementationOnce(
+    (_url: unknown, _key: unknown, options: unknown) => {
+      const { cookies } = options as SSRClientOptions;
+      stub.auth.getUser.mockImplementation(() => {
+        // A real refresh writes through the adapter mid-call, before the
+        // `{ data, error }` result is known. Copy the fixtures so the gate
+        // cannot mutate the shared array.
+        if (refreshedCookies) {
+          cookies.setAll(refreshedCookies.map((c) => ({ ...c })));
+        }
+        return respond();
+      });
+      return stub;
+    },
+  );
   return stub;
 }
 
@@ -293,11 +354,21 @@ describe('admin gate — security uniformity (SEC-09)', () => {
     }
   }, 10_000);
 
-  /** S5 — cookie parity. Differential Set-Cookie would be a wire-level oracle. */
-  it('S5: Set-Cookie uniformity — all three redirect outcomes carry an identical (empty) cookie set', async () => {
+  /**
+   * S5 — cookie parity. Differential Set-Cookie would be a wire-level oracle.
+   *
+   * Every outcome drives `cookies.setAll` first, so the adapter really does
+   * build a cookie-bearing pass-through response in each iteration. The gate
+   * then discards that response in favour of the login redirect. Asserting
+   * zero here therefore proves something: no half-refreshed session rides out
+   * on a rejection, and the three rejections stay byte-identical to each other.
+   * With a stub that never called `setAll` this could only ever read [0,0,0]
+   * and would pass no matter what the adapter did.
+   */
+  it('S5: Set-Cookie uniformity — a refresh mid-gate leaves all three redirect outcomes with an identical, empty cookie set', async () => {
     const cookieSets: number[] = [];
     for (const behavior of ['none', 'error', 'throw'] as const) {
-      mockSupabaseUser(behavior);
+      mockSupabaseUser(behavior, REFRESHED_COOKIES);
       const res = await middleware(makeRequest('/admin'));
       cookieSets.push(res.headers.getSetCookie().length);
     }
@@ -319,6 +390,95 @@ describe('admin gate — security uniformity (SEC-09)', () => {
     expect(loc).not.toContain('/secret');
     expect(loc).not.toContain('/leaked');
     expect(loc!.endsWith('/admin/login')).toBe(true);
+  });
+});
+
+// --- Token refresh: the SSR cookie adapter (TS-04) -------------------------
+
+describe('admin gate — refreshed-token cookie adapter (TS-04)', () => {
+  /**
+   * The core of the adapter's job. Supabase refreshes an expiring session
+   * during `getUser()` and hands the new cookies to `setAll`; those cookies
+   * must reach the browser on the response the gate actually returns. If the
+   * adapter dropped them the request would still succeed — the user just
+   * silently loses their session at the next request. That is the failure
+   * `middleware.ts:67-69` warns about, and this is its detector.
+   */
+  it('puts cookies handed to setAll during a refresh onto the pass-through response', async () => {
+    mockSupabaseUser('present', REFRESHED_COOKIES);
+    const res = await middleware(makeRequest('/admin'));
+
+    expect(res.status).toBe(200);
+    const setCookie = res.headers.getSetCookie();
+    expect(setCookie.length).toBe(REFRESHED_COOKIES.length);
+    for (const { name, value } of REFRESHED_COOKIES) {
+      expect(
+        setCookie.some((header) => header.startsWith(`${name}=${value}`)),
+        `no Set-Cookie header for ${name}`,
+      ).toBe(true);
+    }
+  });
+
+  /** The `options` bag has to survive the hop, or the cookies land unscoped. */
+  it('forwards the attributes on each refreshed cookie, not just name and value', async () => {
+    mockSupabaseUser('present', REFRESHED_COOKIES);
+    const res = await middleware(makeRequest('/admin'));
+
+    for (const header of res.headers.getSetCookie()) {
+      expect(header).toContain('Path=/');
+      expect(header).toContain('HttpOnly');
+    }
+  });
+
+  /**
+   * The adapter's other half: it also writes the refreshed cookies back onto
+   * the incoming request (`middleware.ts:85-87`) before rebuilding the
+   * response from it, so a downstream Server Component reading cookies in the
+   * same pass sees the new session rather than the stale one.
+   */
+  it('writes the refreshed cookies back onto the request the downstream handler reads', async () => {
+    mockSupabaseUser('present', REFRESHED_COOKIES);
+    const request = makeRequest('/admin');
+    await middleware(request);
+
+    for (const { name, value } of REFRESHED_COOKIES) {
+      expect(request.cookies.get(name)?.value, `request cookie ${name}`).toBe(
+        value,
+      );
+    }
+  });
+
+  /** The adapter reads the request jar back out, so the client sees what arrived. */
+  it('exposes the cookies already on the request to the SSR client through getAll', async () => {
+    mockSupabaseUser('present');
+    const request = makeRequest('/admin', {
+      cookieHeader: 'sb-stub-auth-token.0=fake-existing-chunk-0',
+    });
+    await middleware(request);
+
+    const [, , options] = supabaseCreateServerClient.mock.calls[0] as [
+      string,
+      string,
+      SSRClientOptions,
+    ];
+    expect(options.cookies.getAll()).toEqual([
+      { name: 'sb-stub-auth-token.0', value: 'fake-existing-chunk-0' },
+    ]);
+  });
+
+  /**
+   * A refresh that happens on a request whose user then fails verification
+   * must not leak a partially-refreshed session onto the login redirect.
+   * Complements S5, which asserts the same thing across all three rejection
+   * outcomes for uniformity reasons; this states it as a security property in
+   * its own right.
+   */
+  it('drops the refreshed cookies when the gate rejects the request', async () => {
+    mockSupabaseUser('none', REFRESHED_COOKIES);
+    const res = await middleware(makeRequest('/admin'));
+
+    expect(res.status).toBe(307);
+    expect(res.headers.getSetCookie()).toEqual([]);
   });
 });
 

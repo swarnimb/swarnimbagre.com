@@ -106,6 +106,35 @@ function payloadOf(calls: StubCall[], method: string): Record<string, unknown> {
   >;
 }
 
+/**
+ * Build a stub Supabase client recording the delete chain,
+ *   `.from('notes').delete().eq('id', id) -> { error }`.
+ * Separate from {@link makeWriteStub} because the delete chain terminates at
+ * `.eq(...)` rather than `.single()`.
+ */
+function makeDeleteStub(result: { error: unknown }): {
+  client: SupabaseClient;
+  calls: StubCall[];
+} {
+  const calls: StubCall[] = [];
+  const chain: Record<string, unknown> = {};
+  chain.delete = (...args: unknown[]) => {
+    calls.push({ method: 'delete', args });
+    return chain;
+  };
+  chain.eq = (...args: unknown[]) => {
+    calls.push({ method: 'eq', args });
+    return Promise.resolve(result);
+  };
+  const client = {
+    from: (table: string) => {
+      calls.push({ method: 'from', args: [table] });
+      return chain;
+    },
+  } as unknown as SupabaseClient;
+  return { client, calls };
+}
+
 beforeEach(() => {
   // Fake timers so each case fast-forwards past the MIN_DURATION_MS floor
   // without consuming real wall time.
@@ -307,5 +336,116 @@ describe('note write payloads — blank sort_order means absent, not zero', () =
       realInternal.createNoteInternal({ ...required, sort_order: -1 }, client),
     ).rejects.toBeInstanceOf(ZodError);
     expect(calls.find((c) => c.method === 'insert')).toBeUndefined();
+  });
+});
+
+/**
+ * The delete path for notes had no coverage at either layer before
+ * BLOCKING-01. CONSTRAINT-10 makes this a hard delete with no tombstone and
+ * no undo, so the id guard is the only thing between a malformed hidden field
+ * and an unbounded DELETE.
+ */
+describe('deleteNoteInternal — removing a note row', () => {
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('issues DELETE FROM notes WHERE id = $1 and resolves on success', async () => {
+    const { client, calls } = makeDeleteStub({ error: null });
+
+    await expect(
+      realInternal.deleteNoteInternal('note-1', client),
+    ).resolves.toBeUndefined();
+
+    expect(calls.find((c) => c.method === 'from')?.args[0]).toBe('notes');
+    expect(calls.find((c) => c.method === 'delete')).toBeDefined();
+    expect(calls.find((c) => c.method === 'eq')?.args).toEqual([
+      'id',
+      'note-1',
+    ]);
+  });
+
+  it('refuses a blank or whitespace-only row id before touching the database', async () => {
+    const { client, calls } = makeDeleteStub({ error: null });
+
+    await expect(
+      realInternal.deleteNoteInternal('', client),
+    ).rejects.toBeInstanceOf(ServiceError);
+    await expect(
+      realInternal.deleteNoteInternal('   ', client),
+    ).rejects.toBeInstanceOf(ServiceError);
+    // A delete with no WHERE target is the one query that must never be sent.
+    expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+  });
+
+  it('surfaces a database rejection of the delete as a ServiceError', async () => {
+    const { client } = makeDeleteStub({
+      error: { code: '42501', message: 'permission denied' },
+    });
+
+    await expect(
+      realInternal.deleteNoteInternal('note-1', client),
+    ).rejects.toBeInstanceOf(ServiceError);
+  });
+});
+
+/**
+ * The two error cases TS-01 requires for the update helper. The happy path is
+ * already covered by the `sort_order` payload cases above; these cover the
+ * ways the write is refused.
+ */
+describe('updateNoteInternal — refusing the write', () => {
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  /** A complete valid payload, so each case only varies the thing under test. */
+  const validPayload = { kicker: 'Currently', line: 'Reading nothing.' };
+
+  beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('refuses a blank row id before touching the database', async () => {
+    const { client, calls } = makeWriteStub({ data: null, error: null });
+
+    await expect(
+      realInternal.updateNoteInternal('', validPayload, client),
+    ).rejects.toBeInstanceOf(ServiceError);
+    expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+  });
+
+  it('refuses a line longer than the column allows, before touching the database', async () => {
+    const { client, calls } = makeWriteStub({ data: null, error: null });
+
+    await expect(
+      realInternal.updateNoteInternal(
+        'note-1',
+        { ...validPayload, line: 'x'.repeat(121) },
+        client,
+      ),
+    ).rejects.toBeInstanceOf(ZodError);
+    // The app boundary mirrors the `notes_line_shape` CHECK, so an oversized
+    // line is rejected here rather than bouncing off Postgres.
+    expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+  });
+
+  it('surfaces a database rejection of the update as a ServiceError', async () => {
+    const { client } = makeWriteStub({
+      data: null,
+      error: { code: '42501', message: 'permission denied' },
+    });
+
+    await expect(
+      realInternal.updateNoteInternal('note-1', validPayload, client),
+    ).rejects.toBeInstanceOf(ServiceError);
   });
 });

@@ -350,6 +350,55 @@ describe('sort_order — blank means absent, not zero', () => {
   });
 });
 
+/**
+ * The two error cases TS-01 requires for the update helper. The happy path is
+ * covered by the `sort_order` payload cases above; these cover the ways the
+ * write is refused. `updateStatInternal` arrived at T46 with neither.
+ */
+describe('updateStatInternal — refusing the write', () => {
+  /** A complete valid payload, so each case only varies the thing under test. */
+  const validPayload = { category: 'health', label: 'sleep hours', value: '7.5' };
+
+  it('refuses a blank or whitespace-only row id before touching the database', async () => {
+    const { client, calls } = makeUpdateStub({ data: null, error: null });
+
+    await expect(
+      updateStatInternal('', validPayload, client),
+    ).rejects.toBeInstanceOf(ServiceError);
+    await expect(
+      updateStatInternal('   ', validPayload, client),
+    ).rejects.toBeInstanceOf(ServiceError);
+    // An update with no WHERE target would rewrite every row in the table.
+    expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+  });
+
+  it('refuses an aside longer than the column allows, before touching the database', async () => {
+    const { client, calls } = makeUpdateStub({ data: null, error: null });
+
+    await expect(
+      updateStatInternal(
+        'stat-1',
+        { ...validPayload, aside: 'x'.repeat(161) },
+        client,
+      ),
+    ).rejects.toBeInstanceOf(ZodError);
+    // The app boundary mirrors the `stats_aside_length` CHECK, so an oversized
+    // aside is rejected here rather than bouncing off Postgres.
+    expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+  });
+
+  it('surfaces a database rejection of the update as a ServiceError', async () => {
+    const { client } = makeUpdateStub({
+      data: null,
+      error: { code: '42501', message: 'permission denied' },
+    });
+
+    await expect(
+      updateStatInternal('stat-1', validPayload, client),
+    ).rejects.toBeInstanceOf(ServiceError);
+  });
+});
+
 describe('deleteStatInternal — TS-04 removes the row', () => {
   it('issues DELETE FROM stats WHERE id = $1 and resolves on success', async () => {
     const { client, calls } = makeDeleteStub({ error: null });

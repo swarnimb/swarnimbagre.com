@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { ZodError } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { ServiceError } from '@/lib/errors';
 import {
   createPostInternal,
   deletePostInternal,
@@ -223,6 +225,81 @@ describe('updatePostInternal — TS-04 rejects slug change on published post (CO
   });
 });
 
+/**
+ * The two error cases TS-01 requires for the update helper. Both matter for
+ * different reasons: the id guard is what stops a blank hidden field from
+ * reaching Postgres as a query with no target, and the Supabase rejection is
+ * the shape every RLS denial and trigger raise arrives in.
+ */
+describe('updatePostInternal — refusing the write', () => {
+  /** A complete valid payload, so each case only varies the thing under test. */
+  const validPayload = {
+    title: 'Renamed',
+    content: 'body',
+    status: 'draft' as const,
+    image_id: null,
+  };
+
+  it('refuses a blank row id before touching the database', async () => {
+    const { client, calls } = makeUpdateStub({
+      fetchResult: { data: null, error: null },
+      updateResult: { data: null, error: null },
+    });
+
+    await expect(
+      updatePostInternal('', validPayload, client),
+    ).rejects.toBeInstanceOf(ServiceError);
+    expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+  });
+
+  it('refuses an image reference that is not a uuid', async () => {
+    const { client, calls } = makeUpdateStub({
+      fetchResult: { data: null, error: null },
+      updateResult: { data: null, error: null },
+    });
+
+    await expect(
+      updatePostInternal(
+        'post-1',
+        { ...validPayload, image_id: 'not-a-uuid' },
+        client,
+      ),
+    ).rejects.toBeInstanceOf(ZodError);
+    expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+  });
+
+  it('surfaces a database rejection of the update as a ServiceError', async () => {
+    const { client } = makeUpdateStub({
+      fetchResult: { data: { status: 'draft', image_id: null }, error: null },
+      updateResult: {
+        data: null,
+        error: { code: '42501', message: 'permission denied' },
+      },
+    });
+
+    await expect(
+      updatePostInternal('post-1', validPayload, client),
+    ).rejects.toBeInstanceOf(ServiceError);
+  });
+
+  it('surfaces a failure to read the existing row as a ServiceError', async () => {
+    const { client, calls } = makeUpdateStub({
+      fetchResult: {
+        data: null,
+        error: { code: 'PGRST116', message: 'no rows returned' },
+      },
+      updateResult: { data: null, error: null },
+    });
+
+    await expect(
+      updatePostInternal('post-missing', validPayload, client),
+    ).rejects.toBeInstanceOf(ServiceError);
+    // The pre-fetch failing means the row's published state is unknown, so no
+    // update is attempted — the slug-lock decision would be a guess.
+    expect(calls.find((c) => c.method === 'update')).toBeUndefined();
+  });
+});
+
 describe('deletePostInternal — TS-04 removes the row', () => {
   it('issues DELETE FROM posts WHERE id = $1 and resolves on success', async () => {
     const { client, calls } = makeDeleteStub({ error: null });
@@ -234,5 +311,28 @@ describe('deletePostInternal — TS-04 removes the row', () => {
     expect(calls.find((c) => c.method === 'delete')).toBeDefined();
     const eqCall = calls.find((c) => c.method === 'eq');
     expect(eqCall?.args).toEqual(['id', 'post-1']);
+  });
+
+  it('refuses a blank or whitespace-only row id before touching the database', async () => {
+    const { client, calls } = makeDeleteStub({ error: null });
+
+    await expect(deletePostInternal('', client)).rejects.toBeInstanceOf(
+      ServiceError,
+    );
+    await expect(deletePostInternal('   ', client)).rejects.toBeInstanceOf(
+      ServiceError,
+    );
+    // A delete with no WHERE target is the one query that must never be sent.
+    expect(calls.find((c) => c.method === 'from')).toBeUndefined();
+  });
+
+  it('surfaces a database rejection of the delete as a ServiceError', async () => {
+    const { client } = makeDeleteStub({
+      error: { code: '42501', message: 'permission denied' },
+    });
+
+    await expect(deletePostInternal('post-1', client)).rejects.toBeInstanceOf(
+      ServiceError,
+    );
   });
 });
