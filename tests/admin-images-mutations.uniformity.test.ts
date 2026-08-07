@@ -140,7 +140,7 @@ describe('uploadImage — Channel 2 (response body shape)', () => {
     await vi.advanceTimersByTimeAsync(1000);
     const result = await p;
     expect(result.status).toBe('error');
-    expect(result.formError).toBeDefined();
+    expect(result.formError).toBe(GENERIC_FORM_ERROR);
     expect(result.fieldErrors).toBeUndefined();
     expect(result.image).toBeUndefined();
     // Channel 1 leak guard — formError must not contain helper-specific

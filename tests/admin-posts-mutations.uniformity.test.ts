@@ -115,7 +115,9 @@ describe('createPost — Channel 2 (response body shape)', () => {
     await vi.advanceTimersByTimeAsync(1000);
     const result = await p;
     expect(result.status).toBe('error');
-    expect(result.formError).toBeDefined();
+    // Exact equality against the shared constant — `toBeDefined()` would pass
+    // for any string, including one that interpolated the underlying reason.
+    expect(result.formError).toBe(GENERIC_FORM_ERROR);
     expect(result.fieldErrors).toBeUndefined();
   });
 });

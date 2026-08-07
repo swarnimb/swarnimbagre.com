@@ -27,6 +27,9 @@ const FIXTURE_SECRET_HEADER = 'x-fixture-secret';
 const FIXTURE_SECRET = 'fake-fixture-secret-value';
 const FIXTURE_EMAIL = 'fixture@example.test';
 const HASHED_TOKEN = 'fake-hashed-token';
+/** Structured-log identifiers the route emits on every failure path (EH-02). */
+const ROUTE_OPERATION = 'apiTestSignIn';
+const FAILURE_LOG_TAG = `[auth] ${ROUTE_OPERATION} failed`;
 
 const generateLink = vi.fn();
 const verifyOtp = vi.fn();
@@ -329,15 +332,101 @@ describe('test sign-in fixture route — Supabase failure paths', () => {
   });
 
   /**
+   * The LOUD-failure rule (`~/.claude/CLAUDE.md`: "Fail LOUD — errors must be
+   * obvious, never silent or swallowed", "Log all failures with stack traces")
+   * applied at this route, and the positive twin of the SEC-05 no-leak case
+   * below. Every branch that answers 500 must also emit a structured line
+   * naming the operation and the reason it refused — a silent 500 here is a
+   * fixture that fails without telling anyone why.
+   *
+   * This is what makes the no-leak assertions non-vacuous: with no positive
+   * assertion, deleting every log statement from the route leaves an empty
+   * call list, and every `not.toContain` passes trivially against `"[]"`.
+   * Mirrors the F4 idiom in `tests/middleware.test.ts`.
+   */
+  it.each([
+    [
+      'missing TEST_FIXTURE_EMAIL env',
+      () => {
+        delete mutableEnv.TEST_FIXTURE_EMAIL;
+      },
+    ],
+    [
+      'missing supabase config env vars',
+      () => {
+        delete mutableEnv.SUPABASE_SERVICE_ROLE_KEY;
+      },
+    ],
+    [
+      'generateLink returned no hashed_token',
+      () => {
+        generateLink.mockResolvedValue({
+          data: null,
+          error: { name: 'AuthApiError', message: 'user not found' },
+        });
+      },
+    ],
+    [
+      'verifyOtp returned error',
+      () => {
+        verifyOtp.mockResolvedValue({
+          error: { name: 'AuthApiError', message: 'token expired' },
+        });
+      },
+    ],
+  ])('logs a structured failure line with reason "%s"', async (reason, arrange) => {
+    arrange();
+
+    const response = await POST(makeAuthorizedRequest());
+
+    expect(response.status).toBe(500);
+    const failureCalls = consoleErrorSpy!.mock.calls.filter(
+      (call) => call[0] === FAILURE_LOG_TAG,
+    );
+    expect(failureCalls).toHaveLength(1);
+    expect(failureCalls[0][1]).toMatchObject({
+      operation: ROUTE_OPERATION,
+      reason,
+    });
+  });
+
+  /**
    * SEC-05 at the fixture route. The failure logs carry the reason and the
    * environment, and must never carry the secret header value or the token
    * that would let a log reader mint a session.
+   *
+   * Drives all four logged branches in sequence, and asserts the count of
+   * emitted lines BEFORE inspecting them — so these `not.toContain` checks can
+   * only pass against a call list that genuinely holds four failure logs.
    */
   it('logs no secret or token material on any failure path', async () => {
+    delete mutableEnv.TEST_FIXTURE_EMAIL;
+    await POST(makeAuthorizedRequest());
+    mutableEnv.TEST_FIXTURE_EMAIL = FIXTURE_EMAIL;
+
+    delete mutableEnv.SUPABASE_SERVICE_ROLE_KEY;
+    await POST(makeAuthorizedRequest());
+    mutableEnv.SUPABASE_SERVICE_ROLE_KEY = 'fake-service-role-key';
+
+    generateLink.mockResolvedValue({
+      data: null,
+      error: { name: 'AuthApiError', message: 'user not found' },
+    });
+    await POST(makeAuthorizedRequest());
+    generateLink.mockResolvedValue({
+      data: { properties: { hashed_token: HASHED_TOKEN } },
+      error: null,
+    });
+
     verifyOtp.mockResolvedValue({
       error: { name: 'AuthApiError', message: 'token expired' },
     });
     await POST(makeAuthorizedRequest());
+
+    const failureCalls = consoleErrorSpy!.mock.calls.filter(
+      (call) => call[0] === FAILURE_LOG_TAG,
+    );
+    expect(failureCalls).toHaveLength(4);
 
     const aggregate = JSON.stringify(consoleErrorSpy!.mock.calls);
     expect(aggregate).not.toContain(FIXTURE_SECRET);
