@@ -6,7 +6,7 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 const { createServerClient } = await import('@/lib/supabase');
-const { attemptMagicLink } = await import('@/lib/auth-internal');
+const { attemptMagicLink, EMAIL_SCHEMA } = await import('@/lib/auth-internal');
 const { signInWithMagicLink } = await import('@/lib/auth');
 
 /** Fixed env values installed for every test so URL + allowlist are deterministic. */
@@ -30,6 +30,18 @@ function makeAuthStub(otpResult: { error: unknown }) {
   };
 }
 
+/** Domain suffix used to build length-boundary addresses for the F-3 tests. */
+const BOUNDARY_DOMAIN = '@example.com';
+
+/**
+ * Build a syntactically valid address of exactly `total` characters by padding
+ * the local part in front of `BOUNDARY_DOMAIN`. Used to sit either side of the
+ * RFC 5321 254-character bound without hard-coding a wall of literal text.
+ */
+function emailOfLength(total: number): string {
+  return 'a'.repeat(total - BOUNDARY_DOMAIN.length) + BOUNDARY_DOMAIN;
+}
+
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | undefined;
 
 beforeEach(() => {
@@ -45,12 +57,58 @@ afterEach(() => {
   delete process.env.ADMIN_ALLOWED_EMAIL;
 });
 
+describe('EMAIL_SCHEMA (length bounds — F-3)', () => {
+  it('accepts a normal valid address', () => {
+    expect(EMAIL_SCHEMA.safeParse(ALLOWED_EMAIL).success).toBe(true);
+  });
+
+  it('accepts an address of exactly 254 characters (RFC 5321 upper bound)', () => {
+    const atBound = emailOfLength(254);
+    expect(atBound).toHaveLength(254);
+    expect(EMAIL_SCHEMA.safeParse(atBound).success).toBe(true);
+  });
+
+  it('rejects an address of exactly 255 characters (one over the bound)', () => {
+    const overBound = emailOfLength(255);
+    expect(overBound).toHaveLength(255);
+    expect(EMAIL_SCHEMA.safeParse(overBound).success).toBe(false);
+  });
+
+  it('rejects a 2-character string (below the min bound)', () => {
+    expect(EMAIL_SCHEMA.safeParse('ab').success).toBe(false);
+  });
+
+  it('rejects `a@b` — 3 chars clears .min(3) but zod .email() requires a dotted domain', () => {
+    // The RFC-theoretical shortest address is 3 characters (`a@b`), but zod's
+    // email pattern requires a domain label plus a 2+ character TLD, so the
+    // shortest string this schema actually accepts is 6 (`a@b.co`). Asserted
+    // against real behaviour rather than the theoretical minimum.
+    expect(EMAIL_SCHEMA.safeParse('a@b').success).toBe(false);
+    expect(EMAIL_SCHEMA.safeParse('a@b.co').success).toBe(true);
+  });
+});
+
 describe('attemptMagicLink (internal throwing helper)', () => {
   it('throws ValidationError when the email is not a valid shape', async () => {
     await expect(attemptMagicLink('not-an-email')).rejects.toBeInstanceOf(
       ValidationError,
     );
     await expect(attemptMagicLink('')).rejects.toBeInstanceOf(ValidationError);
+  });
+
+  it('throws ValidationError and does NOT call Supabase for an over-length email (F-3)', async () => {
+    const stub = makeAuthStub({ error: null });
+    vi.mocked(createServerClient).mockResolvedValue(
+      stub as unknown as Awaited<ReturnType<typeof createServerClient>>,
+    );
+
+    const overBound = emailOfLength(255);
+    expect(overBound).toHaveLength(255);
+    await expect(attemptMagicLink(overBound)).rejects.toBeInstanceOf(
+      ValidationError,
+    );
+
+    expect(stub.auth.signInWithOtp).not.toHaveBeenCalled();
   });
 
   it('calls supabase.auth.signInWithOtp with shouldCreateUser:false on allowlisted input', async () => {
@@ -170,6 +228,12 @@ describe('signInWithMagicLink (Server Action wrapper — F-12 + F-13)', () => {
   it('resolves with undefined (does NOT throw) for a malformed email (F-13 wire-shape uniformity)', async () => {
     await expect(signInWithMagicLink('not-an-email')).resolves.toBeUndefined();
     await expect(signInWithMagicLink('')).resolves.toBeUndefined();
+  });
+
+  it('resolves with undefined (does NOT throw) for an over-length email (F-3 rejection stays inside the F-13 envelope)', async () => {
+    await expect(
+      signInWithMagicLink(emailOfLength(255)),
+    ).resolves.toBeUndefined();
   });
 
   it('resolves with undefined (does NOT throw) when Supabase fails (F-13 wire-shape uniformity)', async () => {

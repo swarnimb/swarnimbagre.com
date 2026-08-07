@@ -16,8 +16,22 @@ import { ServiceError, ValidationError, toLogSafeError } from './errors';
  * the browser.
  */
 
-/** Zod schema for the email field at the magic-link boundary (SEC-02). */
-export const EMAIL_SCHEMA = z.string().min(1).email();
+/**
+ * Zod schema for the email field at the magic-link boundary (SEC-02).
+ *
+ * Bounded at 254 characters — the RFC 5321 maximum length of a reverse-path /
+ * forward-path address — so an oversized string is rejected by the parse
+ * instead of being carried into `assertAllowlistedEmail` and the Supabase
+ * call (`docs/security-report.md` audit 19, finding F-3).
+ *
+ * The `.min(3)` floor is the F-3 recommendation verbatim. It is redundant in
+ * practice: zod's `.email()` pattern requires a dotted domain with a 2+
+ * character TLD, so the shortest string this schema accepts is 6 characters
+ * (`a@b.co`). The theoretical 3-character address `a@b` does NOT pass. The
+ * floor is kept because a length bound that states both ends is cheaper to
+ * audit than one that leans on the format check for its lower end.
+ */
+export const EMAIL_SCHEMA = z.string().min(3).max(254).email();
 
 /** Operation tag used in error logs for `signInWithMagicLink`. */
 export const SIGN_IN_OPERATION = 'signInWithMagicLink';
@@ -98,7 +112,8 @@ function getSiteUrl(): string {
  *
  * @param email Plain-text email address. Validated before any network call.
  * @returns Resolves when Supabase has accepted the request.
- * @throws ValidationError when `email` is empty, malformed, or not allowlisted.
+ * @throws ValidationError when `email` is empty, malformed, longer than the
+ *                         RFC 5321 254-character bound, or not allowlisted.
  * @throws ServiceError    when Supabase returns an error, the site URL is not
  *                         configured, or the allowlist env var is missing.
  */

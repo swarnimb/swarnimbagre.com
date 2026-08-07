@@ -13,15 +13,24 @@ const FAILURE_REDIRECT = '/admin/login?error=callback_failed';
 /** Destination once the session is established. */
 const SUCCESS_REDIRECT = '/admin';
 
-/** Email-OTP type values accepted by `supabase.auth.verifyOtp`. */
-const VALID_EMAIL_OTP_TYPES = new Set([
-  'email',
-  'magiclink',
-  'recovery',
-  'invite',
-  'email_change',
-  'signup',
-]);
+/**
+ * Email-OTP `type` values this callback will hand to `supabase.auth.verifyOtp`
+ * (F-4).
+ *
+ * Deliberately narrower than Supabase's `EmailOtpType` union. This project is
+ * magic-link only, single user, no passwords (CONSTRAINT-09), so the only
+ * types it can legitimately receive are the two the magic-link template may
+ * carry: `email` (the `token_hash` template shape used by `@supabase/ssr`, and
+ * the type `/api/test/sign-in` verifies with) and `magiclink` (the type
+ * `auth.admin.generateLink` mints and the stock Magic Link template emits).
+ *
+ * `recovery`, `invite`, `email_change` and `signup` are NOT accepted: there is
+ * no password to recover, no signup flow ("Allow new users to sign up" is OFF
+ * and `attemptMagicLink` passes `shouldCreateUser: false`), no invite flow, and
+ * no UI anywhere that changes the admin email. Accepting them widened the set
+ * of tokens that could mint an admin session for no operational gain.
+ */
+const VALID_EMAIL_OTP_TYPES = new Set(['email', 'magiclink']);
 
 /**
  * Build an absolute redirect URL anchored to the incoming request origin.
@@ -130,7 +139,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (tokenHash && type && VALID_EMAIL_OTP_TYPES.has(type)) {
     const { error } = await supabase.auth.verifyOtp({
       token_hash: tokenHash,
-      type: type as 'email',
+      type: type as 'email' | 'magiclink',
     });
     if (error) {
       logCallbackFailure('verifyOtp returned error', toLogSafeError(error));

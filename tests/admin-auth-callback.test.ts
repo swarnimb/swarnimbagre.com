@@ -10,6 +10,8 @@ const { GET } = await import('@/app/(admin)/admin/auth/callback/route');
 
 const ALLOWED_EMAIL = 'allowed@example.test';
 const CALLBACK_ORIGIN = 'https://example.test';
+/** The single generic failure destination every rejection path shares (SEC-05). */
+const FAILURE_LOCATION = '/admin/login?error=callback_failed';
 
 /**
  * Build a stub Supabase client. Each auth method is a vi.fn so the test can
@@ -146,6 +148,26 @@ describe('admin auth callback route — defense-in-depth allowlist (F-1)', () =>
     expect(response.headers.get('location')).toContain('error=callback_failed');
   });
 
+  it('accepts type=magiclink and proceeds to verifyOtp', async () => {
+    const stub = makeSupabaseStub({
+      getUserResult: { data: { user: { email: ALLOWED_EMAIL } }, error: null },
+    });
+    vi.mocked(createServerClient).mockResolvedValueOnce(
+      stub as unknown as Awaited<ReturnType<typeof createServerClient>>,
+    );
+
+    const response = await GET(
+      makeRequest('/admin/auth/callback?token_hash=t&type=magiclink'),
+    );
+
+    expect(stub.auth.verifyOtp).toHaveBeenCalledWith({
+      token_hash: 't',
+      type: 'magiclink',
+    });
+    expect(response.headers.get('location')).toContain('/admin');
+    expect(response.headers.get('location')).not.toContain('error=callback_failed');
+  });
+
   it('compares the user email case-insensitively after trim', async () => {
     const stub = makeSupabaseStub({
       getUserResult: {
@@ -162,5 +184,68 @@ describe('admin auth callback route — defense-in-depth allowlist (F-1)', () =>
     expect(stub.auth.signOut).not.toHaveBeenCalled();
     expect(response.headers.get('location')).toContain('/admin');
     expect(response.headers.get('location')).not.toContain('error=callback_failed');
+  });
+});
+
+describe('admin auth callback route — narrowed OTP type set (F-4)', () => {
+  /**
+   * Drive the handler with one `type` value and return both the response and
+   * the stub, so each case can assert that verification never started.
+   */
+  async function callWithType(type: string) {
+    const stub = makeSupabaseStub({
+      getUserResult: { data: { user: { email: ALLOWED_EMAIL } }, error: null },
+    });
+    vi.mocked(createServerClient).mockResolvedValueOnce(
+      stub as unknown as Awaited<ReturnType<typeof createServerClient>>,
+    );
+    const response = await GET(
+      makeRequest(`/admin/auth/callback?token_hash=t&type=${type}`),
+    );
+    return { stub, response };
+  }
+
+  // The project is magic-link only, no passwords (CONSTRAINT-09), so a
+  // recovery token must never be exchangeable for an admin session.
+  it.each(['recovery', 'email_change', 'invite', 'signup', 'not-a-real-type'])(
+    'rejects type=%s without calling verifyOtp',
+    async (type) => {
+      const { stub, response } = await callWithType(type);
+
+      expect(stub.auth.verifyOtp).not.toHaveBeenCalled();
+      expect(stub.auth.exchangeCodeForSession).not.toHaveBeenCalled();
+      expect(stub.auth.getUser).not.toHaveBeenCalled();
+      expect(response.headers.get('location')).toContain('/admin/login');
+      expect(response.headers.get('location')).toContain('error=callback_failed');
+    },
+  );
+
+  // SEC-05: the redirect must not say WHICH check failed. A rejected type and
+  // a failed verifyOtp have to be indistinguishable from outside.
+  it('produces a byte-identical redirect for every rejected type and for a verifyOtp failure', async () => {
+    const locations: (string | null)[] = [];
+
+    for (const type of ['recovery', 'email_change', 'not-a-real-type']) {
+      const { response } = await callWithType(type);
+      locations.push(response.headers.get('location'));
+    }
+
+    const failingStub = makeSupabaseStub({
+      verifyOtpError: { name: 'AuthApiError', message: 'invalid token' },
+    });
+    vi.mocked(createServerClient).mockResolvedValueOnce(
+      failingStub as unknown as Awaited<ReturnType<typeof createServerClient>>,
+    );
+    const failed = await GET(makeRequest('/admin/auth/callback?token_hash=t&type=email'));
+    locations.push(failed.headers.get('location'));
+
+    expect(locations[0]).toBe(`${CALLBACK_ORIGIN}${FAILURE_LOCATION}`);
+    expect(new Set(locations).size).toBe(1);
+  });
+
+  it('does not leak the rejected type value into the redirect URL', async () => {
+    const { response } = await callWithType('recovery');
+
+    expect(response.headers.get('location')).not.toContain('recovery');
   });
 });
