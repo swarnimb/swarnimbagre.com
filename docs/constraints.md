@@ -1,9 +1,11 @@
 # Constraints: swarnimbagre.com
 
 **Date seeded:** 2026-05-06 (by `@plan` Phase 4)
-**Last updated:** 2026-08-06 (Session 55: CONSTRAINT-24 added — review outputs stay local, design outputs get committed, on finding F-49). Previously 2026-08-04 (Session 52: CONSTRAINT-23 added — admin Server Action auth guard; CONSTRAINT-05 amended with the `100svh` home-root deviation. Earlier the same day, T46 redesign: CONSTRAINT-05 re-baselined, 03/15/16/22 amended)
+**Last updated:** 2026-08-07 (status notes re-verified against code and live DNS; three items flagged `> OPEN` for the builder)
 
 > Loaded by `@session-start` every session. Active binding decisions only — not history, not options considered. New constraints are added when `@plan`, `@cto`, or the builder makes a binding decision. A constraint is removed only when the decision is explicitly reversed, with the reversal noted in `docs/session-log.md`.
+>
+> Lines marked `> OPEN (D-n):` are unresolved questions awaiting the builder. They record a known contradiction so a reader is not misled; they do not change the rule above them.
 
 ---
 
@@ -15,7 +17,7 @@
 
 **Decision:** The site is built on Next.js 15 (App Router) starting at the first commit. No Pages Router. No prior static-deploy phase.
 
-**What it means in practice:** Every public route is an App Router route under `app/`. The static React-via-CDN bundle in `site/` is the design source — components are ported into Next.js, not served as standalone HTML. No middleware or build config is written for a static deploy that gets thrown away.
+**What it means in practice:** Every public route is an App Router route under `app/`. The design source is ported into Next.js components, never served as standalone HTML. No middleware or build config is written for a static deploy that gets thrown away. (The design source is now the T46 export — see CONSTRAINT-05. The `site/` CDN bundle this originally named is retired and kept only as a historical record.)
 
 **Who decided and when:** `@plan` (Phase 2 architecture), 2026-05-06.
 
@@ -39,7 +41,7 @@
 
 **Decision:** Tailwind CSS is imported in exactly one file (`styles/admin.css`), which is imported only by `app/(admin)/layout.tsx`. Tailwind's Preflight reset is scoped under `.admin-root` via `tailwindcss-scoped-preflight`. The public site bundle never sees Tailwind.
 
-**What it means in practice:** No `className="px-4 text-lg"` style usage in any public component. Public styling is exclusively CSS variables from `app/styles/colors_and_type.css` plus inline styles. Admin pages are wrapped in `<div className="admin-root">`. Tailwind config's `content` glob excludes public routes.
+**What it means in practice:** No `className="px-4 text-lg"` style usage in any public component. Public styling is exclusively tokens from `app/styles/colors_and_type.css` plus the hand-written component classes in `app/styles/public*.css`. Admin pages are wrapped in `<div className="admin-root">`. Tailwind's `content` glob in `tailwind.config.ts` lists only `app/(admin)/**`, `components/admin/**` and `components/ui/**`; `corePlugins.preflight` is off and the reset is re-applied under `.admin-root` by `scopedPreflightStyles` + `isolateInsideOfContainer`.
 
 **Who decided and when:** `@plan` (Phase 2 architecture, resolves ASSUMPTION-04), 2026-05-06.
 
@@ -61,7 +63,7 @@
 
 ### [CONSTRAINT-05] Public design source is verbatim — inviolable
 
-> **RE-BASELINED at T46 (2026-08-04).** The constraint stands; its *subject* changed. The original dark bundle at `docs/design-source/personal-site-web/` is retired, along with Overrides 1, 2 and 3, which described surfaces that no longer exist.
+> **RE-BASELINED at T46 (2026-08-04).** The constraint stands; its *subject* changed. The original dark bundle at `docs/design-source/personal-site-web/` is retired, along with Overrides 1, 2 and 3, which described surfaces that no longer exist. Same for `site/`, `site/components.jsx` and `site/mobile-components.jsx` — historical record only, never build against them.
 
 **Decision:** The Claude Design export at `docs/design-source/redesign-2026-08/` is the source of truth for every public-site visual decision. `template.extracted.html` is the readable unpacked markup; `swarnim-bagre-site.bundled.html` is the shipped artifact it came from. No Tailwind, no shadcn, no Aceternity, no Magic UI on the public site. Tokens come from `app/styles/colors_and_type.css`; component classes from `app/styles/public*.css`.
 
@@ -76,17 +78,16 @@
 - `/writing/[slug]` exists. The export pointed every list row back at the list itself, which would have left post bodies unreachable.
 - The carousel is hand-rolled, not embla-backed. See the CONSTRAINT-22 note below.
 - Copy is first person throughout, including the home bio, which the export wrote in third person.
-- The home page root (`.hpage` in `app/styles/public-home.css`) is sized in `svh`, not `vh`. `vh` resolves to the LARGE viewport — the height the page would have with the browser's toolbars retracted — so on Chrome for Android/iOS, where the bars are usually showing, the box was taller than the visible area and `.h-conv`'s `margin: auto 0` centred the conversation inside that oversized box, pushing one end off screen. Safari masked it by collapsing its bars far more eagerly. `svh` is the height guaranteed visible WITH the bars present, so the layout always fits and never shifts; `dvh` was rejected because it tracks the toolbars as they move and would slide the centred content during scroll. The export's intent ("exactly one screen, no scroll") is preserved — `vh` simply implemented that intent incorrectly — so this is a defect fix rather than a design change, but it is still a deviation and is recorded rather than left implicit. **The two `min-height` declarations in `.hpage` are a deliberate fallback pair:** `min-height: 100vh` sits directly above `min-height: 100svh` to serve engines without `svh`. Do not tidy the duplicate away. Scope is Home only — `app/styles/base.css` (`min-height: 100vh` on `html, body`) and `app/styles/public-other.css` (`.cpage { height: 100vh; overflow: hidden }`) were deliberately not changed, because Home is the only page that must show its top and bottom edges simultaneously; every other page only needs its top in view and lets scrolling handle the rest. Added 2026-08-04, Session 52.
+- The home page root (`.hpage` in `app/styles/public-home.css`) is sized in `svh`, not `vh`. `vh` resolves to the LARGE viewport — the height with the browser's toolbars retracted — so on Chrome for Android/iOS the box was taller than the visible area and `.h-conv`'s `margin: auto 0` centred the conversation inside that oversized box, pushing one end off screen. `svh` is the height guaranteed visible WITH the bars present; `dvh` was rejected because it tracks the bars as they move and would slide the centred content during scroll. **The two `min-height` declarations in `.hpage` are a deliberate fallback pair:** `min-height: 100vh` sits directly above `min-height: 100svh` to serve engines without `svh`. Do not tidy the duplicate away. **The fallback pair propagated to `app/styles/base.css`** (`html, body`, lines 13–14) at `a499372`: leaving the body floor on plain `vh` undid the Home fix, because the floor then sat ~120px taller than Home's own `100svh` box and that gap was dead scrollable space. `app/styles/public-other.css` keeps `.cpage { height: 100vh; overflow: hidden }` at full height, but releases it to `height: auto; overflow: visible` under both `max-width: 640px` and `max-height: 600px` — the latter is what lets `/other` scroll on a phone held sideways.
+- `.cpage` in `app/styles/public-other.css` releases its height lock to `height: auto` under **both** `max-width: 640px` and `@media (max-height: 600px)`. The width release alone left a landscape phone (wider than 640px) locked, so `overflow: hidden` clipped the bottom tile rows with no scroll to recover them — width is the wrong question to ask about a height lock. The row `flex: none` inside that block is load-bearing, not cosmetic: rows divide a fixed height with `flex: 1`, so once the height goes `auto` there is no free space to divide and a `flex-basis: 0` row collapses to nothing.
 
-**~~Known latent issue — surfaced, not fixed (2026-08-04, Session 52)~~ — RESOLVED 2026-08-06, Session 53.** `.cpage` in `app/styles/public-other.css` released its height lock to `height: auto` only at `max-width: 640px`. A phone in landscape is usually wider than 640px, so the lock plus `overflow: hidden` stayed active and clipped the bottom tile rows with no scroll to recover them. Fixed in `eac4c91` by adding a `@media (max-height: 600px)` release alongside the width one — width is the wrong question to ask about a height lock. The row `flex: none` in that block is load-bearing, not cosmetic: rows divide a fixed height with `flex: 1`, so once the height goes `auto` there is no free space to divide and a `flex-basis: 0` row collapses to nothing. Confirmed on device by the builder.
-
-**Deviation found and closed at Session 53 (2026-08-06) — `.ctile` / `.ttile` vertical centring.** The export specifies both tile types as `display:flex; flex-direction:column; justify-content:center; gap:...` at `template.extracted.html:447` (`.ctile`) and `:463` (`.ttile`). `public-other.css` implemented every part of that rule **except `justify-content`**, so it fell back to `flex-start` and pinned every tile's content to the top of a box several times its own height. Fixed in `ade464c`.
-
-> **Lesson worth keeping, because it will recur: an empty-state fallback can hide an export deviation indefinitely.** This defect shipped through T46 and survived two security audits and a full test suite — not because anyone looked and missed it, but because it was **unreachable**. `stats` and `notes` were both at 0 rows, so `/other` rendered the `.cempty` state and the tile grid never existed in the DOM. The first real content is what surfaced it. Any public surface with an empty-state branch should be treated as **unverified against the export until it has been seen with real rows in it** — passing tests and a clean build say nothing about a branch that never rendered.
+> **Lesson worth keeping, because it will recur: an empty-state fallback can hide an export deviation indefinitely.** `.ctile` / `.ttile` shipped missing the export's `justify-content: center` (`template.extracted.html:447` and `:463`), pinning every tile's content to the top of a box several times its own height. It survived T46, two security audits and a full test suite — not because anyone looked and missed it, but because it was **unreachable**: `stats` and `notes` were both at 0 rows, so `/other` rendered the `.cempty` state and the tile grid never existed in the DOM. The first real content is what surfaced it. Treat any public surface with an empty-state branch as **unverified against the export until it has been seen with real rows in it** — passing tests and a clean build say nothing about a branch that never rendered.
 
 **Overrides:** none active. Overrides 1, 2 and 3 were retired with the bundle they amended.
 
-**Who decided and when:** Kickoff + `@designer`, 2026-05-05. Reaffirmed at `@plan`, 2026-05-06. Re-baselined onto the new export at T46, 2026-08-04, after real user feedback that the original design was confusing and disliked.
+> **OPEN (D-6):** `@designer` sign-off pending on whether `app/error.tsx` and `app/not-found.tsx` (shipped at T41, commit `b369d47`) belong in the recorded-deviations list above. The export has no pattern for either surface. Until that sign-off lands they are NOT accepted deviations — do not add them here.
+
+**Who decided and when:** Kickoff + `@designer`, 2026-05-05. Re-baselined onto the new export at T46, 2026-08-04, after real user feedback that the original design was confusing and disliked.
 
 **What this closes off:** Faster iteration on public-site visuals using off-the-shelf libraries. Reversing means accepting visual drift from the export and re-deriving design decisions in conversation, which is what having a canonical design source exists to avoid.
 
@@ -120,7 +121,7 @@
 
 **Decision:** Every table has RLS enabled at creation. No table has a permissive policy that grants access by default. Each access path is an explicit policy: anon read of published projects, anon read of published posts, anon read of all stats, anon read of images-of-published-parents, authenticated full CRUD for the admin.
 
-**What it means in practice:** Adding a new table requires adding RLS policies in the same migration. A table without policies is fully denied — no role can read or write. Reviewers catch missing policies because the table is unusable until they exist.
+**What it means in practice:** Adding a new table requires adding RLS policies in the same migration. A table without policies is fully denied — no role can read or write. Reviewers catch missing policies because the table is unusable until they exist. Tables added after the original enumeration follow the same shape and are policied in their own migration — `project_media` (010) and `notes` (014). `service_role` is deliberately never granted a policy on any table: it bypasses RLS, and giving it one would imply a permissive path that does not exist.
 
 **Who decided and when:** Kickoff (security stance) + `@plan` (architecture), 2026-05-06.
 
@@ -132,7 +133,9 @@
 
 **Decision:** Supabase Auth with Email provider only. Magic link flow. One account: the configured admin email (held in `ADMIN_ALLOWED_EMAIL` and the Supabase Auth user record; intentionally not committed to the repo). JWT 1 hour, refresh 30 days inactivity (Supabase defaults). Lockout fallback is manual session invalidation in the Supabase dashboard.
 
-**What it means in practice:** No password storage. No social login. No multi-user logic. The middleware's auth check is pure session-presence — no role check is needed because there is exactly one user. Adding a second user is a non-trivial feature.
+**What it means in practice:** No password storage. No social login. No multi-user logic. No role check is needed because there is exactly one user; the middleware gate and `assertAdminSession()` both verify the session server-side with `getUser()` (CONSTRAINT-23). Adding a second user is a non-trivial feature.
+
+> **OPEN (D-3):** the lockout-fallback sentence above contradicts the rewritten `docs/auth-flow.md` §5. Dashboard session invalidation ends a session; it does not create one, so it is not a recovery path — §5.1 documents it as never having worked. The mechanism that does work is `scripts/recover-admin-session.ts`, which mints a `token_hash` via `auth.admin.generateLink` and redeems it at the production callback without touching the inbox. BUILDER'S CALL: the rule text above is left as recorded and is not resolved here.
 
 **Who decided and when:** Kickoff + `@plan`, 2026-05-06.
 
@@ -186,19 +189,21 @@
 
 **What this closes off:** Conventional marketing copy patterns. Reversing means rewriting every label and microcopy, and doing so under a different brand premise.
 
+> **OPEN (D-11):** commit `b6f5c82` removed em-dashes from all 13 shipped strings. This constraint has never mentioned em-dashes, and whether the sweep established a standing rule or was a one-off stylistic pass is undecided. BUILDER'S CALL — no em-dash rule is being added here. Note the scope if it is adopted: the sweep covered shipped strings only, not this document or any other doc.
+
 ---
 
 ### [CONSTRAINT-14] Server-Component data loads must go through `lib/safe-load.ts`
 
 **Decision:** Any public-route Server Component that calls a `lib/db.ts` read function MUST wrap the call in `safeLoad(load, fallback, context)` from `lib/safe-load.ts`. The wrapper catches thrown `ServiceError`s (and any other error), logs structured context (operation, error code, error message, stack) to stderr in the same shape as `logDbError`, then returns the caller-supplied fallback. Pages with no row to render return an empty-state UI, not a 500.
 
-**What it means in practice:** Every list page (`app/projects/page.tsx`, `app/writing/page.tsx`, `app/other/page.tsx`) and every detail page's `generateMetadata` + page body load uses `safeLoad`. A DB failure (env misconfigured, RLS denying, network blip) becomes "empty content, logged error" rather than "Application error" 500 in the user's face. Detail pages still dispatch `notFound()` on null result — that path is `safeLoad` + `if (!row) notFound()`.
+**What it means in practice:** Every list page (`app/projects/page.tsx`, `app/writing/page.tsx`, `app/other/page.tsx`) and the `/writing/[slug]` detail page's `generateMetadata` + page body load uses `safeLoad`. A DB failure (env misconfigured, RLS denying, network blip) becomes "empty content, logged error" rather than "Application error" 500 in the user's face. Detail pages still dispatch `notFound()` on null result — that path is `safeLoad` + `if (!row) notFound()`. `app/sitemap.ts` (T41) counts as a boundary for this purpose and uses `safeLoad` too: a failed query degrades to "roots only" rather than 500-ing on the crawler's request.
 
 **Carve-out:** `safeLoad` is the UI-boundary catch. It is NOT a generic silent-catch — its JSDoc explicitly documents that calling it from non-boundary call sites (inside `lib/`, in mid-render helpers) is a violation of EH-01. Boundary-only.
 
 **Who decided and when:** `@dev` Targeted Fix (BLOCKING-01 from `docs/qa-report.md`), 2026-05-11 session 7.
 
-**What this closes off:** Letting `ServiceError` bubble to Next.js's default error UI on user-facing pages. Reversing means accepting that a transient DB issue, an env-var typo, or an RLS misconfiguration crashes the page rather than degrading. Detail pages had this latent bug for two sessions before seed data exposed it.
+**What this closes off:** Letting `ServiceError` bubble to Next.js's default error UI on user-facing pages. Reversing means accepting that a transient DB issue, an env-var typo, or an RLS misconfiguration crashes the page rather than degrading.
 
 ---
 
@@ -273,7 +278,7 @@ or a re-evaluation of header uniformity under PKCE.
 
 **What it means in practice:** Direct `process.env.NODE_ENV` access is folded into a literal at build time by Next 15's compile-time inlining. The dot-notation form becomes a constant `'development' !== 'test'` at build, defeating the runtime gate entirely. The bracket-with-variable form preserves the runtime read. Reviewers see `[NODE_ENV_KEY]` and recognize that the literal form would be a regression. Currently applies to `app/api/test/sign-in/route.ts`; any future dev-only API surface follows the same pattern.
 
-**Who decided and when:** T19.2 implementation, `@dev`, 2026-05-12. Verified by `@security` audit 7 — bracket indirection survives Next 15 / SWC bundling; runtime gate is enforced in production builds.
+**Who decided and when:** T19.2 implementation, `@dev`, 2026-05-12. Confirmed against a production build by `@security` audit 7: the bracket indirection survives Next 15 / SWC bundling and the runtime gate holds.
 
 **What this closes off:** "Just use `process.env.NODE_ENV`" simplification PRs. The literal form is a build-time constant; the bracket form is a runtime check. They look identical but behave differently. Reversing requires either accepting the bundler's literal-substitution (and dropping the dev-route gate entirely) or migrating to a different runtime-only access pattern (e.g., `globalThis.process.env.NODE_ENV` — untested).
 
@@ -287,7 +292,7 @@ or a re-evaluation of header uniformity under PKCE.
 
 **Who decided and when:** `@supabase` diagnosis + main-thread lock during T28 BLOCKING-02 resolution, 2026-05-14.
 
-**What this closes off:** The "table policy is sufficient" assumption. Migration 005 added the `images` bucket but deferred its `storage.objects` policy to "T15"; the deferral was forgotten. T28's first real upload caught the gap. Migration 007 closed it for `images`; CONSTRAINT-20 ensures the next bucket doesn't repeat the mistake. See `docs/founder-brief.md` (`storage.objects` RLS policy entry, 2026-05-14).
+**What this closes off:** The "table policy is sufficient" assumption. Migration 005 created the `images` bucket but deferred its `storage.objects` policy, and the deferral was forgotten until the first real upload failed; migration 007 closed it. See `docs/founder-brief.md` (`storage.objects` RLS policy entry, 2026-05-14).
 
 ---
 
@@ -295,11 +300,13 @@ or a re-evaluation of header uniformity under PKCE.
 
 **Decision:** The canonical public origin is the bare apex `https://swarnimbagre.com`. `www.swarnimbagre.com` is a non-canonical alias that redirects to the apex. Every origin-bearing setting must resolve to the apex: Vercel primary domain, Supabase Auth Site URL, Supabase redirect-URL allowlist, `NEXT_PUBLIC_SITE_URL`, and the magic-link email template's `{{ .SiteURL }}` base.
 
-**What it means in practice:** One canonical host avoids split auth-cookie domains and a double redirect on the magic-link callback. As of 2026-05-16 the Vercel project still has `www` as primary (apex 307→www) — the Vercel primary-flip is the remaining action to make reality match this constraint. Until flipped, the auth callback crosses an apex→www hop; the query string survives a 307 so it functions, but the cookie/canonical fragility remains until corrected.
+**What it means in practice:** One canonical host avoids split auth-cookie domains and a double redirect on the magic-link callback. **Reality now matches the constraint** (verified live 2026-08-07): `https://swarnimbagre.com` returns `200 OK` directly and `https://www.swarnimbagre.com` returns `308 Permanent Redirect` to it. The Vercel primary-flip that was outstanding at 2026-05-16 has been done. The auth callback no longer crosses an apex→www hop, and `app/robots.ts` and `app/sitemap.ts` inline the apex as `SITE_ORIGIN`, so crawlers are handed terminal URLs rather than redirecting ones.
 
 **Who decided and when:** Main thread on the builder's behalf during the T39 launch (builder overwhelmed, delegated the call), confirmed by the builder at `@end-session`, 2026-05-16.
 
 **What this closes off:** A `www`-canonical or dual-canonical setup. Reversing means re-pointing Vercel primary, Supabase Site URL + redirect allowlist, `NEXT_PUBLIC_SITE_URL`, and the email template base, then re-testing the magic-link callback end-to-end.
+
+---
 
 ### [CONSTRAINT-22] JS libraries on the public site require a named Override and a 15 KB gzip budget
 
@@ -362,12 +369,12 @@ or a re-evaluation of header uniformity under PKCE.
 | 13 | Voice — dry, anti-LinkedIn, no emoji | Applies to public copy AND admin labels | Kickoff + `@plan` | 2026-05-06 |
 | 14 | Server-Component data loads via `lib/safe-load.ts` | Page-level catch + log + fallback; no 500 on DB failure | `@dev` Targeted Fix | 2026-05-11 |
 | 15 | Image reads use signed URLs (TTL 3600s) | `getImageUrl` centralized; no `getPublicUrl` for private bucket | `@plan` + T14 | 2026-05-11 |
-| 16 | Admin color tokens namespaced as `--admin-*` | 8-token semantic palette; namespaced to prevent public `:root` collisions | T15 | 2026-05-11 / amended 2026-05-12 |
+| 16 | Admin color tokens namespaced as `--admin-*` | 8-token semantic palette, admin-owned (not mirrored from public); declared at `:root` so Radix portals resolve them | T15 | 2026-05-11 / amended 2026-05-12 + 2026-05-19 |
 | 17 | Admin URL pattern locked to `/admin/*` | URL = layout = Tailwind = middleware = robots boundary | `@cto` pre-T16 | 2026-05-12 |
 | 18 | Supabase SSR client locked to flowType: implicit | No PKCE verifier cookie; header channel uniform | `@security` audit 3 | 2026-05-12 |
 | 19 | Dev-only routes use bracket NODE_ENV indirection | Defeats Next 15 compile-time inlining; runtime gate enforced | `@dev` + T19.2 | 2026-05-12 |
 | 20 | Storage bucket RLS policies accompany table FK migrations | Every bucket gets a `storage.objects` policy scoped to `bucket_id` (USING + WITH CHECK); default-deny applies to Storage | `@supabase` + T28 | 2026-05-14 |
-| 21 | Canonical domain = apex `swarnimbagre.com` (no `www`) | All origin config (Vercel/Supabase/env/email) resolves to apex; `www` redirects to it | Main thread on builder behalf, confirmed by builder | 2026-05-16 |
+| 21 | Canonical domain = apex `swarnimbagre.com` (no `www`) | All origin config (Vercel/Supabase/env/email) resolves to apex. **Live as of 2026-08-07:** apex 200, `www` 308 → apex; the Vercel primary-flip is done | Main thread on builder behalf, confirmed by builder | 2026-05-16 |
 | 22 | Public-site JS libraries require a named Override + ≤15 KB gzip route-chunk budget | Every public-site npm dep gets a Surface boundary doc and a measured route-chunk delta. **Zero consumers as of T46**: embla was uninstalled and the carousel hand-rolled, so the public site has no runtime JS dependencies | `@cto` S34, codified at T43.I | 2026-05-20 / codified 2026-05-23 / zeroed 2026-08-04 |
 | 23 | Admin Server Actions call `assertAdminSession()` first, inside the `try` | Two-layer authorization (app check + RLS) on all 17 admin mutation actions; `lib/auth.ts` sign-in/sign-out exempt | `@security` audit 24 (F-39) | 2026-08-04 |
 | 24 | Review outputs stay local; design outputs get committed | State-of-the-work docs (security / QA findings, logs, handoff, framework issues) are gitignored; what-to-build docs are committed. The repo is public, so a findings file is an attack guide | Builder (on F-49) | 2026-08-06 |

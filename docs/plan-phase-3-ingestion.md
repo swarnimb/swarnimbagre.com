@@ -1,7 +1,7 @@
 # Plan — Phase 3: OpenClaw Ingestion
 
 **Date:** 2026-05-06
-**Status:** Active
+**Status:** Deferred — T30 is done. T29 + T31 await the OpenClaw operator gate, an external dependency. This phase is not the next task; see [`plan-index.md`](plan-index.md).
 **Tasks:** T29–T31 (3 tasks)
 **Predecessor:** [`plan-phase-2-admin.md`](plan-phase-2-admin.md)
 **Successor:** [`plan-phase-4-launch.md`](plan-phase-4-launch.md)
@@ -119,4 +119,4 @@ The locked decision (CONSTRAINT-04, ASSUMPTION-06 option (a)) is: **Edge Functio
 
 - All 3 tasks complete; manual integration tests passed; the test rows have been removed.
 - OpenClaw is configured and successfully writes a stat from its own runtime (verified via the `/admin/stats` view).
-- Mark Phase 3 row Done in [`plan-index.md`](plan-index.md). Mark Phase 4 row Active. Log transition in `docs/session-log.md`.
+- Mark Phase 3 row Done in [`plan-index.md`](plan-index.md). Log the transition in `docs/session-log.md`. Phase 4 already completed out of order (2026-08-06) — there is no next phase to activate.

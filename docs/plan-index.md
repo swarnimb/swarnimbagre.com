@@ -1,8 +1,8 @@
 # Plan Index: swarnimbagre.com
 
-**Date:** 2026-05-06 — **last updated 2026-08-06 (Session 54).**
-**Total tasks:** 48 across 4 phases (40 original + T10.5 testing-infra inserted 2026-05-07; T41 + T42 added 2026-05-19, Session 28; T43 added 2026-05-20, Session 32; T44 project + post reordering added 2026-05-28, Session 43; T45 project writeup embedding added 2026-05-28, Session 43; T46 full public-site redesign added 2026-08-04, Session 51; T47 reliable e2e teardown added 2026-08-06, Session 54).
-**Entry point for `@session-start`** — load this file to find the active phase file, then load that phase file.
+**Date:** 2026-05-06 — **last updated 2026-08-07.**
+**Total tasks:** 48 across 4 phases — T1–T47, plus T10.5 (testing infrastructure, inserted 2026-05-07).
+**Entry point for `@session-start`** — load this file first. It states whether any phase is active before you open a phase file.
 
 ---
 
@@ -12,8 +12,8 @@
 |---|---|---|---|---|
 | 1 — Foundation | [`plan-phase-1-foundation.md`](plan-phase-1-foundation.md) | T1–T14 + T10.5 (15 tasks) | External-deps prep, Next.js scaffold, Supabase project + schema + RLS, public reads, Markdown render, Storage integration, testing harness, first deploy | Done (2026-05-11) |
 | 2 — Admin panel | [`plan-phase-2-admin.md`](plan-phase-2-admin.md) | T15–T28 (14 tasks) | Admin layout, Tailwind scoping, shadcn install, magic link auth, projects + posts CRUD, stats view + manual insert, image upload, orphan cleanup | Done (2026-05-14) |
-| 3 — OpenClaw ingestion | [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md) | T29–T31 (3 tasks) | Edge Function `stats-ingest`, OpenClaw config notes, monitoring setup | **Deferred — T30 done; T29 + T31 await OpenClaw operator gate (see session-handoff)** |
-| 4 — Polish + launch | [`plan-phase-4-launch.md`](plan-phase-4-launch.md) | T32–T47 (16 tasks; T41 trigger-gated deferred, not an exit blocker) | Admin smoke test, error monitoring, README, env checklist, launch checklist, security review, code review, doc audit, production deploy + post-launch ops + project content-model expansion + project media multi-image carousel + manual project/post drag-reorder + project writeup embedding + full public-site redesign (T46 — new light palette, single responsive tree, mobile fork deleted) | **Complete as of Session 55 (2026-08-06) — all tasks closed or superseded.** Historical: T32–T39, T42, T43, T44, T45, T46 closed (T39 launched the site 2026-05-19/S27; T43 closed 2026-05-23/S40; T45 closed 2026-05-28/S44; T44 closed 2026-06-03/S47; T46 closed 2026-08-04/S51 — full redesign). **Session 55 (2026-08-06):** **T40 closed** by superseding its two remaining criteria (voice check on live copy, launch-checklist post-launch section) as continuous work, not one-time gates — they were superseded, not completed, and that work continues outside the plan. **DS-05 fresh-clone verification superseded as not needed** (both mirrored boxes, T33 criterion 4 and T38's `README.md` criterion). **T47** (reliable e2e teardown) was added at Session 54 and closed at Session 55: teardown now sweeps the database with the service role, restores `sort_order`, and verifies against a fresh read rather than trusting the suite's own report. T41 remains deferred trigger-gated and is not an exit blocker. The Playwright suite has now been run for the first time and is **15/15 green** (Session 54), which closed the long-standing "unrun suite" item and, in the process, found one real production bug (`post_id` missing from `PROJECT_COLUMNS` — the card's Writeup action was inert) and one new defect (the suite leaks live rows even when green → T47). The `/other` content rows were entered at Session 53. **Project image assets were removed from plan tracking at Session 55 by builder decision** — cards rendering "no preview yet" is a known, accepted state, not a missing task. Do not re-add it. Header-tick caveat resolved: T38, T39, T42, T43, T44, T45 were ticked by explicit builder decision at Session 53.** |
+| 3 — OpenClaw ingestion | [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md) | T29–T31 (3 tasks) | Edge Function `stats-ingest`, OpenClaw config notes, monitoring setup | **Deferred** — T30 done; T29 + T31 await the OpenClaw operator gate |
+| 4 — Polish + launch | [`plan-phase-4-launch.md`](plan-phase-4-launch.md) | T32–T47 (16 tasks) | Error monitoring, README, env checklist, launch checklist, security review, code review, doc audit, production deploy, post-launch ops, project content-model expansion, project media carousel, manual project/post drag-reorder, project writeup embedding, full public-site redesign (T46), discoverability + public-route resilience (T41), reliable e2e teardown (T47) | **Complete (2026-08-06)** — every task closed or superseded |
 
 ---
 
@@ -26,41 +26,43 @@ Phase 1 → Phase 2 → Phase 3 → Phase 4. Each phase depends on the previous 
 - **End of Phase 3:** OpenClaw can write stats via the `stats-ingest` Edge Function. The shared secret is configured in both Supabase and OpenClaw.
 - **End of Phase 4:** site is launched at `swarnimbagre.com`, monitored, and the post-launch checklist is closed.
 
-The earliest-blocking task is T1 (external-deps prep): Vercel project link, Supabase project create, DNS plan. No code can be merged until those exist.
+The earliest-blocking task was T1 (external-deps prep): Vercel project link, Supabase project create, DNS plan. No code could be merged until those existed.
 
 ---
 
 ## Locked Decisions Reflected in the Plan
 
-The 47 tasks across the 4 phase files reflect the architectural decisions in [`architecture.md`](architecture.md), the constraints in [`constraints.md`](constraints.md), and the Founder Briefs in [`founder-brief.md`](founder-brief.md). T41 + T42 (added 2026-05-19, Session 28) extend the original 40-task plan with: discoverability + resilience deferred follow-up (T41) and project content-model expansion (T42). T43 (added 2026-05-20, Session 32) extends Phase 4 with project media multi-image carousel + first public-site JS library (Override 2). T44 + T45 (added 2026-05-28, Session 43) add manual project/post drag-reorder and the embedded project writeup. T46 (added 2026-08-04, Session 51) is the full public-site redesign — it re-baselines CONSTRAINT-05 onto a new design source, retires Overrides 1/2/3, collapses the mobile component fork into a single responsive tree, and returns the public site to zero runtime JS dependencies. Specifically:
+The 48 tasks across the 4 phase files reflect the architectural decisions in [`architecture.md`](architecture.md), the constraints in [`constraints.md`](constraints.md), and the Founder Briefs in [`founder-brief.md`](founder-brief.md). Specifically:
 
 - Phase A (static-bundle deploy) is **dropped**. Phase 1 starts at Next.js scaffolding.
 - T30 (in Phase 3) is **Edge Function `stats-ingest` only** — no "Path A vs Path B" branching.
 - All RLS, Markdown sanitization, Tailwind scoping, image bucket path, slug-lock, and voice rules are encoded into individual task acceptance criteria with the relevant rule codes embedded (SEC-XX, EH-XX, CQ-XX, TS-XX, DS-XX).
+- T46 (full public-site redesign, 2026-08-04) re-baselines CONSTRAINT-05 onto a new design source, retires Overrides 1/2/3, collapses the mobile component fork into a single responsive tree, and returns the public site to zero runtime JS dependencies. Task specs written before T46 may name files, fonts, or palette values that no longer exist — the code and `docs/design-source/redesign-2026-08/` win over any older task spec.
 
 ---
 
-## Plan Status — CLOSED as of Session 55 (2026-08-06)
+## Plan Status — CLOSED
 
 **No phase row is marked Active, and that is correct — do not "fix" it by marking one.**
 
-The four-phase plan produced by `@plan` is finished. Phases 1, 2 and 4 are complete; Phase 3 is deferred behind the OpenClaw operator gate, which is an external dependency and not work an agent can start. Every task is `[x]`, `[~]`, or gated.
+The four-phase plan produced by `@plan` is finished. Phases 1, 2 and 4 are complete. Phase 3 is deferred behind the OpenClaw operator gate, an external dependency and not work an agent can start.
 
-**Boxes that remain `[ ]` are NOT the next task.** There are two groups, and both are blocked by design rather than waiting their turn:
-- **T41** (Phase 4 — robots, sitemap, OG, favicon, error pages, Search Console) is trigger-gated and was explicitly never a Phase 4 exit blocker. It runs when the builder decides it runs.
+**There is no agent-executable open plan task.** Do not nominate one. What remains:
+
 - **T29 / T31** (Phase 3) await the OpenClaw operator gate.
+- **Google Search Console verification + sitemap submission** — the one genuinely open T41 criterion. It needs the builder's Google account and cannot be automated.
+- **OG preview validation** — a manual check against a public deploy, to be run the day before the URL is first shared publicly (preview caches are sticky).
 
-A first-incomplete-`[ ]` sweep will land on T41. **Landing on it does not make it the next task.** Do not begin it without the builder saying so.
+**T41 shipped on 2026-08-06 at commit `b369d47`.** `app/robots.ts`, `app/sitemap.ts`, `app/error.tsx`, `app/not-found.tsx`, `app/icon.svg`, `app/opengraph-image.tsx` and the site-wide OG/Twitter metadata in `app/layout.tsx` all exist, with tests in `tests/robots.test.ts` and `tests/sitemap.test.ts`. Its spec in `plan-phase-4-launch.md` was three months stale when it ran and was overridden in four places (a route deleted at T46, two retired fonts, the old dark palette, and a favicon in the retired bundle); per-route OG overrides therefore apply to `/writing/[slug]` only. Treat the code as the record of what T41 did, not the task spec.
 
-**New work arrives via `@create-plan`**, which appends a numbered task to the appropriate phase file. If a new task is added, note it here — but adding a task does not by itself reopen a phase.
+**New work arrives via `@create-plan`**, which appends a numbered task to the appropriate phase file. Adding a task does not by itself reopen a phase.
 
 ---
 
 ## How `@session-start` Uses This File
 
 1. Load `manifest.md`, `CLAUDE.md`, this file, [`constraints.md`](constraints.md), [`assumptions.md`](assumptions.md).
-2. Find the first phase row with `Status: Active`. **If no row is Active, stop looking — read "Plan Status" above and report "no active phase; the plan is closed" rather than falling through to the first `[ ]` you can find.** That fallback is what would nominate a trigger-gated task as the next task.
-3. Load that phase file as the working plan.
-4. Find the first incomplete task in that file. Confirm it is the next task before doing any work.
+2. Find the first phase row with `Status: Active`. **If no row is Active, stop looking — read "Plan Status" above and report "no active phase; the plan is closed" rather than falling through to the first `[ ]` you can find.** Unticked boxes in the phase files are gated or superseded, not queued.
+3. If a phase is Active, load that phase file as the working plan, find the first incomplete task, and confirm it is the next task before doing any work.
 
-When all tasks in the active phase are complete, the next phase becomes Active. Mark the previous phase row as Done, mark the next as Active, log the transition in `docs/session-log.md`. **When the LAST phase completes there is no next phase to activate** — that is the current state, and it is recorded above rather than papered over by leaving a finished phase marked Active.
+When all tasks in an active phase are complete, the next phase becomes Active: mark the previous phase row Done, mark the next Active, log the transition in `docs/session-log.md`. **When the LAST phase completes there is no next phase to activate** — that is the current state, and it is recorded above rather than papered over by leaving a finished phase marked Active.
