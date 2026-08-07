@@ -44,6 +44,12 @@ docs/design-source/personal-site-web/project/Swarnim Bagre.html
 docs/design-source/personal-site-web/project/Swarnim Bagre - Personal Site.html
 
 # Claude framework — never commit (SEC-07)
+#
+# The rule: anything an sbdev process emits ABOUT THE STATE OF THE WORK stays
+# local. Docs that record what to build (prd, architecture, constraints,
+# plan-*) are committed deliberately; docs that record how far short of it we
+# currently are — findings, untested surfaces, session state — are a map of
+# this specific site's weak points and belong nowhere public.
 CLAUDE.md
 manifest.md
 profile.md
@@ -52,6 +58,11 @@ docs/testing-setup.md
 docs/session-log.md
 docs/session-handoff.md
 docs/framework-issues.md
+# Added 2026-08-06 closing F-49. SEC-07 named both on 2026-07-28; they had been
+# tracked since long before that and the repo is public, so treat everything
+# already in history as permanently disclosed.
+docs/qa-report.md
+docs/security-report.md
 
 # Test artifacts
 /test-results/
