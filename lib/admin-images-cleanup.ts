@@ -240,7 +240,7 @@ export async function deleteOrphanImagesInternal(
     // dashboard using the bucketPaths in the structured log entry.
     logMutationError(CLEANUP_ORPHANS_OPERATION, {
       warning:
-        'storage remove failed AFTER row delete — orphan storage objects unrecoverable from app',
+        'storage remove failed AFTER row delete: orphan storage objects unrecoverable from app',
       bucketPaths,
       errorMessage: removeErr.message ?? null,
     });

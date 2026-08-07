@@ -63,7 +63,7 @@ function formatCreated(iso: string): string {
  * size lookup may have failed for an individual row but the rest of the
  * sweep is still actionable. */
 function formatSize(bytes: number | null): string {
-  if (bytes === null) return '—';
+  if (bytes === null) return '-';
   return `~${(bytes / BYTES_PER_MB).toFixed(1)} MB`;
 }
 

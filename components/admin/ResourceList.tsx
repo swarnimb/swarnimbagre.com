@@ -150,7 +150,7 @@ export default function ResourceList<
 
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
-              Page {page} of {totalPages} — {total} total
+              Page {page} of {totalPages} · {total} total
             </p>
             <Pagination className="mx-0 w-auto justify-end">
               <PaginationContent>

@@ -35,7 +35,7 @@ export class ValidationError extends Error {
    * @param reason Short, internal-facing description of why it failed.
    */
   constructor(field: string, reason: string) {
-    super(`Validation failed: ${field} — ${reason}`);
+    super(`Validation failed for ${field}: ${reason}`);
     this.name = 'ValidationError';
     this.field = field;
   }

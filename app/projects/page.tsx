@@ -8,7 +8,7 @@ import type { Post } from '@/lib/types';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Projects — Swarnim Bagre',
+  title: 'Projects · Swarnim Bagre',
   description:
     'Things I made when I should have been doing something else. A few are even useful, to me, mostly.',
   alternates: {

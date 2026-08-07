@@ -7,7 +7,7 @@ import type { Note, Stat } from '@/lib/types';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Everything else — Swarnim Bagre',
+  title: 'Everything else · Swarnim Bagre',
   description:
     'Hobbies, sports I am mediocre at, and things I track just to feel slightly less unobserved.',
   alternates: {

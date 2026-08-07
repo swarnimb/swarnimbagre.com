@@ -92,7 +92,7 @@ export async function orphanPreviousImage(
   if (!data || data.length === 0) {
     logMutationError(ORPHAN_IMAGE_OPERATION, {
       oldImageId,
-      warning: 'no rows affected — already orphaned or row missing',
+      warning: 'no rows affected: already orphaned or row missing',
     });
   }
 }
