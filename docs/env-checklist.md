@@ -27,9 +27,10 @@ Variables fall into four categories. Read this before the per-variable detail.
 3. Test / CI only. Used by the local test fixture and CI. Must never be set in
    Vercel. Not startup-required.
 
-4. Deferred. Intentionally left blank (Sentry, T32 Option B). Must NOT be
-   added to startup validation or `next build` breaks. See `docs/monitoring.md`
-   for the gate condition that reactivates them.
+4. Deferred. Intentionally left blank (Sentry, T32 Option B). Headed
+   `Category 5` below. Must NOT be added to startup validation or `next build`
+   breaks. See `docs/monitoring.md` for the gate condition that reactivates
+   them.
 
 There is also a separate runtime: the Supabase stats-ingest Edge Function runs
 on Deno, not Next.js. It validates its own environment via its own
@@ -103,18 +104,6 @@ environment.
 `TEST_FIXTURE_SECRET` is one of three independent gates on the test sign-in
 route - the route is reachable only when `NODE_ENV=test`, `VERCEL!=1`, and the
 secret matches. All three must hold.
-
----
-
-## Category 4 - Optional / Preview-Only
-
-| Name | Exposure | Source | Set locally | Set in production | Fails if missing |
-|---|---|---|---|---|---|
-| `NEXT_PUBLIC_TWEAKS` | Public (boolean) | Set by you | Optional in `.env.local` | Vercel Preview only, set to `1`; unset in Production | Nothing breaks - the tweaks dev panel is simply hidden |
-
-The tweaks panel is gated at build time by `NEXT_PUBLIC_TWEAKS === '1'`
-(see `components/public/pages/Home.tsx`). Because the value is inlined at
-build, a visitor cannot summon the panel on production via any URL.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-06
 **Status:** Complete (2026-05-11, session 9)
-**Tasks:** T1–T14 (14 tasks)
+**Tasks:** T1–T14 + T10.5 (15 tasks)
 **Predecessor:** none — first phase
 **Successor:** [`plan-phase-2-admin.md`](plan-phase-2-admin.md)
 
@@ -349,8 +349,8 @@ Sub-phased on 2026-05-07 into T10a–T10d. Track progress at sub-phase level. Or
 **Files:** Port `site/tweaks-panel.jsx` → `components/public/TweaksPanel.tsx`. Add `<title>`, `<meta description>`, `<link rel="canonical">` to all 4 pages.
 
 **Acceptance criteria:**
-- [x] Tweaks panel gated by `NEXT_PUBLIC_TWEAKS=1` env var (not querystring).
-- [x] All four pages have `<title>`, `<meta description>`, and `<link rel="canonical">` set.
+- [~] Tweaks panel gated by `NEXT_PUBLIC_TWEAKS=1` env var (not querystring). — **Superseded:** never built for Next.js (`components/public/TweaksPanel.tsx` does not exist; the only implementation is `site/tweaks-panel.jsx`, retired with the bundle at T46), and `NEXT_PUBLIC_TWEAKS` was removed from `.env.example` on 2026-08-07 with zero code readers repo-wide.
+- [x] All four pages have `<title>`, `<meta description>`, and `<link rel="canonical">` set. — verified: `export const metadata` with `alternates.canonical` in `app/page.tsx`, `app/projects/page.tsx`, `app/writing/page.tsx`, `app/other/page.tsx`.
 
 **Tests required:** None.
 
@@ -543,7 +543,7 @@ Sub-phased on 2026-05-07 into T10a–T10d. Track progress at sub-phase level. Or
 
 ## Phase 1 Exit Criteria
 
-- All 14 tasks complete; their tests passing.
+- All 15 tasks complete; their tests passing.
 - Public site live on Vercel with DB-backed content from Supabase.
 - `/admin/*` routes exist as auth-gated placeholders (full admin UI is Phase 2).
 - No SaaS phrases, no emoji in any committed copy (CONSTRAINT-13).

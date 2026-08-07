@@ -437,6 +437,8 @@ End state: site is live at `swarnimbagre.com`, monitored, the post-launch checkl
 - Posts keep single-image upload (PRD §3.5a). `app/writing/[slug]/page.tsx` and `components/admin/PostForm.tsx` are outside T43.
 
 > **Superseded at T46:** `embla-carousel-react` was uninstalled and the carousel hand-rolled in `ProjectFrame.tsx`. The public site is back to zero runtime JS dependencies, so **CONSTRAINT-22 now has no consumers** and Override 2 is retired. The `project_media` table, its RPC and the admin write surface all survive.
+>
+> The rewrite was not behaviour-for-behaviour. Six of T43.G's shipped behaviours did not survive it — captions, keyboard ←/→, the `aria-live` announcement, `prefers-reduced-motion`, `useId`-based `aria-controls` wiring, and no-loop / boundary-disabled arrows. Each is marked `[~]` in T43.G below with the code that proves it. Four of the six are accessibility regressions; none has been re-opened as a task.
 
 ---
 
@@ -592,17 +594,17 @@ Four-file mutation module (`lib/admin-project-media-mutations{,-internal,-types,
 ### Task T43.G: Public component — `ProjectMediaCarousel` (embla wrapper)
 
 **Acceptance criteria — PRD §2.3a G/W/T:**
-- [x] Multi-slide carousel: dots + arrows + horizontal swipe + keyboard ←/→ all functional. No auto-advance. No loop — `loop: false`; boundary slides disable the corresponding arrow button.
-- [x] Single-slide carousel: no nav chrome. Renders the slide static.
-- [x] Zero-slide carousel: returns `null` (caller renders nothing).
-- [x] Active-slide caption renders below the image in muted meta type when present.
-- [x] Screen-reader live region announces "Slide N of M, [alt text]" when active slide changes.
-- [x] `prefers-reduced-motion: reduce` honored: embla `duration: 0` when the media query matches.
-- [x] Pair-row divider drag does NOT advance the carousel — drag within the divider hit area is consumed.
-- [x] Multi-instance DOM ID hygiene: `React.useId()` for the `aria-controls` / `aria-labelledby` / dot button IDs.
+- [~] Multi-slide carousel: dots + arrows + horizontal swipe + keyboard ←/→ all functional. No auto-advance. No loop — `loop: false`; boundary slides disable the corresponding arrow button. — **T46 regression:** `components/public/ProjectFrame.tsx` ships dots, arrows and swipe, but has no keydown handler at all, and `go()` wraps modulo `slides.length`, so the carousel now loops and neither arrow is ever disabled at a boundary.
+- [x] Single-slide carousel: no nav chrome. Renders the slide static. — still true: `ProjectFrame.tsx` gates all chrome behind `multi = slides.length > 1`.
+- [~] Zero-slide carousel: returns `null` (caller renders nothing). — **Changed at T46, deliberately (T46 Q7):** `ProjectFrame.tsx` returns a `.sb-frame` wrapper containing "no preview yet" rather than `null`.
+- [~] Active-slide caption renders below the image in muted meta type when present. — **T46 regression, not an unshipped slot:** `ProjectFrame.tsx` threads `caption` into the slide model (lines 26, 41, 48) but the JSX emits only `<img>` / `<span className="sb-slide-label">`; no caption element is rendered and no caption class exists in `app/styles/public-projects.css`.
+- [~] Screen-reader live region announces "Slide N of M, [alt text]" when active slide changes. — **T46 regression:** no `aria-live` region exists anywhere under `app/` or `components/`; slide changes are silent to screen readers.
+- [~] `prefers-reduced-motion: reduce` honored: embla `duration: 0` when the media query matches. — **T46 regression:** `prefers-reduced-motion` appears in no CSS file or component in the repo, so the `.4s cubic-bezier(.4, 0, .2, 1)` `.sb-track` transform runs unconditionally.
+- [~] Pair-row divider drag does NOT advance the carousel — drag within the divider hit area is consumed. — **Moot after T46:** `BeforeAfterMedia.tsx` and its divider were deleted; `toSlides()` flattens a before/after pair into two ordinary slides, so no divider hit area exists.
+- [~] Multi-instance DOM ID hygiene: `React.useId()` for the `aria-controls` / `aria-labelledby` / dot button IDs. — **T46 regression:** `ProjectFrame.tsx` calls no `React.useId()` and emits no `aria-controls` / `aria-labelledby`; arrows and dots carry `aria-label` only, so the dots are not programmatically tied to the track.
 - [x] CONSTRAINT-05 Override 2 boundary: this is the only public-site component using a JS library.
 - [x] All styling uses CSS variables from `colors_and_type.css`. No Tailwind. No inline library defaults.
-- [x] Arrow + dot button labels are typographic glyphs only (`←`, `→`, `•`) — CONSTRAINT-13. ARIA labels: `aria-label="Slide 1"` etc.
+- [~] Arrow + dot button labels are typographic glyphs only (`←`, `→`, `•`) — CONSTRAINT-13. ARIA labels: `aria-label="Slide 1"` etc. — **Drifted at T46:** arrows render `&lsaquo;` / `&rsaquo;` and dots are unlabelled CSS shapes, while the ARIA strings became prose (`Previous image of {title}`, `Go to image N of {title}`) — the exact phrasing T43.A rejected. Visible chrome still holds CONSTRAINT-13; the ARIA contract does not.
 - [x] `ProjectMediaCarousel.tsx` ≤200 lines (CQ-02). — 198; presentational sub-components extracted to `ProjectMediaCarouselParts.tsx` (164).
 - [x] `BeforeAfterMedia.tsx` post-refactor ≤200 lines (closes S31 CQ-02 MAJOR carry-forward). — 161; CSS scenes extracted to `BeforeAfterMediaScenes.tsx` (91).
 - [~] Bundle delta verified: T43.B + T43.G commits combined add ≤10 KB gzip to the public-route entry chunk. — **DEFERRED to T43.H:** nothing imports the carousel yet, so its entry-chunk delta is 0 and unmeasurable until wired in.

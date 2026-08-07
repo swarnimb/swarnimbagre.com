@@ -557,9 +557,8 @@ Single free-tier project. Migrations applied via Supabase CLI from `supabase/mig
 | `ADMIN_ALLOWED_EMAIL` | Vercel server-only + local `.env.local` | **no** | Admin allowlist enforcement for magic-link sign-in (Layer 2 defense; Layer 1 is the Supabase dashboard). See `auth-flow.md` §3 and `lib/auth-internal.ts::assertAllowlistedEmail`. Also the identity `recover-admin-session.ts` targets |
 | `NEXT_PUBLIC_SITE_URL` | Vercel + local `.env.local` | yes | Absolute site URL for magic-link `emailRedirectTo`. Falls back to `NEXT_PUBLIC_VERCEL_URL` when unset. See `lib/auth-internal.ts::getSiteUrl` |
 | `TEST_FIXTURE_SECRET` | `.env.local` + CI secrets only, never Vercel | **no** | Gate 3 of the dev-only test sign-in route (§4.7) |
-| `NEXT_PUBLIC_TWEAKS` | Vercel (preview only, never production) | yes (boolean) | Gated the tweaks panel. **Dead:** `TweaksPanel.tsx` was deleted at T46, so nothing reads it. Left documented rather than silently dropped; removing it from Vercel is housekeeping, not a code change |
 
-`.env.example` lists every Next.js-runtime variable name with no values (SEC-01). The one exception is `STATS_INGEST_SECRET`: it is Edge-Function-only (read via `Deno.env.get`, never by the Next.js app), so it appears in `.env.example` only as a documented comment block — not as an assignable key — pointing at the Supabase secret-store lifecycle in `docs/openclaw-config.md`. `NEXT_PUBLIC_TWEAKS` is unset in production.
+`.env.example` lists every Next.js-runtime variable name with no values (SEC-01). The one exception is `STATS_INGEST_SECRET`: it is Edge-Function-only (read via `Deno.env.get`, never by the Next.js app), so it appears in `.env.example` only as a documented comment block — not as an assignable key — pointing at the Supabase secret-store lifecycle in `docs/openclaw-config.md`.
 
 ### 5.4 Reproducibility debt — operational unversioned config
 

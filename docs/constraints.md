@@ -1,7 +1,7 @@
 # Constraints: swarnimbagre.com
 
 **Date seeded:** 2026-05-06 (by `@plan` Phase 4)
-**Last updated:** 2026-08-07 (status notes re-verified against code and live DNS; three items flagged `> OPEN` for the builder)
+**Last updated:** 2026-08-07 (status notes re-verified against code and live DNS; of the three items flagged `> OPEN`, D-3 and D-11 are resolved by builder decision — D-6 remains open)
 
 > Loaded by `@session-start` every session. Active binding decisions only — not history, not options considered. New constraints are added when `@plan`, `@cto`, or the builder makes a binding decision. A constraint is removed only when the decision is explicitly reversed, with the reversal noted in `docs/session-log.md`.
 >
@@ -67,7 +67,7 @@
 
 **Decision:** The Claude Design export at `docs/design-source/redesign-2026-08/` is the source of truth for every public-site visual decision. `template.extracted.html` is the readable unpacked markup; `swarnim-bagre-site.bundled.html` is the shipped artifact it came from. No Tailwind, no shadcn, no Aceternity, no Magic UI on the public site. Tokens come from `app/styles/colors_and_type.css`; component classes from `app/styles/public*.css`.
 
-**What it means in practice:** A new public-site visual pattern requires either (a) finding the matching pattern in the export, or (b) stopping work and consulting `@designer`. No improvisation, no "close enough" substitutes, no library defaults. Same hex codes, same px values, same `clamp()` expressions, same transition timing (`.18s ease` hover, `.4s cubic-bezier(.4, 0, .2, 1)` carousel track). **One breakpoint: 640px.**
+**What it means in practice:** A new public-site visual pattern requires either (a) finding the matching pattern in the export, or (b) stopping work and consulting `@designer`. No improvisation, no "close enough" substitutes, no library defaults. Same hex codes, same px values, same `clamp()` expressions, same transition timing (`.18s ease` hover, `.4s cubic-bezier(.4, 0, .2, 1)` carousel track). **One width breakpoint: 640px.** (`public-other.css` additionally carries a `max-height: 600px` guard so the viewport-locked Other grid survives short windows; that is a height guard, not a second device breakpoint.)
 
 **Additive prop extensions are permitted** when (a) the component renders identically with the new prop omitted and (b) interactive behavior is wired to real destinations. The verbatim rule governs rendered visual output: pixels, motion, typography. It does not govern prop interfaces or runtime behavior.
 
@@ -131,13 +131,13 @@
 
 ### [CONSTRAINT-09] Magic link auth, single user
 
-**Decision:** Supabase Auth with Email provider only. Magic link flow. One account: the configured admin email (held in `ADMIN_ALLOWED_EMAIL` and the Supabase Auth user record; intentionally not committed to the repo). JWT 1 hour, refresh 30 days inactivity (Supabase defaults). Lockout fallback is manual session invalidation in the Supabase dashboard.
+**Decision:** Supabase Auth with Email provider only. Magic link flow. One account: the configured admin email (held in `ADMIN_ALLOWED_EMAIL` and the Supabase Auth user record; intentionally not committed to the repo). JWT 1 hour, refresh 30 days inactivity (Supabase defaults). Lockout fallback is `scripts/recover-admin-session.ts`, which mints a session without any email: holding `SUPABASE_SERVICE_ROLE_KEY`, it calls `auth.admin.generateLink({ type: 'magiclink' })` for `ADMIN_ALLOWED_EMAIL`, takes the returned `properties.hashed_token`, and prints a single `{origin}/admin/auth/callback?token_hash=<hash>&type=email` URL. Opening that URL in a browser drives this app's own callback, which redeems the token with `verifyOtp` and writes the session cookies — Supabase's `/auth/v1/verify` endpoint, the Site URL and the redirect-URL allowlist are never consulted, which is why it works when the dashboard's own link flows do not. Its limits: it is unavailable to anyone who has lost the service-role key; the Supabase user record must already exist, because `generateLink` does not create one; and the printed URL is single-use, expires on the project's email-OTP expiry (1 hour by default), and is a live credential — a session in a string — so it is never pasted into chat, a ticket, or a commit. The full ordered fallback ladder, including the email-based steps and the Supabase SMTP rate limit that caps them, is `docs/auth-flow.md` §5.
 
 **What it means in practice:** No password storage. No social login. No multi-user logic. No role check is needed because there is exactly one user; the middleware gate and `assertAdminSession()` both verify the session server-side with `getUser()` (CONSTRAINT-23). Adding a second user is a non-trivial feature.
 
-> **OPEN (D-3):** the lockout-fallback sentence above contradicts the rewritten `docs/auth-flow.md` §5. Dashboard session invalidation ends a session; it does not create one, so it is not a recovery path — §5.1 documents it as never having worked. The mechanism that does work is `scripts/recover-admin-session.ts`, which mints a `token_hash` via `auth.admin.generateLink` and redeems it at the production callback without touching the inbox. BUILDER'S CALL: the rule text above is left as recorded and is not resolved here.
+**Amended 2026-08-07 (D-3):** the fallback clause previously read "manual session invalidation in the Supabase dashboard". That was never a recovery path — invalidating a session ends one, it does not create one — and `docs/auth-flow.md` §5.1 records it as having never worked. It is replaced above by the mechanism that does work. Only the fallback clause changed; magic-link auth, the single account and the allowed-email gate are unchanged.
 
-**Who decided and when:** Kickoff + `@plan`, 2026-05-06.
+**Who decided and when:** Kickoff + `@plan`, 2026-05-06. Fallback clause corrected by the builder, 2026-08-07.
 
 **What this closes off:** Multi-user collaboration, role-based access, comments-with-accounts. Reversing means designing a user model, role system, and per-resource ownership checks (SEC-04).
 
@@ -185,11 +185,11 @@
 
 **What it means in practice:** Every label, button, error message, and microcopy decision passes the voice rule. "Powerful admin tools" is wrong; "Admin" is right. Decorative emoji are forbidden; typographic symbols (※, ¶, *, →) are allowed in moderation. The rule applies to private admin labels even though no visitor sees them — voice discipline is for the builder, not the audience.
 
-**Who decided and when:** Kickoff + `@designer` + `@plan`, 2026-05-06.
+**Em-dash sub-rule (added 2026-08-07, D-11):** no em-dash (U+2014) in a **shipped string**. A shipped string is anything that can reach a screen or a log: public-site copy, page titles and route metadata, admin labels and microcopy, error and log message text. **The rule stops there.** It does NOT apply to documentation (this file included), code comments, test names, or commit messages — all of which use em-dashes freely throughout this project and are deliberately left alone. Do not sweep them. What to use instead, as established by the sweep in commit `b6f5c82`: a middle dot (`·`) where the dash separated two title-like halves (the three public page titles, the admin pagination line); a plain hyphen for the orphan-cleanup null-size placeholder; a colon where the dash introduced an explanation (the two `logMutationError` warnings, and `ValidationError`, whose message was rephrased to `Validation failed for {field}: {reason}`). In prose, recast the sentence with a comma, a full stop or parentheses rather than swapping the glyph — an em-dash mid-sentence is a structural choice, not a punctuation mark with a drop-in replacement.
+
+**Who decided and when:** Kickoff + `@designer` + `@plan`, 2026-05-06. Em-dash sub-rule added by the builder, 2026-08-07, adopting the `b6f5c82` sweep as standing policy.
 
 **What this closes off:** Conventional marketing copy patterns. Reversing means rewriting every label and microcopy, and doing so under a different brand premise.
-
-> **OPEN (D-11):** commit `b6f5c82` removed em-dashes from all 13 shipped strings. This constraint has never mentioned em-dashes, and whether the sweep established a standing rule or was a one-off stylistic pass is undecided. BUILDER'S CALL — no em-dash rule is being added here. Note the scope if it is adopted: the sweep covered shipped strings only, not this document or any other doc.
 
 ---
 
@@ -362,11 +362,11 @@ or a re-evaluation of header uniformity under PKCE.
 | 06 | Markdown via marked + DOMPurify | Whitelist enforced; DB stores raw MD | `@plan` | 2026-05-06 |
 | 07 | Image bucket path scheme | Path encodes parent type and id | `@plan` | 2026-05-06 |
 | 08 | RLS default-deny on all tables | Every new table needs explicit policies | `@plan` | 2026-05-06 |
-| 09 | Magic link auth, single user | No multi-user logic anywhere | Kickoff + `@plan` | 2026-05-06 |
+| 09 | Magic link auth, single user | No multi-user logic anywhere. **Amended 2026-08-07 (D-3):** lockout fallback is `scripts/recover-admin-session.ts` (service-role key required, no email involved), not dashboard session invalidation, which never worked | Kickoff + `@plan`, fallback corrected by builder | 2026-05-06 / amended 2026-08-07 |
 | 10 | Hard-delete with confirm modal | No soft-delete, no undo | `@plan` | 2026-05-06 |
 | 11 | Status enum: draft \| published | Binary visibility, no scheduling | `@plan` | 2026-05-06 |
 | 12 | Slug locked at DB level after publish | URLs permanent on publish | `@plan` | 2026-05-06 |
-| 13 | Voice — dry, anti-LinkedIn, no emoji | Applies to public copy AND admin labels | Kickoff + `@plan` | 2026-05-06 |
+| 13 | Voice — dry, anti-LinkedIn, no emoji | Applies to public copy AND admin labels. **Added 2026-08-07 (D-11):** no em-dash (U+2014) in shipped strings; docs, comments, test names and commit messages are exempt | Kickoff + `@plan`, em-dash sub-rule by builder | 2026-05-06 / amended 2026-08-07 |
 | 14 | Server-Component data loads via `lib/safe-load.ts` | Page-level catch + log + fallback; no 500 on DB failure | `@dev` Targeted Fix | 2026-05-11 |
 | 15 | Image reads use signed URLs (TTL 3600s) | `getImageUrl` centralized; no `getPublicUrl` for private bucket | `@plan` + T14 | 2026-05-11 |
 | 16 | Admin color tokens namespaced as `--admin-*` | 8-token semantic palette, admin-owned (not mirrored from public); declared at `:root` so Radix portals resolve them | T15 | 2026-05-11 / amended 2026-05-12 + 2026-05-19 |

@@ -2,7 +2,7 @@
 
 **Date:** 2026-05-06
 **Status:** Done (2026-05-14)
-**Tasks:** T15–T28 (14 tasks)
+**Tasks:** T15–T28 + T19.1 + T19.2 (16 tasks)
 **Predecessor:** [`plan-phase-1-foundation.md`](plan-phase-1-foundation.md)
 **Successor:** [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md)
 
@@ -542,7 +542,7 @@ _Completed 2026-05-14. Single-test serial-mode Playwright spec at `tests/e2e/adm
 
 ## Phase 2 Exit Criteria
 
-- All 14 tasks complete; tests passing.
+- All 16 tasks complete; tests passing.
 - Admin can do full CRUD on projects, posts, stats, and images locally + on the production deploy.
 - No programmatic write path open yet (Phase 3).
 - Mark Phase 2 row Done in [`plan-index.md`](plan-index.md). Mark Phase 3 row Active. Log transition in `docs/session-log.md`.

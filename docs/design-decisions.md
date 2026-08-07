@@ -14,7 +14,7 @@
 - Every implementation task MUST use the token layer in `app/styles/colors_and_type.css` and the component classes in `app/styles/public.css` + `public-home.css` / `public-projects.css` / `public-writing.css` / `public-other.css`. No new tokens, no overrides, no "close enough" substitutes.
 - Where a pattern exists in the export, the implementation matches it exactly: same hex codes, same px sizes, same `clamp()` expressions, same font weights, same spacing, same timing (`.18s ease` on hover, `.4s cubic-bezier(.4, 0, .2, 1)` on the carousel track).
 - "Similar-looking" is NOT acceptable.
-- **One breakpoint: 640px.** Single responsive tree. No mobile component fork, no server-side device split. Both were deleted at T46.
+- **One width breakpoint: 640px** — the only width query in `app/styles/`, repeated per page sheet. `public-other.css` additionally carries a `max-height: 600px` guard that releases the `.cpage` height lock so the viewport-locked Other grid survives short windows (shipped at `eac4c91`); that is a height guard, not a second device breakpoint, and it fires on any short viewport, desktop included. Single responsive tree. No mobile component fork, no server-side device split. Both were deleted at T46.
 - If a needed pattern does NOT exist in the export, stop and consult `@designer` before improvising.
 
 **Why this rule:** the design was developed through long iteration on claude.ai/design and represents finished, locked decisions. Re-interpretation invalidates that work and produces drift.
@@ -34,6 +34,7 @@ These are the design as built, not drift. Anything not listed here is bundle-ver
 | The carousel is hand-rolled, not embla-backed. The public site carries zero runtime JS dependencies. | no `embla-*` in `package.json`; track transition at `app/styles/public-projects.css:44` |
 | Copy is first person throughout, including the home bio, which the export wrote in third person. | `components/public/pages/Home.tsx:101` |
 | Viewport units are `svh`, not `vh` — see below. | `app/styles/public-home.css:34-35`, `app/styles/base.css:13-14` |
+| `/other` carries a `max-height: 600px` release on the `.cpage` height lock. The export has exactly one media query — `max-width: 640px` — and asks no height question at all, so its one-screen Other grid clips with no scroll on any short viewport. | `app/styles/public-other.css:234`; export query at `template.extracted.html:216` |
 
 ### Why `svh` (2026-08-04, Session 52)
 
@@ -77,7 +78,7 @@ Both compose existing public classes only — no new tokens, no new CSS — but 
 
 **Primary user:** Mixed — recruiters reviewing background, engineering peers, potential collaborators, people landing via social (X, Reddit, etc.), casual readers exploring the writing. Voice and density must hold up across all of them simultaneously; do not optimize for one.
 
-**Platform priority:** Balanced. Desktop and mobile are equally important, and are served by a SINGLE responsive layout with one breakpoint at 640px. The old split (separate `index.html` / `mobile.html`, later a `components/public/mobile/` tree and a server-side device header) was retired at T46 because it meant building and maintaining every screen twice, on a one-person site.
+**Platform priority:** Balanced. Desktop and mobile are equally important, and are served by a SINGLE responsive layout with one width breakpoint at 640px, plus a short-viewport height guard on `/other` (see the CANONICAL SOURCE block above). The old split (separate `index.html` / `mobile.html`, later a `components/public/mobile/` tree and a server-side device header) was retired at T46 because it meant building and maintaining every screen twice, on a one-person site.
 
 **Use frequency:** Occasional — visitors will read once, maybe return periodically. Not a daily-use tool. Affects density (spacious is fine) and motion (subtle only — nothing that grates on repeat visits).
 
@@ -188,7 +189,7 @@ Do NOT pull typography tokens, spacing tokens, motion tokens, or any other publi
 
 All four are resolved. Kept as stubs because other docs cite them by number.
 
-1. **Viewport routing strategy.** ✅ **RESOLVED T46 (2026-08-04)** — moot. The two-file desktop/mobile split it was asking about no longer exists; the site is a single responsive tree with one breakpoint at 640px, so there is nothing to route.
+1. **Viewport routing strategy.** ✅ **RESOLVED T46 (2026-08-04)** — moot. The two-file desktop/mobile split it was asking about no longer exists; the site is a single responsive tree with one width breakpoint at 640px (plus a height guard on `/other`, which routes nothing either), so there is nothing to route.
 2. **`tweaks-panel.jsx` production strategy.** ✅ **RESOLVED 2026-05-07** — gated behind the `NEXT_PUBLIC_TWEAKS=1` env var (preview-only, never production), per architecture §5.3. A `?tweaks=1` querystring was rejected: an env var is locked at build time, so visitors cannot summon the panel on production no matter what URL they craft.
 3. **Next.js migration timing.** ✅ **RESOLVED** — the site is on the Next.js App Router.
 4. **Tailwind + shadcn isolation for admin.** ✅ **RESOLVED** — Tailwind is scoped so its utilities do not reach the public-site bundle, and shadcn styles load only under `/admin/*`. See `docs/architecture.md`.

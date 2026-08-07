@@ -115,7 +115,7 @@ Backed by migration `014_other_page_model.sql`, which added `stats.aside` + `sta
 
 ### 2.6 Tweaks panel
 
-> **Not implemented; no shipped surface.** `NEXT_PUBLIC_TWEAKS` is still declared in `.env.example`, but no TypeScript or TSX file in the repo reads it and no tweaks component exists — the only implementation, `site/tweaks-panel.jsx`, belongs to the retired bundle (§2). If the panel is ever revived it is gated by that env var, never by a querystring, and it must not ship to production.
+> **Not implemented; no shipped surface.** The panel was never built for Next.js — no component exists and nothing in the repo reads a tweaks flag. The only implementation, `site/tweaks-panel.jsx`, belongs to the retired bundle (§2). `NEXT_PUBLIC_TWEAKS` has been removed from `.env.example`; it had no code readers. If the panel is ever revived it is gated by a build-time env var, never by a querystring, and it must not ship to production.
 
 ### 2.7 Discoverability and resilience surfaces (T41)
 
