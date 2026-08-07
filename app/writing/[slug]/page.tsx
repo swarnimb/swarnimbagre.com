@@ -9,6 +9,18 @@ import { MarkdownContent } from '@/components/public/MarkdownContent';
 import { formatPostDate } from '@/lib/post-summary';
 
 const SITE_ORIGIN = 'https://swarnimbagre.com';
+/**
+ * T41: the site card, reused per post.
+ *
+ * `app/opengraph-image.tsx` is a root file convention, so it already applies
+ * to this route by inheritance. It is named explicitly anyway because the
+ * per-post `openGraph` object below replaces the inherited one wholesale —
+ * omitting `images` here would strip the card rather than keep it. There is no
+ * per-post image generator: posts have no cover art in the data model, so
+ * every post shares the site card. Relative, because `metadataBase` in
+ * `app/layout.tsx` absolutizes it.
+ */
+const OG_IMAGE_PATH = '/opengraph-image';
 const DESCRIPTION_MAX = 160;
 const BODY_MAX = 720;
 const WRITING_INDEX_PATH = '/writing';
@@ -29,12 +41,31 @@ export async function generateMetadata({
     'metadata:writing/[slug]',
   );
   if (!post) {
-    return { title: 'Post not found — Swarnim Bagre' };
+    return { title: 'Post not found · Swarnim Bagre' };
   }
+  const title = `${post.title} · Swarnim Bagre`;
+  const description = deriveDescription(post.content);
+  const url = `${SITE_ORIGIN}/writing/${post.slug}`;
   return {
-    title: `${post.title} — Swarnim Bagre`,
-    description: deriveDescription(post.content),
-    alternates: { canonical: `${SITE_ORIGIN}/writing/${post.slug}` },
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      type: 'article',
+      siteName: 'Swarnim Bagre',
+      title,
+      description,
+      url,
+      publishedTime: post.created_at,
+      modifiedTime: post.updated_at,
+      images: [OG_IMAGE_PATH],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description,
+      images: [OG_IMAGE_PATH],
+    },
   };
 }
 

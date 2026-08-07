@@ -35,9 +35,39 @@ const spaceMono = Space_Mono({
   variable: "--font-space-mono",
 });
 
+const SITE_ORIGIN = "https://swarnimbagre.com";
+const SITE_NAME = "Swarnim Bagre";
+const SITE_DESCRIPTION =
+  "Personal site: projects, writing, and assorted hobby stats.";
+
+// T41: site-wide Open Graph + Twitter defaults. Individual routes override
+// title/description (and `/writing/[slug]` overrides the image too) via their
+// own `metadata` / `generateMetadata` exports.
+//
+// `metadataBase` is what lets the `app/opengraph-image.tsx` file convention
+// resolve to an absolute URL. Without it Next emits a relative og:image, which
+// most scrapers drop, and warns on every build.
+//
+// No `icons` key on purpose: `app/icon.svg` is a file convention and Next
+// injects the <link rel="icon"> itself. Declaring it here as well would emit
+// the tag twice.
 export const metadata: Metadata = {
-  title: "Swarnim Bagre",
-  description: "Personal site: projects, writing, and assorted hobby stats.",
+  metadataBase: new URL(SITE_ORIGIN),
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: SITE_ORIGIN,
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export default function RootLayout({
