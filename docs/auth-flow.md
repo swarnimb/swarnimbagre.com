@@ -87,13 +87,70 @@ The auth provider does not by itself restrict which email addresses may sign in.
 
 ## 5. Lockout Fallback
 
-If the magic link cannot be received (lost inbox access, email provider outage, deliverability issue):
+If the magic link cannot be received (lost inbox access, email provider outage, deliverability issue), work down this list. Steps are ordered least to most drastic — stop at the first one that gets you a session.
 
-1. Open the Supabase dashboard → Authentication → Users.
-2. Locate the admin user row and either trigger "Send magic link" / "Send password recovery" from the row actions, or copy a one-time recovery URL.
-3. If the user record itself is unrecoverable (account fully compromised or destroyed), delete the record and recreate it with the same email. **Data loss risk: zero.** All admin-managed data lives in `projects`, `posts`, `stats`, `images` — none of it is keyed off the auth user's UUID. The admin's identity is the email, not the UUID. RLS uses role-based policies (`authenticated` vs `anon`), not user-id matching.
+**Read this first: the email budget.** Supabase's built-in SMTP is rate-limited project-wide — 2 emails per hour on the default configuration. The budget is shared across everything the project sends, and an email that is sent but never received still spends it. A genuine lockout therefore gives roughly two attempts per hour on any email-based path, and steps 1 and 2 below are both email-based. Step 3 sends nothing and is not subject to the cap. *Unverified: the exact number is a Supabase platform default, not something this repo can assert — check `Auth → Rate Limits` in the dashboard before planning around it. If a custom SMTP provider has been configured, the built-in cap does not apply and the provider's limits do instead.*
 
-This is a single-user system. If the only inbox is permanently lost, recovery requires Supabase dashboard access, which is a separate failure mode (Supabase dashboard login uses GitHub or a GitHub-linked email — losing both inboxes simultaneously is the unrecoverable case, and it falls outside this system's scope).
+### 5.1 What does not work
+
+Two things that look like fallbacks are not.
+
+- **"Send password recovery" from the user row.** There are no passwords in this system to recover (CONSTRAINT-09, §1). Even if the recovery email arrived, its link carries `type=recovery`, and the callback's `VALID_EMAIL_OTP_TYPES` set accepts only `email` and `magiclink` — `recovery` is refused deliberately (F-4). It was documented here as a fallback until 2026-08-06; it never could have worked. Do not reach for it.
+- **Copying a Supabase-generated action / recovery URL out of the dashboard and pasting it into a browser.** Those links point at the project's own `/auth/v1/verify` endpoint, which verifies the token and then redirects to the configured Site URL — the apex root `/` per CONSTRAINT-21 — not to `/admin/auth/callback`. `/admin/auth/callback` is the only place in this app that consumes an auth payload, and nothing at `/` does. Under `flowType: 'implicit'` (CONSTRAINT-18) the tokens also arrive in the URL *fragment*, which never reaches the server at all. No session is established. *Unverified: this is read off the auth model the code encodes plus Supabase's documented verify-endpoint behaviour, not off an observed redemption.* Step 3 exists precisely to route around this — it hands the token to this app's callback directly and never touches `/auth/v1/verify`.
+
+### 5.2 Step 1 — Request a fresh link from `/admin/login`
+
+The obvious one, worth ruling out first: a single failed delivery is more often a transient provider issue than a lockout. Costs one of the two hourly emails. If two attempts in an hour both fail to arrive, stop retrying — you are spending the budget you will want for step 2.
+
+### 5.3 Step 2 — Dashboard → Authentication → Users → "Send magic link"
+
+Open the Supabase dashboard, find the admin user row, trigger "Send magic link".
+
+This is the one dashboard row action that should work. It sends using the project's **Magic Link email template**, which has been customized away from the stock `{{ .ConfirmationURL }}` body to the `token_hash` shape that lands on `/admin/auth/callback?token_hash=…&type=email` (§2 step 5). That template is unversioned operational config held only in the dashboard — see `architecture.md` §5.4 — so this step's correctness depends entirely on the template still being intact. There is no `emailRedirectTo` involved: the origin comes from the template's `{{ .SiteURL }}` base, which is the canonical apex per CONSTRAINT-21.
+
+*Unverified: that the row action uses the project's customized Magic Link template rather than a stock body is inferred, not observed. The corroboration is that §2's described link shape is the `token_hash` shape and production sign-in works, which is only possible with the template customized — and `architecture.md` §5.4 records that customization as existing config.*
+
+Costs one of the two hourly emails. If the template has drifted back to stock, this step fails the same way §5.1's second bullet describes, and you have spent an email finding out. Go to step 3.
+
+### 5.4 Step 3 — Mint a session with the service-role key (no email at all)
+
+This is the real escape hatch. It requires an operator who still holds `SUPABASE_SERVICE_ROLE_KEY` and needs no inbox, no SMTP, and no dashboard email quota.
+
+The mechanism is already proven inside this repo: `app/api/test/sign-in/route.ts` mints admin sessions for the Playwright suite by calling `auth.admin.generateLink({ type: 'magiclink' })` with the service-role key and redeeming the returned `properties.hashed_token` through `verifyOtp`. `scripts/recover-admin-session.ts` does the same generate step, then prints the URL that lets a browser perform the redeem step against the production callback.
+
+1. From a checkout whose `.env.local` carries `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `ADMIN_ALLOWED_EMAIL`, run:
+
+   ```
+   npx tsx scripts/recover-admin-session.ts
+   ```
+
+   The origin defaults to `NEXT_PUBLIC_SITE_URL`, falling back to `NEXT_PUBLIC_VERCEL_URL` — the same precedence `lib/auth-internal.ts::getSiteUrl` uses. Pass an origin as the first argument to override it (`npx tsx scripts/recover-admin-session.ts http://localhost:3000` recovers a session against a local dev server instead of production).
+
+2. It prints one URL of the shape `{origin}/admin/auth/callback?token_hash=<one-time>&type=email`.
+
+3. Open that URL in a browser. `/admin/auth/callback` is one of the two strict-equality exemptions in the middleware gate, so it is reachable without a session. The callback's `token_hash` branch calls `verifyOtp`, `rejectIfNotAllowlisted` confirms the user is `ADMIN_ALLOWED_EMAIL`, the SSR helper writes the session cookies, and the browser lands on `/admin`.
+
+Why this works where §5.1's dashboard links do not: the browser never visits `/auth/v1/verify`, so the Site URL and the redirect-URL allowlist are not consulted, and no fragment is involved. The token goes straight into this app's own callback, which is the same code path a real magic link exercises.
+
+Conditions and limits:
+
+- The Supabase user record must already exist. `generateLink` does not create one — if the record is gone, go to step 4 first, then come back.
+- The printed URL is single-use and expires on the project's email-OTP expiry, 1 hour by default. *Unverified: the expiry value is a dashboard setting this repo does not read.*
+- Treat the printed URL as a live credential — it is a session in a string. Do not paste it into chat, a ticket, or a commit.
+- *Unverified: whether `generateLink` also queues an email (and therefore spends the hourly budget) was not tested. The token is returned in the API response either way, so the step works regardless — but do not assume it is free if you are also rationing steps 1 and 2.*
+- If `SUPABASE_SERVICE_ROLE_KEY` is what has been lost, this step is unavailable and you are on step 4 or the unrecoverable case.
+
+### 5.5 Step 4 — Delete and recreate the user record
+
+If the user record itself is unrecoverable (account fully compromised or destroyed), delete the record in the dashboard and recreate it with the same email.
+
+**Data loss risk: zero.** Verified against the schema: `supabase/migrations/*` contains no reference to `auth.users`, `auth.uid()`, or any `user_id` / `owner_id` / `author_id` / `created_by` column. All admin-managed data lives in `projects`, `posts`, `stats`, `images` and none of it is keyed off the auth user's UUID. The admin's identity is the email held in `ADMIN_ALLOWED_EMAIL`, not the UUID. RLS is role-based throughout (`authenticated` vs `anon`), not user-id matching — so a new UUID behind the same email has exactly the same access as the old one.
+
+Recreate the user as email-confirmed, then recover a session with step 3 (or step 2 if email is working). Note that recreating the record does not by itself sign anyone in.
+
+### 5.6 The unrecoverable case
+
+This is a single-user system. If the only inbox is permanently lost and `SUPABASE_SERVICE_ROLE_KEY` is gone with it, recovery requires Supabase dashboard access, which is a separate failure mode (Supabase dashboard login uses GitHub or a GitHub-linked email — losing both inboxes simultaneously is the unrecoverable case, and it falls outside this system's scope).
 
 ---
 
@@ -113,6 +170,7 @@ Where the pieces this doc describes were built:
 - **T17 (Phase 2):** `/admin/login` page, `/admin/auth/callback` route handler, `middleware.ts` admin gate, `ADMIN_ALLOWED_EMAIL` env var added to `.env.example`, tests for the full flow.
 - **Subsequent admin tasks:** logout button wiring, session-expiry redirect UX.
 - **T38 (Phase 4):** this doc reconciled to as-built — allowlist enforcement location corrected (callback + sign-in helper, not middleware), logout redirect corrected to `/admin/login`, §2 narrative aligned to §2a, cookie naming softened to library-managed.
+- **2026-08-06:** §5 rewritten. The prior fallback advised "Send password recovery" (no passwords exist — CONSTRAINT-09) and copying a dashboard recovery URL (never traverses `/admin/auth/callback`, so no session results). Replaced with a ladder ordered least-to-most-drastic, the built-in-SMTP email budget stated up front, and a service-role escape hatch added: `scripts/recover-admin-session.ts`. Nothing in the auth code changed.
 
 The contract: this doc and the code agree. Any future change to the auth flow updates this document in the same task.
 
