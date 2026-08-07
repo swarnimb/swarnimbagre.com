@@ -40,11 +40,27 @@ The 47 tasks across the 4 phase files reflect the architectural decisions in [`a
 
 ---
 
+## Plan Status — CLOSED as of Session 55 (2026-08-06)
+
+**No phase row is marked Active, and that is correct — do not "fix" it by marking one.**
+
+The four-phase plan produced by `@plan` is finished. Phases 1, 2 and 4 are complete; Phase 3 is deferred behind the OpenClaw operator gate, which is an external dependency and not work an agent can start. Every task is `[x]`, `[~]`, or gated.
+
+**Boxes that remain `[ ]` are NOT the next task.** There are two groups, and both are blocked by design rather than waiting their turn:
+- **T41** (Phase 4 — robots, sitemap, OG, favicon, error pages, Search Console) is trigger-gated and was explicitly never a Phase 4 exit blocker. It runs when the builder decides it runs.
+- **T29 / T31** (Phase 3) await the OpenClaw operator gate.
+
+A first-incomplete-`[ ]` sweep will land on T41. **Landing on it does not make it the next task.** Do not begin it without the builder saying so.
+
+**New work arrives via `@create-plan`**, which appends a numbered task to the appropriate phase file. If a new task is added, note it here — but adding a task does not by itself reopen a phase.
+
+---
+
 ## How `@session-start` Uses This File
 
 1. Load `manifest.md`, `CLAUDE.md`, this file, [`constraints.md`](constraints.md), [`assumptions.md`](assumptions.md).
-2. Find the first phase row with `Status: Active`.
+2. Find the first phase row with `Status: Active`. **If no row is Active, stop looking — read "Plan Status" above and report "no active phase; the plan is closed" rather than falling through to the first `[ ]` you can find.** That fallback is what would nominate a trigger-gated task as the next task.
 3. Load that phase file as the working plan.
 4. Find the first incomplete task in that file. Confirm it is the next task before doing any work.
 
-When all tasks in the active phase are complete, the next phase becomes Active. Mark the previous phase row as Done, mark the next as Active, log the transition in `docs/session-log.md`.
+When all tasks in the active phase are complete, the next phase becomes Active. Mark the previous phase row as Done, mark the next as Active, log the transition in `docs/session-log.md`. **When the LAST phase completes there is no next phase to activate** — that is the current state, and it is recorded above rather than papered over by leaving a finished phase marked Active.
