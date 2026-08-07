@@ -49,6 +49,8 @@ This file is the plain-language record of every architectural decision. The audi
 | 35 | Admin actions check who is calling before they act — `assertAdminSession()` (F-39 / F-40, audit 24b) | [§6.6.10](architecture.md#6610-application-layer-auth-guard-on-admin-mutations--assertadminsession-f-39-audit-24b) + §6.2 + §6.6.4 + §6.6.6 |
 | 36 | New Other-page rows land at the end of the list, not on top of each other (migration 016) | [§2.3](architecture.md#23-stats) + §2.6 + `supabase/migrations/016_stats_notes_sort_order_append.sql` |
 | 37 | A Supabase-installed database function was left callable from the internet; revoked (F-41, migration 015) | [§6.1](architecture.md#61-rls-policies--per-table) + `supabase/migrations/015_revoke_rls_auto_enable_execute.sql` |
+| 38 | The e2e teardown talks to the database directly (T47) | [§4.7](architecture.md#47-test-infrastructure-node_env-gated-dev-only-routes) + `tests/e2e/global-teardown.ts` + `tests/e2e/fixtures/cleanup.ts` |
+| 39 | The e2e suite runs one file at a time (T47) | [§4.7](architecture.md#47-test-infrastructure-node_env-gated-dev-only-routes) + `playwright.config.ts` |
 
 ---
 
@@ -793,6 +795,38 @@ The reason to fix a zero-exposure finding is that the function runs with elevate
 - This function appears in no migration in the repository and carries no creation date, so it could not have been found by reading our own code. It surfaced through the security audit.
 
 **What this closes off:** The assumption that the project's security surface is only what the project authored. Anything the platform installs into the database is in scope for review, and the standing rule is now explicit: an elevated-privilege function that anonymous or logged-in callers can run needs either a written justification or a revoke, no matter who put it there. Reversing this is one line, and the migration records it, but there is no known reason to.
+
+---
+
+## 38. The e2e teardown talks to the database directly (T47)
+
+**Date:** 2026-08-06
+**Architecture link:** [`architecture.md` §4.7](architecture.md#47-test-infrastructure-node_env-gated-dev-only-routes) + `tests/e2e/global-teardown.ts` + `tests/e2e/fixtures/cleanup.ts`
+
+**Decided:** The Playwright suite no longer cleans up by clicking through the admin panel. It connects to the database directly with an administrative key, deletes only its own test rows, and then re-reads the database to prove they are gone.
+
+**What this means for your product:** A passing test run can no longer leave a fake project published on the live site, and can no longer scramble the order of the real projects on `/projects`. Both had actually happened. Before this, a green result meant "the tests were happy", not "the site is clean".
+
+**Check before approving:**
+- The safety of this rests on the tests being able to recognise their own rows. They are identified by a title prefix plus a timestamp stamped in at run time, and image files by name plus proof their parent project is gone.
+- Confirm you are comfortable that you will not name a real project starting with `T28 `, `T42 ` or `T43F `.
+
+**What this closes off:** The test runner now needs the administrative database key present locally. It was already there; it is now load-bearing, so a machine without it cannot run the e2e suite at all.
+
+---
+
+## 39. The e2e suite runs one file at a time (T47)
+
+**Date:** 2026-08-06
+**Architecture link:** [`architecture.md` §4.7](architecture.md#47-test-infrastructure-node_env-gated-dev-only-routes) + `playwright.config.ts`
+
+**Decided:** Playwright now runs with a single worker instead of in parallel.
+
+**What this means for your product:** The test suite is green by default when you run it, instead of failing for reasons that have nothing to do with your code. It is also faster this way — 1.6 minutes against 4.0 — because the parallel runs were fighting each other over one development server rather than sharing it.
+
+**Check before approving:** Nothing to verify. This matches how the suite has always actually been run; it had never once been verified green in parallel.
+
+**What this closes off:** If the suite grows large enough that serial runs become slow, the fix is more dev servers, not more workers. One server is the bottleneck.
 
 ---
 

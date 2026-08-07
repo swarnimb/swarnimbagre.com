@@ -1,7 +1,7 @@
 # Constraints: swarnimbagre.com
 
 **Date seeded:** 2026-05-06 (by `@plan` Phase 4)
-**Last updated:** 2026-08-04 (Session 52: CONSTRAINT-23 added — admin Server Action auth guard; CONSTRAINT-05 amended with the `100svh` home-root deviation. Earlier the same day, T46 redesign: CONSTRAINT-05 re-baselined, 03/15/16/22 amended)
+**Last updated:** 2026-08-06 (Session 55: CONSTRAINT-24 added — review outputs stay local, design outputs get committed, on finding F-49). Previously 2026-08-04 (Session 52: CONSTRAINT-23 added — admin Server Action auth guard; CONSTRAINT-05 amended with the `100svh` home-root deviation. Earlier the same day, T46 redesign: CONSTRAINT-05 re-baselined, 03/15/16/22 amended)
 
 > Loaded by `@session-start` every session. Active binding decisions only — not history, not options considered. New constraints are added when `@plan`, `@cto`, or the builder makes a binding decision. A constraint is removed only when the decision is explicitly reversed, with the reversal noted in `docs/session-log.md`.
 
@@ -331,6 +331,18 @@ or a re-evaluation of header uniformity under PKCE.
 
 ---
 
+### [CONSTRAINT-24] Review outputs stay local; design outputs get committed
+
+**Decision:** Documents that record the STATE of the work — security findings, QA findings, session logs, session handoff, framework issues — are gitignored and never committed. Documents that record WHAT TO BUILD — `prd.md`, `architecture.md`, `constraints.md`, the plan files, `design-decisions.md`, `kickoff-brief.md`, `founder-brief.md` — are committed deliberately.
+
+**What it means in practice:** The repository is PUBLIC (`github.com/swarnimb/swarnimbagre.com`, verified `private: false` on 2026-08-06). A findings document in a public repo is a target-specific attack guide. When a new document type is created, classify it by this rule rather than waiting for SEC-07's filename list to be updated — the list is what failed here. `.gitignore` carries this rule as a comment on its SEC-07 section.
+
+**Who decided and when:** Builder, 2026-08-06, Session 55, on discovering finding F-49.
+
+**What this closes off:** Nothing structural. Note the residual: `docs/qa-report.md` and `docs/security-report.md` were tracked across 18 commits before this rule existed, and remain in the public history. Treat their prior contents as permanently disclosed.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -358,3 +370,4 @@ or a re-evaluation of header uniformity under PKCE.
 | 21 | Canonical domain = apex `swarnimbagre.com` (no `www`) | All origin config (Vercel/Supabase/env/email) resolves to apex; `www` redirects to it | Main thread on builder behalf, confirmed by builder | 2026-05-16 |
 | 22 | Public-site JS libraries require a named Override + ≤15 KB gzip route-chunk budget | Every public-site npm dep gets a Surface boundary doc and a measured route-chunk delta. **Zero consumers as of T46**: embla was uninstalled and the carousel hand-rolled, so the public site has no runtime JS dependencies | `@cto` S34, codified at T43.I | 2026-05-20 / codified 2026-05-23 / zeroed 2026-08-04 |
 | 23 | Admin Server Actions call `assertAdminSession()` first, inside the `try` | Two-layer authorization (app check + RLS) on all 17 admin mutation actions; `lib/auth.ts` sign-in/sign-out exempt | `@security` audit 24 (F-39) | 2026-08-04 |
+| 24 | Review outputs stay local; design outputs get committed | State-of-the-work docs (security / QA findings, logs, handoff, framework issues) are gitignored; what-to-build docs are committed. The repo is public, so a findings file is an attack guide | Builder (on F-49) | 2026-08-06 |

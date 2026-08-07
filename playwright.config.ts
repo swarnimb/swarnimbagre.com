@@ -60,7 +60,7 @@ export default defineConfig({
   // route pre-warming does not help. This is not a workaround: the suite has
   // never been verified green any other way. Session 54's first green run was
   // `--workers=1`, and so is every green run since. Serial is also FASTER here
-  // (1.7m vs 4.0m measured Session 55) because contention costs more than
+  // (1.6m vs 4.0m measured Session 55) because contention costs more than
   // concurrency saves.
   workers: 1,
   forbidOnly: !!process.env.CI,

@@ -1,7 +1,7 @@
 # Architecture: swarnimbagre.com
 
 **Date:** 2026-05-06
-**Last revised:** 2026-08-04 (audit 24b — admin Server Action auth guard, migrations 015 + 016)
+**Last revised:** 2026-08-06 (T47 — Playwright global setup / teardown, single worker)
 **Status:** Locked. Six architectural decisions captured below; each has a Founder Brief in [`founder-brief.md`](founder-brief.md). Binding constraints derived from these decisions are in [`constraints.md`](constraints.md).
 
 > **T46 re-baseline (2026-08-04).** The public site was rebuilt against a new design export. `constraints.md` CONSTRAINT-05 and `design-decisions.md` are the authoritative statement of what the design now is; this document describes how it is built. The mobile component fork, the device-variant middleware header, the `/projects/[slug]` route and the embla dependency were all removed. Overrides 1, 2 and 3 are retired. Sections below carry T46 notes where the shape changed.
@@ -461,7 +461,11 @@ E2E tests log in via a server-side magic-link flow that mirrors the production c
 
 **Serial-mode requirement.** Specs that share a fixture user must use `test.describe.configure({ mode: 'serial' })`. `auth.admin.generateLink` invalidates the prior magic-link token for the email; concurrent workers calling generate+verify against the same user race and one fails with `otp_expired`. If a future spec needs parallelism, mint per-test-isolated identities (`playwright-fixture-${testId}@test.swarnimbagre.com`).
 
-**Cross-references:** `tests/e2e/fixtures/auth.ts` (`loginAsAdmin()` helper), `tests/e2e/admin-logout.spec.ts` (consumer + serial-mode example), `docs/plan-phase-2-admin.md` T19.2 (origin), `docs/founder-brief.md` entries 19 + 20.
+**Suite lifecycle (T47).** `playwright.config.ts` registers `tests/e2e/global-setup.ts` and `tests/e2e/global-teardown.ts`. Setup snapshots `projects.sort_order` before any test writes, then warms the routes the suite hits first. Teardown runs after the last test whether or not the run was green: it sweeps every fixture row and its Storage objects with a service-role client (`@supabase/supabase-js`, a devDependency — nothing here ships to the browser), restores the ordering from the snapshot, and verifies against a fresh read that nothing survived. It talks to Postgres directly rather than driving deletes through the admin UI because the suite writes to the production database (CONSTRAINT-02 — no staging project) and UI-driven cleanup left live rows behind on runs that reported green. A teardown failure fails the run. Both files execute in plain Node and must not import anything reaching `next/headers`.
+
+**One worker, deliberately (T47).** `workers: 1` in `playwright.config.ts`. All eight spec files share a single `next dev` server; run in parallel they contend for it and the 20s per-step budgets in `admin-smoke.spec.ts` blow. The suite has never been verified green any other way, and serial is also faster here (1.7m vs 4.0m, measured Session 55). This subsumes the serial-mode requirement above at the config level; the per-spec `mode: 'serial'` declarations stay as the local statement of the constraint.
+
+**Cross-references:** `tests/e2e/fixtures/auth.ts` (`loginAsAdmin()` helper), `tests/e2e/admin-logout.spec.ts` (consumer + serial-mode example), `tests/e2e/global-setup.ts` + `tests/e2e/global-teardown.ts` + `tests/e2e/fixtures/cleanup.ts` + `tests/e2e/fixtures/sort-order-snapshot.ts` (T47 lifecycle), `docs/plan-phase-2-admin.md` T19.2 (origin), `docs/founder-brief.md` entries 19 + 20.
 
 ### 4.9 Carousel surface: hand-rolled (T46)
 
