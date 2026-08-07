@@ -20,9 +20,43 @@
  * than through PostgREST `like` filters: the tables hold tens of rows, the
  * predicate is then unit-testable without a database, and there is no risk of
  * a mis-escaped filter string deleting something it shouldn't.
+ *
+ * F-50 hardening: the match rules and the row ceilings live in
+ * `./cleanup-predicates`. Every candidate set is collected and gated BEFORE
+ * the first delete, so a broken predicate stops the run instead of half of it.
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+
+import { CleanupEnvError, CleanupIncompleteError, CleanupQueryError } from './cleanup-errors';
+import {
+  assertWithinCeiling,
+  isSweepableImage,
+  isTestStat,
+  isTestTitle,
+  type ImageParentIndex,
+  type ImageRowRef,
+} from './cleanup-predicates';
+
+export { CleanupEnvError, CleanupIncompleteError, CleanupQueryError } from './cleanup-errors';
+
+export {
+  CleanupCeilingError,
+  FIXTURE_IMAGE_FILENAMES,
+  isFixtureImagePath,
+  isSweepableImage,
+  isTestStat,
+  isTestTitle,
+  ROWS_PER_RUN,
+  RUN_ID_TOKEN_PATTERN,
+  SWEEP_CEILINGS,
+  SWEEP_DEBRIS_RUN_ALLOWANCE,
+  TEST_TITLE_PREFIXES,
+  assertWithinCeiling,
+  type ImageParentIndex,
+  type ImageRowRef,
+  type SweepTable,
+} from './cleanup-predicates';
 
 /** Env var holding the Supabase project URL. Primed by `playwright.config.ts`. */
 const ENV_SUPABASE_URL = 'NEXT_PUBLIC_SUPABASE_URL';
@@ -33,30 +67,6 @@ const ENV_SERVICE_ROLE_KEY = 'SUPABASE_SERVICE_ROLE_KEY';
 /** Storage bucket holding uploaded images (mirrors `IMAGES_BUCKET` in lib). */
 const IMAGES_BUCKET = 'images';
 
-/**
- * Title prefixes used by every row `admin-smoke.spec.ts` creates. Each test
- * title is `<prefix><description> <RUN_ID>`, so the prefix alone identifies a
- * fixture row without depending on the run that produced it — that is what
- * makes the sweep self-healing across earlier crashed runs.
- */
-export const TEST_TITLE_PREFIXES: readonly string[] = ['T28 ', 'T42 ', 'T43F '];
-
-/**
- * Filenames the suite uploads. `images` rows carry no title and no run marker,
- * and `images.parent_id` has no FK (polymorphic, `001_create_schema.sql`), so
- * rows from crashed runs dangle rather than cascade. The uploaded filename is
- * the only durable marker they carry.
- */
-export const FIXTURE_IMAGE_FILENAMES: readonly string[] = [
-  't28-first.png',
-  't43f-single.png',
-  't43f-before.png',
-  't43f-after.png',
-];
-
-/** Category prefix the stats fixture writes (`t28-${RUN_ID}`). */
-const TEST_STAT_CATEGORY_PREFIX = 't28-';
-
 /** Per-table counts of what the sweep removed. */
 export interface CleanupReport {
   projects: number;
@@ -66,77 +76,12 @@ export interface CleanupReport {
   storageObjects: number;
 }
 
-/** Named error for a missing runner environment variable (EH-05). */
-export class CleanupEnvError extends Error {
-  public readonly operation: string;
-
-  constructor(variableName: string, operation: string) {
-    super(
-      `${variableName} is not set in the Playwright runner environment. ` +
-        `Set it in .env.local; playwright.config.ts loads that file at config ` +
-        `load, so teardown inherits it. operation=${operation}`,
-    );
-    this.name = 'CleanupEnvError';
-    this.operation = operation;
-  }
-}
-
-/** Named error for a failed Supabase call during the sweep (EH-05, EH-02). */
-export class CleanupQueryError extends Error {
-  public readonly operation: string;
-  public readonly table: string;
-
-  constructor(options: { operation: string; table: string; cause: unknown; detail?: string }) {
-    super(
-      `e2e teardown failed. operation=${options.operation} table=${options.table} ` +
-        `detail=${options.detail ?? 'none'} cause=${String(
-          (options.cause as { message?: string } | null)?.message ?? options.cause,
-        )}`,
-      { cause: options.cause },
-    );
-    this.name = 'CleanupQueryError';
-    this.operation = options.operation;
-    this.table = options.table;
-  }
-}
-
-/** Named error for test rows that survived the sweep (EH-05). */
-export class CleanupIncompleteError extends Error {
-  public readonly survivors: Record<string, number>;
-
-  constructor(survivors: Record<string, number>) {
-    const detail = Object.entries(survivors)
-      .map(([table, count]) => `${table}=${count}`)
-      .join(' ');
-    super(
-      `e2e teardown left test rows in the PRODUCTION database. ` +
-        `Reporting success while leaving rows behind is the defect T47 exists ` +
-        `to fix, so this fails the run. survivors: ${detail}`,
-    );
-    this.name = 'CleanupIncompleteError';
-    this.survivors = survivors;
-  }
-}
-
-/** True when `title` was written by the e2e suite rather than by the builder. */
-export function isTestTitle(title: string): boolean {
-  return TEST_TITLE_PREFIXES.some((prefix) => title.startsWith(prefix));
-}
-
-/**
- * True when `bucketPath` points at a suite-uploaded fixture image.
- *
- * Paths follow CONSTRAINT-07: `images/{parentType}/{parentId}/{uuid}_{name}`.
- * The leading underscore is part of the match so a real upload that merely
- * ends with the same word cannot be swept.
- */
-export function isFixtureImagePath(bucketPath: string): boolean {
-  return FIXTURE_IMAGE_FILENAMES.some((name) => bucketPath.endsWith(`_${name}`));
-}
-
-/** True when a stats row was written by the suite. */
-export function isTestStat(row: { category: string; label: string }): boolean {
-  return row.category.startsWith(TEST_STAT_CATEGORY_PREFIX) || isTestTitle(row.label);
+/** Every row the sweep intends to delete, collected before anything is. */
+interface SweepCandidates {
+  projectIds: string[];
+  postIds: string[];
+  statIds: string[];
+  images: { id: string; bucket_path: string }[];
 }
 
 /**
@@ -213,26 +158,46 @@ export async function findTestProjectIds(client: SupabaseClient): Promise<{ id: 
 }
 
 /**
- * Image rows to sweep: those parented to a fixture project, plus every row
- * whose bucket path is a fixture upload. The second set absorbs debris from
- * earlier crashed runs, which `lib/admin-images-cleanup.ts` cannot see — its
- * predicate is `parent_id IS NULL AND parent_type IS NULL` with a seven-day
- * grace period, and these rows carry a stale non-null `parent_id`.
+ * Read all four tables and work out what the sweep would delete.
+ *
+ * The full project and post id sets are read here, once, so the image decision
+ * can ask "does this row's parent still exist?" without a query per row.
  */
-async function collectTestImages(
+async function collectSweepCandidates(
   client: SupabaseClient,
-  projectIds: string[],
-): Promise<{ id: string; bucket_path: string }[]> {
-  const rows = await selectAll<{ id: string; bucket_path: string; parent_id: string | null }>(
+  operation: string,
+): Promise<SweepCandidates> {
+  const projectRows = await selectAll<{ id: string; title: string }>(client, 'projects', 'id, title', operation);
+  const postRows = await selectAll<{ id: string; title: string }>(client, 'posts', 'id, title', operation);
+  const statRows = await selectAll<{ id: string; category: string; label: string }>(
+    client,
+    'stats',
+    'id, category, label',
+    operation,
+  );
+  const imageRows = await selectAll<ImageRowRef & { id: string }>(
     client,
     'images',
-    'id, bucket_path, parent_id',
-    'collectTestImages',
+    'id, bucket_path, parent_id, parent_type',
+    operation,
   );
-  const parented = new Set(projectIds);
-  return rows
-    .filter((row) => isFixtureImagePath(row.bucket_path) || (row.parent_id !== null && parented.has(row.parent_id)))
-    .map((row) => ({ id: row.id, bucket_path: row.bucket_path }));
+
+  const projectIds = projectRows.filter((row) => isTestTitle(row.title)).map((row) => row.id);
+  const postIds = postRows.filter((row) => isTestTitle(row.title)).map((row) => row.id);
+  const index: ImageParentIndex = {
+    sweptParentIds: new Set([...projectIds, ...postIds]),
+    liveProjectIds: new Set(projectRows.map((row) => row.id)),
+    livePostIds: new Set(postRows.map((row) => row.id)),
+  };
+
+  return {
+    projectIds,
+    postIds,
+    statIds: statRows.filter(isTestStat).map((row) => row.id),
+    images: imageRows
+      .filter((row) => isSweepableImage(row, index))
+      .map((row) => ({ id: row.id, bucket_path: row.bucket_path })),
+  };
 }
 
 /**
@@ -266,44 +231,37 @@ async function removeStorageObjects(client: SupabaseClient, paths: string[]): Pr
  * delete only nulls `projects.image_id` — the image rows survive with a stale
  * `parent_id` and nothing else would ever find them.
  *
+ * Every ceiling is checked before the first delete. A partial sweep that dies
+ * halfway is harder to reason about than one that never started.
+ *
  * @param client Service-role client.
  * @returns Per-table counts of what was removed.
+ * @throws CleanupCeilingError when any candidate set is implausibly large.
  */
 export async function sweepTestArtifacts(client: SupabaseClient): Promise<CleanupReport> {
-  const projectIds = (await findTestProjectIds(client)).map((row) => row.id);
-  const images = await collectTestImages(client, projectIds);
+  const operation = 'sweepTestArtifacts';
+  const candidates = await collectSweepCandidates(client, operation);
 
-  const projects = await deleteByIds(client, 'projects', projectIds, 'sweepTestArtifacts:projects');
-  const storageObjects = await removeStorageObjects(client, images.map((row) => row.bucket_path));
-  const imageRows = await deleteByIds(
+  assertWithinCeiling('projects', candidates.projectIds.length);
+  assertWithinCeiling('posts', candidates.postIds.length);
+  assertWithinCeiling('stats', candidates.statIds.length);
+  assertWithinCeiling('images', candidates.images.length);
+
+  const projects = await deleteByIds(client, 'projects', candidates.projectIds, `${operation}:projects`);
+  const storageObjects = await removeStorageObjects(
+    client,
+    candidates.images.map((row) => row.bucket_path),
+  );
+  const images = await deleteByIds(
     client,
     'images',
-    images.map((row) => row.id),
-    'sweepTestArtifacts:images',
+    candidates.images.map((row) => row.id),
+    `${operation}:images`,
   );
+  const posts = await deleteByIds(client, 'posts', candidates.postIds, `${operation}:posts`);
+  const stats = await deleteByIds(client, 'stats', candidates.statIds, `${operation}:stats`);
 
-  const postRows = await selectAll<{ id: string; title: string }>(client, 'posts', 'id, title', 'sweepTestArtifacts:posts');
-  const posts = await deleteByIds(
-    client,
-    'posts',
-    postRows.filter((row) => isTestTitle(row.title)).map((row) => row.id),
-    'sweepTestArtifacts:posts',
-  );
-
-  const statRows = await selectAll<{ id: string; category: string; label: string }>(
-    client,
-    'stats',
-    'id, category, label',
-    'sweepTestArtifacts:stats',
-  );
-  const stats = await deleteByIds(
-    client,
-    'stats',
-    statRows.filter(isTestStat).map((row) => row.id),
-    'sweepTestArtifacts:stats',
-  );
-
-  return { projects, posts, stats, images: imageRows, storageObjects };
+  return { projects, posts, stats, images, storageObjects };
 }
 
 /**
@@ -311,24 +269,22 @@ export async function sweepTestArtifacts(client: SupabaseClient): Promise<Cleanu
  *
  * The sweep reporting success is not evidence it worked — that is precisely
  * the defect this task exists to fix — so the run is gated on a fresh read.
+ * It re-uses the sweep's own candidate collection: an assertion with a looser
+ * predicate than the sweep would fail the run over rows the sweep is not
+ * allowed to touch.
  *
  * @throws CleanupIncompleteError when anything remains.
  */
 export async function assertNoTestArtifacts(client: SupabaseClient): Promise<void> {
-  const operation = 'assertNoTestArtifacts';
-  const projects = (await findTestProjectIds(client)).length;
-  const posts = (
-    await selectAll<{ title: string }>(client, 'posts', 'title', operation)
-  ).filter((row) => isTestTitle(row.title)).length;
-  const stats = (
-    await selectAll<{ category: string; label: string }>(client, 'stats', 'category, label', operation)
-  ).filter(isTestStat).length;
-  const images = (
-    await selectAll<{ bucket_path: string }>(client, 'images', 'bucket_path', operation)
-  ).filter((row) => isFixtureImagePath(row.bucket_path)).length;
+  const remaining = await collectSweepCandidates(client, 'assertNoTestArtifacts');
+  const survivors = {
+    projects: remaining.projectIds.length,
+    posts: remaining.postIds.length,
+    stats: remaining.statIds.length,
+    images: remaining.images.length,
+  };
 
-  const survivors = { projects, posts, stats, images };
-  if (projects + posts + stats + images > 0) {
+  if (Object.values(survivors).some((count) => count > 0)) {
     throw new CleanupIncompleteError(survivors);
   }
 }

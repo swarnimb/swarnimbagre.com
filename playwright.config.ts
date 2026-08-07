@@ -53,6 +53,16 @@ export default defineConfig({
   globalSetup: './tests/e2e/global-setup.ts',
   globalTeardown: './tests/e2e/global-teardown.ts',
   fullyParallel: true,
+  // One worker, deliberately. All eight spec files share a single `next dev`
+  // server, and `admin-smoke.spec.ts` is one long serial CRUD flow whose steps
+  // carry a 20s budget. Run in parallel, the specs contend for that server and
+  // its Server Action round-trips blow the budget — writes, not compiles, so
+  // route pre-warming does not help. This is not a workaround: the suite has
+  // never been verified green any other way. Session 54's first green run was
+  // `--workers=1`, and so is every green run since. Serial is also FASTER here
+  // (1.7m vs 4.0m measured Session 55) because contention costs more than
+  // concurrency saves.
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: 'list',

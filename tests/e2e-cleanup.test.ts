@@ -2,12 +2,19 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   isTestTitle,
   isFixtureImagePath,
+  isSweepableImage,
   isTestStat,
+  assertWithinCeiling,
   createServiceRoleClient,
+  CleanupCeilingError,
   CleanupEnvError,
   CleanupIncompleteError,
   TEST_TITLE_PREFIXES,
   FIXTURE_IMAGE_FILENAMES,
+  ROWS_PER_RUN,
+  SWEEP_CEILINGS,
+  SWEEP_DEBRIS_RUN_ALLOWANCE,
+  type ImageParentIndex,
 } from '@/tests/e2e/fixtures/cleanup';
 
 /**
@@ -86,6 +93,38 @@ describe('isTestTitle', () => {
     expect(isTestTitle('What T42 taught me')).toBe(false);
   });
 
+  // F-50, THE FIX. The builder is about to add real project rows, and a task
+  // id in a real title is not far-fetched — the whole site is built out of
+  // numbered tasks. Before F-50 this title matched on the prefix alone and an
+  // unattended `npm run test:e2e` would have deleted the row from production.
+  // A prefix is a naming convention; the run-id token is machine-generated.
+  it('rejects a real title that carries a fixture prefix but no run-id token', () => {
+    expect(isTestTitle('T28 Redesign')).toBe(false);
+    expect(isTestTitle('T42 retro')).toBe(false);
+    expect(isTestTitle('T43F rollout notes')).toBe(false);
+  });
+
+  // A version-like number is not a run id. `Date.now()` has been 13 digits
+  // since 2001 and stays that way until 2286, so anything shorter is a human.
+  it('rejects a prefixed title whose t28- number is too short to be a timestamp', () => {
+    expect(isTestTitle('T28 project t28-2026')).toBe(false);
+    expect(isTestTitle('T28 project t28-123456789')).toBe(false);
+    expect(isTestTitle('T28 project t28-1234567890')).toBe(true);
+  });
+
+  // The token requirement must not break self-healing: debris from a run that
+  // crashed months ago still carries that run's token, so it still matches.
+  it('accepts fixture rows left behind by an earlier crashed run', () => {
+    expect(isTestTitle('T28 project t28-1700000000000')).toBe(true);
+    expect(isTestTitle('T43F media project t28-1699999999999')).toBe(true);
+  });
+
+  // The XSS step appends its payload after the run id, so the token is not at
+  // the end of the string. The match is unanchored for exactly this row.
+  it('accepts the xss step title, where the run id sits mid-string', () => {
+    expect(isTestTitle('T28 project t28-1754521234567 <script>alert(1)</script>')).toBe(true);
+  });
+
   it('exposes the prefixes it matches on', () => {
     expect(TEST_TITLE_PREFIXES).toEqual(['T28 ', 'T42 ', 'T43F ']);
   });
@@ -137,6 +176,169 @@ describe('isFixtureImagePath', () => {
   });
 });
 
+describe('isSweepableImage', () => {
+  // Ids stand in for real rows. `TEST_PROJECT_ID` is a fixture project being
+  // deleted in this same pass; `REAL_PROJECT_ID` and `REAL_POST_ID` are the
+  // builder's live content; `DEAD_PROJECT_ID` is a project that no longer
+  // exists, which is what debris from a crashed run points at.
+  const TEST_PROJECT_ID = '11111111-1111-4111-8111-111111111111';
+  const REAL_PROJECT_ID = '22222222-2222-4222-8222-222222222222';
+  const REAL_POST_ID = '33333333-3333-4333-8333-333333333333';
+  const DEAD_PROJECT_ID = '44444444-4444-4444-8444-444444444444';
+
+  const index: ImageParentIndex = {
+    sweptParentIds: new Set([TEST_PROJECT_ID]),
+    liveProjectIds: new Set([TEST_PROJECT_ID, REAL_PROJECT_ID]),
+    livePostIds: new Set([REAL_POST_ID]),
+  };
+
+  /** Bucket path in the CONSTRAINT-07 shape, ending in `_{filename}`. */
+  const pathFor = (parentId: string, filename: string): string =>
+    `images/projects/${parentId}/2f1dad51-9dad-4185-aea3-15885a9bbfd0_${filename}`;
+
+  it('sweeps a fixture upload parented to a fixture project going in this pass', () => {
+    expect(
+      isSweepableImage(
+        {
+          bucket_path: pathFor(TEST_PROJECT_ID, 't28-first.png'),
+          parent_id: TEST_PROJECT_ID,
+          parent_type: 'projects',
+        },
+        index,
+      ),
+    ).toBe(true);
+  });
+
+  // F-50, THE FIX. The builder is about to upload real project images for the
+  // first time. A real file named `t28-first.png` used to be swept on filename
+  // alone; now the parent has to be unreachable, and a live real project is
+  // not. This is the case that made the finding non-theoretical.
+  it('refuses a fixture-looking path whose parent is a live real project', () => {
+    expect(
+      isSweepableImage(
+        {
+          bucket_path: pathFor(REAL_PROJECT_ID, 't28-first.png'),
+          parent_id: REAL_PROJECT_ID,
+          parent_type: 'projects',
+        },
+        index,
+      ),
+    ).toBe(false);
+  });
+
+  // `images.parent_type` is polymorphic over projects and posts, so the live
+  // check has to consult the right table. Checking only projects would treat
+  // every real post image as an orphan and delete it.
+  it('refuses a fixture-looking path whose parent is a live real post', () => {
+    expect(
+      isSweepableImage(
+        {
+          bucket_path: `images/posts/${REAL_POST_ID}/2f1dad51-9dad-4185-aea3-15885a9bbfd0_t43f-single.png`,
+          parent_id: REAL_POST_ID,
+          parent_type: 'posts',
+        },
+        index,
+      ),
+    ).toBe(false);
+  });
+
+  // Self-healing. `images.parent_id` has no FK, so when an earlier run crashed
+  // after its project was deleted the image row survived pointing at nothing.
+  // Nothing else in the codebase can see these rows.
+  it('sweeps a fixture upload whose parent project no longer exists', () => {
+    expect(
+      isSweepableImage(
+        {
+          bucket_path: pathFor(DEAD_PROJECT_ID, 't43f-before.png'),
+          parent_id: DEAD_PROJECT_ID,
+          parent_type: 'projects',
+        },
+        index,
+      ),
+    ).toBe(true);
+  });
+
+  it('sweeps a fixture upload that was already orphaned to a null parent', () => {
+    expect(
+      isSweepableImage(
+        { bucket_path: pathFor(DEAD_PROJECT_ID, 't43f-after.png'), parent_id: null, parent_type: null },
+        index,
+      ),
+    ).toBe(true);
+  });
+
+  // When `parent_type` is null but `parent_id` is not — a shape the app never
+  // writes — both tables are consulted. An unknown parent must not be enough
+  // evidence to delete.
+  it('refuses a row with a null parent_type whose id still exists as a post', () => {
+    expect(
+      isSweepableImage(
+        { bucket_path: pathFor(REAL_POST_ID, 't28-first.png'), parent_id: REAL_POST_ID, parent_type: null },
+        index,
+      ),
+    ).toBe(false);
+  });
+
+  // The filename is still a precondition. Being parented to a fixture project
+  // no longer authorises a delete on its own.
+  it('refuses a non-fixture filename even under a fixture project', () => {
+    expect(
+      isSweepableImage(
+        {
+          bucket_path: pathFor(TEST_PROJECT_ID, 'hero-shot.png'),
+          parent_id: TEST_PROJECT_ID,
+          parent_type: 'projects',
+        },
+        index,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe('sweep ceilings', () => {
+  // The ceiling is a backstop behind the predicates, not a replacement for
+  // them: one mis-titled real project is one extra row and no plausible
+  // ceiling catches it. What it catches is a predicate that has come loose.
+  it('derives each ceiling from one run of rows times the debris allowance', () => {
+    expect(SWEEP_DEBRIS_RUN_ALLOWANCE).toBe(6);
+    expect(ROWS_PER_RUN).toEqual({ projects: 4, posts: 1, stats: 1, images: 4 });
+    expect(SWEEP_CEILINGS).toEqual({ projects: 24, posts: 6, stats: 6, images: 24 });
+  });
+
+  // The worst real pass observed cleared 7 projects and 8 images in one go.
+  // If the ceiling tripped on that, self-healing would be dead on arrival.
+  it('does not throw for the largest sweep actually observed', () => {
+    expect(() => assertWithinCeiling('projects', 7)).not.toThrow();
+    expect(() => assertWithinCeiling('images', 8)).not.toThrow();
+  });
+
+  it('does not throw at exactly the ceiling', () => {
+    expect(() => assertWithinCeiling('projects', SWEEP_CEILINGS.projects)).not.toThrow();
+    expect(() => assertWithinCeiling('images', SWEEP_CEILINGS.images)).not.toThrow();
+    expect(() => assertWithinCeiling('posts', SWEEP_CEILINGS.posts)).not.toThrow();
+    expect(() => assertWithinCeiling('stats', SWEEP_CEILINGS.stats)).not.toThrow();
+  });
+
+  it('throws CleanupCeilingError one row past the ceiling', () => {
+    expect(() => assertWithinCeiling('projects', SWEEP_CEILINGS.projects + 1)).toThrow(
+      CleanupCeilingError,
+    );
+  });
+
+  // The builder has to be able to act on this without reading the source, so
+  // the table, the count and the limit all have to reach the terminal.
+  it('names the table, the candidate count and the ceiling', () => {
+    const error = new CleanupCeilingError('images', 99, 24);
+
+    expect(error.message).toContain('table=images');
+    expect(error.message).toContain('candidates=99');
+    expect(error.message).toContain('ceiling=24');
+    expect(error.table).toBe('images');
+    expect(error.count).toBe(99);
+    expect(error.ceiling).toBe(24);
+  });
+});
+
 describe('isTestStat', () => {
   // Stats rows carry no title, so the sweep matches on the run-scoped category
   // the fixture writes, with the label as a fallback.
@@ -150,6 +352,20 @@ describe('isTestStat', () => {
     for (const row of REAL_STATS) {
       expect(isTestStat(row)).toBe(false);
     }
+  });
+
+  // F-50 applies the same run-id requirement here. `t28-` on its own is a
+  // string the builder could plausibly type into a category field; a category
+  // carrying a 13-digit timestamp is not.
+  it('rejects a category that starts with the fixture prefix but carries no run id', () => {
+    expect(isTestStat({ category: 't28-manual', label: 'hours spent on T28' })).toBe(false);
+  });
+
+  // Stats from a crashed run still carry their own token, so they still go.
+  it('accepts a stats row left behind by an earlier run', () => {
+    expect(isTestStat({ category: 't28-t28-1700000000000', label: 'T28 stat t28-1700000000000' })).toBe(
+      true,
+    );
   });
 });
 
