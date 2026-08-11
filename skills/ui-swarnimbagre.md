@@ -33,6 +33,14 @@ Before executing:
 
 ### Mode A — Public site (`components/public/*` or any non-`/admin` route page under `app/`)
 
+**Gate — does this surface exist in the export? Run this before step 1.**
+
+Before building any public surface, establish whether that surface EXISTS in the design export at `docs/design-source/redesign-2026-08/` (`template.extracted.html` is the readable markup). If it does not, STOP and consult `@designer` before assembling it out of existing classes.
+
+Reusing only pre-existing classes does NOT satisfy CONSTRAINT-05. Class reuse is a claim about the CSS; it says nothing about whether the right pattern was picked, and a surface absent from the export has no right pattern to find by reading it. "Nothing was improvised, every class already exists" is the exact reasoning that shipped T41's 404 and error boundary using home-only `.h-btn` pills (~31.5px mobile) where the export's off-home `.sb-action` (44px, 42px at 640px) was correct — the only escape route on a dead-end page, rendered at the smallest tap target on the site.
+
+**Standing carve-out (from the 2026-08-07 `@designer` consult — do not re-run this consult per surface):** system pages — 404, error boundaries, any future `loading.tsx` or maintenance surface — compose the shared shell (`.container` + `SiteHeader` + `.title-block` / `.page-title` / `.page-lede`) plus `.sb-actions` / `.sb-action`. `h-*` classes are home-only and never leave the home page. A system page built to that recipe needs no consult; anything outside it does.
+
 1. Use the existing ported bundle components under `components/public/*.tsx` (desktop) and `components/public/mobile/*.tsx` (mobile) verbatim. Import and compose; do not duplicate or reimplement.
 2. Style only via the CSS variables defined in `app/styles/colors_and_type.css`. No new tokens. No overrides. No "close enough" substitutes.
 3. NO Tailwind. NO shadcn. NO Aceternity. NO Magic UI. NO library substitutions of any kind. The bundle is the library.
