@@ -434,7 +434,7 @@ const GUARD_CASES: readonly GuardCase[] = [
       projectMediaActions.saveProjectMedia(
         { status: 'idle' },
         buildRowsFormData({ project_id: UUID_A }, [
-          { image_id: UUID_B, image_after_id: null, caption: 'a slide' },
+          { image_id: UUID_B, image_after_id: null },
         ]),
       ),
     okEnvelope: OK,

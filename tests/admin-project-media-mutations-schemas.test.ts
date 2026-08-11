@@ -4,10 +4,7 @@ import {
   projectMediaRowSchema,
   projectMediaSaveSchema,
 } from '@/lib/admin-project-media-mutations-schemas';
-import {
-  PROJECT_MEDIA_CAPTION_MAX_LENGTH,
-  PROJECT_MEDIA_MAX_ROWS,
-} from '@/lib/admin-project-media-mutations-types';
+import { PROJECT_MEDIA_MAX_ROWS } from '@/lib/admin-project-media-mutations-types';
 
 /**
  * T43.E acceptance — pure schema tests for `projectMediaRowSchema` and
@@ -27,20 +24,18 @@ const VALID_UUID_B = '00000000-0000-4000-8000-0000000000bb';
 const VALID_PROJECT_UUID = '00000000-0000-4000-8000-000000000099';
 
 describe('projectMediaRowSchema', () => {
-  it('accepts a minimal valid row (image_after_id + caption null)', () => {
+  it('accepts a minimal valid row (image_after_id null)', () => {
     const input = {
       image_id: VALID_UUID_A,
       image_after_id: null,
-      caption: null,
     };
     expect(() => projectMediaRowSchema.parse(input)).not.toThrow();
   });
 
-  it('accepts a full valid row (before/after pair + caption)', () => {
+  it('accepts a full valid row (before/after pair)', () => {
     const input = {
       image_id: VALID_UUID_A,
       image_after_id: VALID_UUID_B,
-      caption: 'before and after the refactor',
     };
     expect(() => projectMediaRowSchema.parse(input)).not.toThrow();
   });
@@ -49,7 +44,6 @@ describe('projectMediaRowSchema', () => {
     const input = {
       image_id: 'not-a-uuid',
       image_after_id: null,
-      caption: null,
     };
     expect(() => projectMediaRowSchema.parse(input)).toThrow(ZodError);
   });
@@ -58,7 +52,6 @@ describe('projectMediaRowSchema', () => {
     const input = {
       image_id: VALID_UUID_A,
       image_after_id: 'not-a-uuid',
-      caption: null,
     };
     expect(() => projectMediaRowSchema.parse(input)).toThrow(ZodError);
   });
@@ -67,34 +60,14 @@ describe('projectMediaRowSchema', () => {
     const input = {
       image_id: VALID_UUID_A,
       image_after_id: VALID_UUID_A,
-      caption: null,
     };
     expect(() => projectMediaRowSchema.parse(input)).toThrow(ZodError);
-  });
-
-  it(`rejects caption longer than ${PROJECT_MEDIA_CAPTION_MAX_LENGTH} chars`, () => {
-    const input = {
-      image_id: VALID_UUID_A,
-      image_after_id: null,
-      caption: 'x'.repeat(PROJECT_MEDIA_CAPTION_MAX_LENGTH + 1),
-    };
-    expect(() => projectMediaRowSchema.parse(input)).toThrow(ZodError);
-  });
-
-  it(`accepts caption at exactly ${PROJECT_MEDIA_CAPTION_MAX_LENGTH} chars`, () => {
-    const input = {
-      image_id: VALID_UUID_A,
-      image_after_id: null,
-      caption: 'x'.repeat(PROJECT_MEDIA_CAPTION_MAX_LENGTH),
-    };
-    expect(() => projectMediaRowSchema.parse(input)).not.toThrow();
   });
 
   it('rejects extra keys in strict mode (e.g., legacy order_index)', () => {
     const input = {
       image_id: VALID_UUID_A,
       image_after_id: null,
-      caption: null,
       // order_index would have been on the legacy payload before @supabase
       // routed it to with-ordinality derivation in the RPC.
       order_index: 0,
@@ -102,10 +75,21 @@ describe('projectMediaRowSchema', () => {
     expect(() => projectMediaRowSchema.parse(input)).toThrow(ZodError);
   });
 
+  it('rejects a retired caption key in strict mode', () => {
+    // The column still exists on the table but nothing renders it, so the
+    // form stopped sending it. A payload that still carries the key is
+    // hand-crafted and gets the uniform validation rejection.
+    const input = {
+      image_id: VALID_UUID_A,
+      image_after_id: null,
+      caption: 'no longer part of the wire payload',
+    };
+    expect(() => projectMediaRowSchema.parse(input)).toThrow(ZodError);
+  });
+
   it('rejects a row missing image_id', () => {
     const input = {
       image_after_id: null,
-      caption: null,
     };
     expect(() => projectMediaRowSchema.parse(input)).toThrow(ZodError);
   });
@@ -123,10 +107,9 @@ describe('projectMediaSaveSchema', () => {
   it('accepts a payload at the max row count', () => {
     const input = {
       project_id: VALID_PROJECT_UUID,
-      rows: Array.from({ length: PROJECT_MEDIA_MAX_ROWS }, (_, i) => ({
+      rows: Array.from({ length: PROJECT_MEDIA_MAX_ROWS }, () => ({
         image_id: VALID_UUID_A,
         image_after_id: null,
-        caption: `slide ${i}`,
       })),
     };
     expect(() => projectMediaSaveSchema.parse(input)).not.toThrow();
@@ -138,7 +121,6 @@ describe('projectMediaSaveSchema', () => {
       rows: Array.from({ length: PROJECT_MEDIA_MAX_ROWS + 1 }, () => ({
         image_id: VALID_UUID_A,
         image_after_id: null,
-        caption: null,
       })),
     };
     expect(() => projectMediaSaveSchema.parse(input)).toThrow(ZodError);
@@ -165,8 +147,8 @@ describe('projectMediaSaveSchema', () => {
     const input = {
       project_id: VALID_PROJECT_UUID,
       rows: [
-        { image_id: VALID_UUID_A, image_after_id: null, caption: null },
-        { image_id: 'not-a-uuid', image_after_id: null, caption: null },
+        { image_id: VALID_UUID_A, image_after_id: null },
+        { image_id: 'not-a-uuid', image_after_id: null },
       ],
     };
     const result = projectMediaSaveSchema.safeParse(input);

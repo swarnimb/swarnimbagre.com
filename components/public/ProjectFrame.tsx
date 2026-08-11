@@ -23,7 +23,6 @@ type Slide = {
   key: string;
   url: string | null;
   alt: string;
-  caption: string | null;
 };
 
 /**
@@ -38,14 +37,12 @@ export function toSlides(media: PublicProjectMediaItem[]): Slide[] {
       key: `${item.id}-a`,
       url: item.imageUrl,
       alt: item.imageAlt,
-      caption: item.caption,
     });
     if (item.imageAfterUrl) {
       slides.push({
         key: `${item.id}-b`,
         url: item.imageAfterUrl,
         alt: item.imageAfterAlt ?? item.imageAlt,
-        caption: item.caption,
       });
     }
   }

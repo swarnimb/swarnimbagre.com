@@ -427,7 +427,6 @@ const SAMPLE_MEDIA: ProjectMedia = {
   project_id: 'p1',
   image_id: 'img-1',
   image_after_id: null,
-  caption: null,
   order_index: 0,
   created_at: '2026-05-20T00:00:00.000Z',
 };

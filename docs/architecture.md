@@ -149,7 +149,7 @@ Six tables: `projects`, `posts`, `stats`, `images`, `project_media`, `notes`. RL
 | `project_id` | `uuid` | NOT NULL, FK → `projects.id` ON DELETE CASCADE |
 | `image_id` | `uuid` | NOT NULL, FK → `images.id` ON DELETE RESTRICT — the primary image when `image_after_id` is NULL, or the "before" image when `image_after_id` is non-NULL |
 | `image_after_id` | `uuid` | NULL, FK → `images.id` ON DELETE RESTRICT — when non-NULL, this row is a before/after pair; when NULL, the row is a single image |
-| `caption` | `text` | NULL, CHECK `caption is null or char_length(caption) <= 280` — plain text, NOT Markdown (rendered as text content, never `dangerouslySetInnerHTML`; carve-out at PRD §7.2) |
+| `caption` | `text` | NULL, CHECK `caption is null or char_length(caption) <= 280`. **Retained but dead as of 2026-08-07.** The column still exists; nothing projects, validates, collects or renders it. The app-side caption path (admin input, zod schema, the 140/280 thresholds, form state, both column projections, the public/admin types, the `ProjectFrame` slide model) was removed and **no migration was run**. The `010a` `save_project_media` RPC still INSERTs into `caption` and now writes NULL on every save. **Any future migration that drops this column MUST replace `save_project_media` in the same migration** — a bare `drop column caption` leaves the RPC INSERTing into a column that no longer exists and every media save fails at runtime. |
 | `order_index` | `integer` | NOT NULL, CHECK `order_index >= 0` — derived by the `save_project_media` RPC from array position via `WITH ORDINALITY`, not trusted from the client |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` |
 
@@ -165,7 +165,7 @@ Six tables: `projects`, `posts`, `stats`, `images`, `project_media`, `notes`. RL
 
 **RLS (migration 010).** `project_media_admin_all` (authenticated, FOR ALL, USING + WITH CHECK both `true`) and `project_media_public_select` (anon, FOR SELECT, USING `exists (select 1 from public.projects p where p.id = public.project_media.project_id and p.status = 'published')`). The public-read policy re-resolves the parent's published status at query time, so a forged `project_id` cannot read an unpublished project's media via the anon role.
 
-**Atomic save surface.** Writes go through the Server Action `saveProjectMedia(projectId, mediaRows[])` — one Server Action, atomic, via the `save_project_media(uuid, jsonb)` RPC in migration `010a`. The RPC does delete-then-insert-all inside a single Postgres transaction; see §6.6.9 for the conventions it established.
+**Atomic save surface.** Writes go through the Server Action `saveProjectMedia(projectId, mediaRows[])` — one Server Action, atomic, via the `save_project_media(uuid, jsonb)` RPC in migration `010a`. The RPC does delete-then-insert-all inside a single Postgres transaction; see §6.6.9 for the conventions it established. **The RPC body still names `caption` in its INSERT column list** even though the app no longer sends the field — dropping the column without replacing the function in the same migration breaks every media save (see the `caption` row above).
 
 **Storage bucket.** Reuses the existing `images` bucket per §2.4. No new bucket, no new `storage.objects` policy — CONSTRAINT-20 is N/A for migrations 010 / 010a.
 
@@ -493,7 +493,7 @@ The project media carousel lives entirely in `components/public/ProjectFrame.tsx
 
 **Multi-instance safety.** `/projects` renders N project cards on one page, each mounting its own `ProjectFrame`. Every instance keeps its own `current` state, and its accessibility wiring is label-based (`aria-label` referencing the project title) rather than id-based, so there are no cross-instance DOM id collisions. If a future change introduces an id-bearing attribute here, scope it per mount with `React.useId()`; a hardcoded id would collide on the second card and break screen-reader navigation for both.
 
-**Client-component boundary.** Server Components above `ProjectFrame` pass already-resolved data: signed image URLs (TTL 3600s per CONSTRAINT-15), caption text, alt text and order. Nothing above the boundary reaches into the carousel's runtime state.
+**Client-component boundary.** Server Components above `ProjectFrame` pass already-resolved data: signed image URLs (TTL 3600s per CONSTRAINT-15), alt text and order. (Caption text was in this list until 2026-08-07; the caption path is gone — see §2.5.) Nothing above the boundary reaches into the carousel's runtime state.
 
 **Empty state.** A project with zero slides renders a `no preview yet` placeholder. There is no SVG-motif fallback — the motif set was deleted along with `thumb_kind` (§2.1) — so a real screenshot is a hard requirement for any project card that should look finished. See `founder-brief.md` entry 34.
 

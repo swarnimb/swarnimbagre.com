@@ -16,20 +16,24 @@
  */
 
 import { z } from 'zod';
-import {
-  PROJECT_MEDIA_CAPTION_MAX_LENGTH,
-  PROJECT_MEDIA_MAX_ROWS,
-} from './admin-project-media-mutations-types';
+import { PROJECT_MEDIA_MAX_ROWS } from './admin-project-media-mutations-types';
 
-// The row-count + caption-length caps live in the client-safe `-types.ts`
-// module (no `zod` dependency) so the `'use client'` form can import them
-// without that risk. This file consumes them in the schema bounds below.
+// The row-count cap lives in the client-safe `-types.ts` module (no `zod`
+// dependency) so the `'use client'` form can import it without that risk.
+// This file consumes it in the schema bound below.
 
 /**
  * Per-row schema. `order_index` is intentionally absent — migration 010a's
  * `save_project_media` RPC derives it from the array position via
  * `with ordinality`, so the wire payload does not carry it. This eliminates
  * the "two rows with the same `order_index`" failure mode at the source.
+ *
+ * `caption` is also absent. The column survives on the table, but no design
+ * pattern renders a caption (CONSTRAINT-05), so the admin no longer collects
+ * one. `.strict()` means a payload that still carries the key is rejected —
+ * deliberate: the only legitimate caller is the form, which stopped sending
+ * it, so a `caption` key now signals a hand-crafted request. The RPC's
+ * `nullif(r.value->>'caption', '')` resolves to null without it.
  *
  * The before/after distinctness rule (`image_after_id !== image_id`)
  * mirrors the `project_media_before_after_distinct` CHECK in migration 010.
@@ -38,13 +42,6 @@ export const projectMediaRowSchema = z
   .object({
     image_id: z.string().uuid('image_id must be a uuid'),
     image_after_id: z.string().uuid('image_after_id must be a uuid').nullable(),
-    caption: z
-      .string()
-      .max(
-        PROJECT_MEDIA_CAPTION_MAX_LENGTH,
-        `caption must be at most ${PROJECT_MEDIA_CAPTION_MAX_LENGTH} characters`,
-      )
-      .nullable(),
   })
   .strict()
   .refine(

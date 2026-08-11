@@ -2,17 +2,10 @@
 
 import { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import ImageUpload from '@/components/admin/ImageUpload';
-import { PROJECT_MEDIA_CAPTION_MAX_LENGTH } from '@/lib/admin-project-media-mutations-types';
 import type { ProjectMediaRowState } from '@/lib/admin-project-media-form-state';
 import type { ImageRecord } from '@/lib/types';
 import type { AdminMediaPreview } from '@/lib/admin-project-media-preview';
-
-/** Caption length at or above this threshold flips the inline counter into
- *  a soft-warn style. Hard-block is enforced by the textarea's `maxLength`. */
-const CAPTION_SOFT_WARN_THRESHOLD = 140;
 
 /** Sentinel `signedUrl` after a fresh upload — no URL is held in memory;
  *  page reload refetches via the loader. The slot shows a hint instead. */
@@ -21,7 +14,6 @@ const POST_UPLOAD_PREVIEW_SENTINEL = '';
 /** CONSTRAINT-13 voice copy — operator-facing labels. */
 const DRAG_HANDLE_GLYPH = '⠿';
 const DELETE_LABEL = 'Delete';
-const CAPTION_LABEL = 'Caption';
 const POST_UPLOAD_HINT = 'New image saved. Preview refreshes after save.';
 const SINGLE_SLOT_LABEL = 'Image';
 const PAIR_BEFORE_SLOT_LABEL = 'Before image';
@@ -44,7 +36,7 @@ export interface ProjectMediaRowProps {
 
 /**
  * Single media-row UI. Renders one or two `ImageUpload` slots based on
- * `row.kind`, plus a caption textarea + drag handle + delete button.
+ * `row.kind`, plus a drag handle + delete button.
  *
  * Drag-reorder uses HTML5 native DnD per spec (no new dep). Admin is
  * desktop-only for the single operator — touch-DnD is not a target.
@@ -59,9 +51,6 @@ export default function ProjectMediaRow({
   onDragOver,
   onDrop,
 }: ProjectMediaRowProps): React.ReactElement {
-  const captionLength = row.caption?.length ?? 0;
-  const captionWarn = captionLength >= CAPTION_SOFT_WARN_THRESHOLD;
-
   const handleImageUpload = useCallback(
     (image: ImageRecord) => {
       onChange({
@@ -83,10 +72,6 @@ export default function ProjectMediaRow({
     },
     [row, onChange],
   );
-
-  function onCaptionChange(value: string): void {
-    onChange({ ...row, caption: value.length === 0 ? null : value });
-  }
 
   return (
     <div
@@ -122,20 +107,6 @@ export default function ProjectMediaRow({
             onUpload={handleImageAfterUpload}
           />
         ) : null}
-
-        <div className="space-y-2">
-          <Label htmlFor={`caption-${row.uid}`}>{CAPTION_LABEL}</Label>
-          <Textarea
-            id={`caption-${row.uid}`}
-            value={row.caption ?? ''}
-            onChange={(e) => onCaptionChange(e.target.value)}
-            maxLength={PROJECT_MEDIA_CAPTION_MAX_LENGTH}
-            rows={2}
-          />
-          <p className={captionWarn ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>
-            {captionLength}/{PROJECT_MEDIA_CAPTION_MAX_LENGTH}
-          </p>
-        </div>
       </div>
 
       <Button type="button" variant="destructive" onClick={onDelete}>

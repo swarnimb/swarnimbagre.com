@@ -38,7 +38,6 @@ function makeMedia(overrides: Partial<ProjectMedia> = {}): ProjectMedia {
     project_id: PROJECT_ID,
     image_id: IMG_1,
     image_after_id: null,
-    caption: null,
     order_index: 0,
     created_at: '2026-05-20T00:00:00.000Z',
     ...overrides,
@@ -59,9 +58,7 @@ function makeImage(id: string, path: string, alt = 'sample alt text'): ImageReco
 
 describe('loadAdminProjectMedia — happy path', () => {
   it('resolves rows to admin shape with previews for a single-image row', async () => {
-    vi.mocked(getProjectMediaByProjectAdmin).mockResolvedValueOnce([
-      makeMedia({ caption: 'A caption' }),
-    ]);
+    vi.mocked(getProjectMediaByProjectAdmin).mockResolvedValueOnce([makeMedia()]);
     vi.mocked(getImageById).mockResolvedValueOnce(
       makeImage(IMG_1, 'projects/a1/b1.jpg', 'main alt'),
     );
@@ -76,7 +73,6 @@ describe('loadAdminProjectMedia — happy path', () => {
       imagePreview: { signedUrl: 'https://signed.example/b1', altText: 'main alt' },
       image_after_id: null,
       imageAfterPreview: null,
-      caption: 'A caption',
     });
   });
 

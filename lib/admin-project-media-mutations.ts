@@ -43,7 +43,6 @@ const ALLOWED_FIELD_ROOTS: ReadonlySet<ProjectMediaMutationFieldName> = new Set(
   'rows',
   'image_id',
   'image_after_id',
-  'caption',
 ]);
 
 /** Type guard: narrow an unknown root segment into the allowed-fields union. */

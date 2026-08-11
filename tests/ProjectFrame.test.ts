@@ -17,7 +17,6 @@ function mediaItem(overrides: Partial<PublicProjectMediaItem> = {}): PublicProje
     imageAlt: 'slide',
     imageAfterUrl: null,
     imageAfterAlt: null,
-    caption: null,
     orderIndex: 0,
     ...overrides,
   };
@@ -40,15 +39,13 @@ describe('toSlides', () => {
         id: 'pair',
         imageAfterUrl: 'https://example.com/after.jpg',
         imageAfterAlt: 'after',
-        caption: 'the swap',
       }),
     ]);
     expect(slides).toHaveLength(2);
     expect(slides.map((slide) => slide.key)).toEqual(['pair-a', 'pair-b']);
+    expect(slides[0].url).toBe('https://example.com/slide.jpg');
     expect(slides[1].url).toBe('https://example.com/after.jpg');
     expect(slides[1].alt).toBe('after');
-    // Both halves of a pair carry the row's single caption.
-    expect(slides.map((slide) => slide.caption)).toEqual(['the swap', 'the swap']);
   });
 
   it('falls back to the primary alt when the after image has none', () => {

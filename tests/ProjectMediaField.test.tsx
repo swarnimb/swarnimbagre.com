@@ -33,12 +33,11 @@ function nextRowId(): string {
   return `00000000-0000-4000-8000-${String(rowIdCounter).padStart(12, '0')}`;
 }
 
-function loaderRow(image_id: string, caption: string | null, after: string | null = null): AdminProjectMediaRow {
+function loaderRow(image_id: string, after: string | null = null): AdminProjectMediaRow {
   return {
     id: nextRowId(),
     image_id,
     image_after_id: after,
-    caption,
     imagePreview: { signedUrl: `https://example.test/${image_id}.png`, altText: `alt-${image_id}` },
     imageAfterPreview: after
       ? { signedUrl: `https://example.test/${after}.png`, altText: `alt-${after}` }
@@ -49,7 +48,7 @@ function loaderRow(image_id: string, caption: string | null, after: string | nul
 // Reuse the same dummy FK — each row still gets a unique `id` via the
 // counter, so duplicate FKs are fine for over-cap render tests.
 function manyRows(n: number): AdminProjectMediaRow[] {
-  return Array.from({ length: n }, () => loaderRow(TEST_IMAGE_ID_A, null));
+  return Array.from({ length: n }, () => loaderRow(TEST_IMAGE_ID_A));
 }
 
 afterEach(() => {
@@ -63,18 +62,20 @@ describe('ProjectMediaField', () => {
       <ProjectMediaField
         projectId={TEST_PROJECT_ID}
         initialMedia={[
-          loaderRow(TEST_IMAGE_ID_A, 'first'),
-          loaderRow(TEST_IMAGE_ID_B, 'second'),
-          loaderRow(TEST_IMAGE_ID_C, 'third'),
+          loaderRow(TEST_IMAGE_ID_A),
+          loaderRow(TEST_IMAGE_ID_B),
+          loaderRow(TEST_IMAGE_ID_C),
         ]}
         saveAction={vi.fn().mockResolvedValue(OK_STATE)}
       />,
     );
     const items = screen.getAllByRole('listitem');
     expect(items).toHaveLength(3);
-    expect(within(items[0]).getByText('first')).toBeInTheDocument();
-    expect(within(items[1]).getByText('second')).toBeInTheDocument();
-    expect(within(items[2]).getByText('third')).toBeInTheDocument();
+    // A row carries no text of its own, so the preview image's alt is the
+    // per-row identifier — `loaderRow` derives it from the image FK.
+    expect(within(items[0]).getByAltText(`alt-${TEST_IMAGE_ID_A}`)).toBeInTheDocument();
+    expect(within(items[1]).getByAltText(`alt-${TEST_IMAGE_ID_B}`)).toBeInTheDocument();
+    expect(within(items[2]).getByAltText(`alt-${TEST_IMAGE_ID_C}`)).toBeInTheDocument();
   });
 
   it('+ image button appends a single row', () => {
@@ -120,7 +121,7 @@ describe('ProjectMediaField', () => {
     render(
       <ProjectMediaField
         projectId={TEST_PROJECT_ID}
-        initialMedia={[loaderRow(TEST_IMAGE_ID_A, 'one'), loaderRow(TEST_IMAGE_ID_B, 'two')]}
+        initialMedia={[loaderRow(TEST_IMAGE_ID_A), loaderRow(TEST_IMAGE_ID_B)]}
         saveAction={vi.fn().mockResolvedValue(OK_STATE)}
       />,
     );
@@ -151,7 +152,7 @@ describe('ProjectMediaField', () => {
     render(
       <ProjectMediaField
         projectId={TEST_PROJECT_ID}
-        initialMedia={[loaderRow(TEST_IMAGE_ID_A, 'shipped')]}
+        initialMedia={[loaderRow(TEST_IMAGE_ID_A)]}
         saveAction={saveAction}
       />,
     );
@@ -163,11 +164,13 @@ describe('ProjectMediaField', () => {
     const formData = saveAction.mock.calls[0][1] as FormData;
     expect(formData.get('project_id')).toBe(TEST_PROJECT_ID);
     const rows = JSON.parse(formData.get('rows') as string);
-    expect(rows).toEqual([{ image_id: TEST_IMAGE_ID_A, image_after_id: null, caption: 'shipped' }]);
-    // Wire shape must NOT leak local-only form-state fields.
+    expect(rows).toEqual([{ image_id: TEST_IMAGE_ID_A, image_after_id: null }]);
+    // Wire shape must NOT leak local-only form-state fields, nor the
+    // retired `caption` key — the boundary schema is `.strict()`.
     expect(rows[0]).not.toHaveProperty('uid');
     expect(rows[0]).not.toHaveProperty('kind');
     expect(rows[0]).not.toHaveProperty('imagePreview');
+    expect(rows[0]).not.toHaveProperty('caption');
   });
 
   it('toast.success fires once on state.status === ok', async () => {
@@ -175,7 +178,7 @@ describe('ProjectMediaField', () => {
     render(
       <ProjectMediaField
         projectId={TEST_PROJECT_ID}
-        initialMedia={[loaderRow(TEST_IMAGE_ID_A, null)]}
+        initialMedia={[loaderRow(TEST_IMAGE_ID_A)]}
         saveAction={saveAction}
       />,
     );

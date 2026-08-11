@@ -33,7 +33,6 @@ function makeMedia(overrides: Partial<ProjectMedia> = {}): ProjectMedia {
     project_id: 'p1',
     image_id: 'img-1',
     image_after_id: null,
-    caption: null,
     order_index: 0,
     created_at: '2026-05-20T00:00:00.000Z',
     ...overrides,
@@ -60,9 +59,7 @@ describe('loadPublicProjectMedia — happy path', () => {
   });
 
   it('resolves image_id to a signed URL and carries alt text on a single-image row', async () => {
-    vi.mocked(getProjectMediaByProject).mockResolvedValueOnce([
-      makeMedia({ caption: 'A caption' }),
-    ]);
+    vi.mocked(getProjectMediaByProject).mockResolvedValueOnce([makeMedia()]);
     vi.mocked(getImageById).mockResolvedValueOnce(
       makeImage('img-1', 'projects/p1/m1.jpg', 'main alt'),
     );
@@ -77,7 +74,6 @@ describe('loadPublicProjectMedia — happy path', () => {
       imageAlt: 'main alt',
       imageAfterUrl: null,
       imageAfterAlt: null,
-      caption: 'A caption',
       orderIndex: 0,
     });
   });

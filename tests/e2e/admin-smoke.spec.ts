@@ -91,9 +91,11 @@ const T42_TAG_PILLS: readonly string[] = ['Next.js', 'Supabase', 'Postgres'];
 
 /** T43.F media-flow project title — distinct prefix so cleanup can scope by it. */
 const T43F_MEDIA_TITLE = `T43F media project ${RUN_ID}`;
-/** T43.F captions used as stable identifiers for post-reload row assertions. */
-const T43F_CAPTION_SINGLE = `T43F single caption ${RUN_ID}`;
-const T43F_CAPTION_PAIR = `T43F pair caption ${RUN_ID}`;
+/** T43.F image alt texts. A media row carries no text of its own now that
+ *  the caption field is gone, so the alt on the persisted preview image is
+ *  what identifies a row after reload. */
+const T43F_ALT_SINGLE = 'T43F single alt';
+const T43F_ALT_BEFORE = 'T43F before alt';
 
 /**
  * The project form's title input, addressed by id rather than by label.
@@ -846,9 +848,14 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
     // -------------------------------------------------------------------
     // T43.F end-to-end — admin ProjectMediaField round-trip.
     //
-    // Create project → add single + pair row → fill captions + uploads →
-    // drag-reorder (pair above single) → Save media → reload → assert the
-    // reordered captions match by position.
+    // Create project → add single + pair row → fill uploads → drag-reorder
+    // (pair above single) → Save media → reload → assert the reordered rows
+    // match by position.
+    //
+    // Rows are identified by shape and by preview alt text, not by caption:
+    // a pair row owns the `Before image` / `After image` upload slots, a
+    // single row owns `Image`, and after reload each slot renders the alt
+    // text its upload was given.
     //
     // HTML5 native drag-drop note: Playwright's `.dragTo()` simulates mouse
     // events, which do NOT trigger HTML5 DragEvent listeners. The helper
@@ -875,19 +882,18 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await page.getByLabel('Image choose image').setInputFiles({
         name: 't43f-single.png', mimeType: 'image/png', buffer: png,
       });
-      await page.getByLabel('Image alt text').fill('T43F single alt');
+      await page.getByLabel('Image alt text').fill(T43F_ALT_SINGLE);
       await page.getByRole('button', { name: /^upload$/i }).first().click();
       await expect(
         page.getByText(/new image saved\. preview refreshes after save\./i).first(),
       ).toBeVisible({ timeout: SHORT_WAIT_MS });
-      await page.getByLabel(/^caption$/i).first().fill(T43F_CAPTION_SINGLE);
 
       // Row 2 (pair). Two ImageUploads — `Before image` + `After image`.
       await page.getByRole('button', { name: '+ pair' }).click();
       await page.getByLabel('Before image choose image').setInputFiles({
         name: 't43f-before.png', mimeType: 'image/png', buffer: png,
       });
-      await page.getByLabel('Before image alt text').fill('T43F before alt');
+      await page.getByLabel('Before image alt text').fill(T43F_ALT_BEFORE);
       await page.getByRole('button', { name: /^upload$/i }).nth(1).click();
       await expect(
         page.getByText(/new image saved\. preview refreshes after save\./i).nth(1),
@@ -900,8 +906,6 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
       await expect(
         page.getByText(/new image saved\. preview refreshes after save\./i).nth(2),
       ).toBeVisible({ timeout: SHORT_WAIT_MS });
-      // Pair row's caption is the second textarea (row 1 already has one).
-      await page.getByLabel(/^caption$/i).nth(1).fill(T43F_CAPTION_PAIR);
 
       // Drag pair (row 2) above single (row 1) via dispatched DragEvents.
       // Scope to the media `<ol>` by its aria-label — `getByRole('listitem')`
@@ -919,19 +923,28 @@ test.describe('T28 — admin smoke (end-to-end)', () => {
         tgt.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
         src.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer: dt }));
       });
-      // After reorder the pair caption should occupy row 1.
-      await expect(page.getByLabel(/^caption$/i).first()).toHaveValue(T43F_CAPTION_PAIR);
-      await expect(page.getByLabel(/^caption$/i).nth(1)).toHaveValue(T43F_CAPTION_SINGLE);
+      // After reorder the pair row should occupy row 1. `exact: true` on the
+      // single row's label matters — getByLabel matches on substring by
+      // default, so 'Image choose image' would also hit 'Before image
+      // choose image' and blow up on a strict-mode violation.
+      await expect(items.nth(0).getByLabel('Before image choose image')).toHaveCount(1);
+      await expect(items.nth(1).getByLabel('Image choose image', { exact: true })).toHaveCount(1);
 
       // Save media — independent from ProjectForm's Save button.
       await page.getByRole('button', { name: /^save media$/i }).click();
       // Toast text per CONSTRAINT-13 voice copy.
       await expect(page.getByText(/^media saved\.$/i)).toBeVisible({ timeout: SHORT_WAIT_MS });
 
-      // Reload and confirm persistence — pair caption still first, single second.
+      // Reload and confirm persistence — pair row still first, single second.
+      // Post-reload the previews resolve to real signed URLs, so the alt text
+      // each upload was given is now on the page and pins the row identity.
       await page.reload();
-      await expect(page.getByLabel(/^caption$/i).first()).toHaveValue(T43F_CAPTION_PAIR);
-      await expect(page.getByLabel(/^caption$/i).nth(1)).toHaveValue(T43F_CAPTION_SINGLE);
+      const reloaded = page
+        .getByRole('list', { name: /project media rows/i })
+        .getByRole('listitem');
+      await expect(reloaded).toHaveCount(2);
+      await expect(reloaded.nth(0).getByAltText(T43F_ALT_BEFORE)).toHaveCount(1);
+      await expect(reloaded.nth(1).getByAltText(T43F_ALT_SINGLE)).toHaveCount(1);
     });
 
     // -------------------------------------------------------------------

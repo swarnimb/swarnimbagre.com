@@ -155,17 +155,20 @@ export interface ImageRecord {
  *
  * The pair shape (`image_id` + `image_after_id`) holds an optional
  * before/after slide; when `image_after_id` is null the row is a
- * single-image slide. `caption` is plain text only (no markdown — T43
- * Override 2 spec). `order_index` is the carousel order, ASC.
+ * single-image slide. `order_index` is the carousel order, ASC.
  *
- * Snake-case mirror of the DB row, per the file-level convention.
+ * The table still carries a `caption` column (migration 010), deliberately
+ * absent here and from both column projections. The design export has no
+ * caption pattern, so nothing on the public card can render one
+ * (CONSTRAINT-05) — collecting and storing the text was dead weight.
+ *
+ * Snake-case mirror of the projected DB row, per the file-level convention.
  */
 export interface ProjectMedia {
   id: string;
   project_id: string;
   image_id: string;
   image_after_id: string | null;
-  caption: string | null;
   order_index: number;
   created_at: string;
 }
@@ -186,6 +189,5 @@ export interface PublicProjectMediaItem {
   imageAlt: string;
   imageAfterUrl: string | null;
   imageAfterAlt: string | null;
-  caption: string | null;
   orderIndex: number;
 }

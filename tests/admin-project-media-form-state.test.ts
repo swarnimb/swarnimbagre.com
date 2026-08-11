@@ -29,7 +29,6 @@ function completeSingle(overrides: Partial<ProjectMediaRowState> = {}): ProjectM
     imagePreview: null,
     image_after_id: null,
     imageAfterPreview: null,
-    caption: null,
     ...overrides,
   };
 }
@@ -42,12 +41,10 @@ describe('fromLoaderRow', () => {
       imagePreview: null,
       image_after_id: null,
       imageAfterPreview: null,
-      caption: 'hello',
     };
     const row = fromLoaderRow(loaded);
     expect(row.kind).toBe('single');
     expect(row.image_id).toBe(IMAGE_A);
-    expect(row.caption).toBe('hello');
     expect(row.uid).not.toBe('');
   });
 
@@ -58,7 +55,6 @@ describe('fromLoaderRow', () => {
       imagePreview: null,
       image_after_id: IMAGE_B,
       imageAfterPreview: null,
-      caption: null,
     };
     expect(fromLoaderRow(loaded).kind).toBe('pair');
   });
@@ -70,7 +66,6 @@ describe('fromLoaderRow', () => {
       imagePreview: null,
       image_after_id: null,
       imageAfterPreview: null,
-      caption: null,
     };
     expect(fromLoaderRow(loaded).uid).toBe(ROW_ID);
   });
@@ -108,19 +103,16 @@ describe('isRowComplete', () => {
 
 describe('toWirePayload', () => {
   it('maps complete rows to the wire shape, dropping local-only fields', () => {
-    const payload = toWirePayload([completeSingle({ caption: 'a caption' })]);
-    expect(payload).toEqual([
-      { image_id: IMAGE_A, image_after_id: null, caption: 'a caption' },
-    ]);
+    // toEqual is exact — a local-only field (uid, kind, imagePreview) or a
+    // retired one (caption) leaking into the payload fails this. The
+    // boundary schema is `.strict()`, so a leak would reject the save.
+    const payload = toWirePayload([completeSingle()]);
+    expect(payload).toEqual([{ image_id: IMAGE_A, image_after_id: null }]);
   });
 
   it('filters out incomplete rows', () => {
     const rows = [completeSingle(), completeSingle({ uid: 'x', image_id: null })];
     expect(toWirePayload(rows)).toHaveLength(1);
-  });
-
-  it('collapses whitespace-only caption to null', () => {
-    expect(toWirePayload([completeSingle({ caption: '   ' })])[0].caption).toBeNull();
   });
 
   it('forces image_after_id null for single rows', () => {

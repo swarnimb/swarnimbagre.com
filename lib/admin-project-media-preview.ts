@@ -15,8 +15,8 @@ export type AdminMediaPreview = { signedUrl: string; altText: string } | null;
  * Shape passed to `ProjectMediaField` for an existing media row. Mirrors
  * the admin-side projection of `project_media` plus pre-resolved signed
  * URLs for each image FK. The wire payload submitted to `saveProjectMedia`
- * carries only `{ image_id, image_after_id, caption }` per row — preview
- * fields are local-only.
+ * carries only `{ image_id, image_after_id }` per row — preview fields are
+ * local-only.
  */
 export interface AdminProjectMediaRow {
   /** `project_media` row id. Stable identity — the form uses it as the
@@ -32,8 +32,6 @@ export interface AdminProjectMediaRow {
   image_after_id: string | null;
   /** Pre-resolved signed URL + alt for the after image. */
   imageAfterPreview: AdminMediaPreview;
-  /** Caption text. Null when the operator left it empty. */
-  caption: string | null;
 }
 
 /**
@@ -61,7 +59,7 @@ export async function loadAdminProjectMedia(
 
 /**
  * Resolve both image FKs on one row in parallel and package into the admin
- * row shape. Caption + FKs pass through verbatim.
+ * row shape. FKs pass through verbatim.
  */
 async function toAdminRow(row: ProjectMedia): Promise<AdminProjectMediaRow> {
   const [imagePreview, imageAfterPreview] = await Promise.all([
@@ -72,7 +70,6 @@ async function toAdminRow(row: ProjectMedia): Promise<AdminProjectMediaRow> {
     id: row.id,
     image_id: row.image_id,
     image_after_id: row.image_after_id,
-    caption: row.caption,
     imagePreview,
     imageAfterPreview,
   };

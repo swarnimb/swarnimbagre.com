@@ -79,7 +79,7 @@ describe('saveProjectMediaInternal', () => {
     const payload = {
       project_id: VALID_PROJECT_UUID,
       rows: [
-        { image_id: VALID_UUID_A, image_after_id: null, caption: 'slide one' },
+        { image_id: VALID_UUID_A, image_after_id: null },
       ],
     };
     await expect(
@@ -126,7 +126,7 @@ describe('saveProjectMediaInternal', () => {
     const payload = {
       project_id: VALID_PROJECT_UUID,
       rows: [
-        { image_id: 'not-a-uuid', image_after_id: null, caption: null },
+        { image_id: 'not-a-uuid', image_after_id: null },
       ],
     };
     await expect(
@@ -148,7 +148,7 @@ describe('saveProjectMediaInternal', () => {
     const payload = {
       project_id: VALID_PROJECT_UUID,
       rows: [
-        { image_id: VALID_UUID_A, image_after_id: null, caption: null },
+        { image_id: VALID_UUID_A, image_after_id: null },
       ],
     };
     let thrown: unknown;
@@ -177,7 +177,7 @@ describe('saveProjectMedia — F-39 admin session guard', () => {
     fd.set(
       'rows',
       JSON.stringify([
-        { image_id: VALID_UUID_A, image_after_id: null, caption: null },
+        { image_id: VALID_UUID_A, image_after_id: null },
       ]),
     );
     const state = await saveProjectMedia(

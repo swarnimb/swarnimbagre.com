@@ -35,6 +35,7 @@ These are the design as built, not drift. Anything not listed here is bundle-ver
 | Copy is first person throughout, including the home bio, which the export wrote in third person. | `components/public/pages/Home.tsx:101` |
 | Viewport units are `svh`, not `vh` — see below. | `app/styles/public-home.css:34-35`, `app/styles/base.css:13-14` |
 | `/other` carries a `max-height: 600px` release on the `.cpage` height lock. The export has exactly one media query — `max-width: 640px` — and asks no height question at all, so its one-screen Other grid clips with no scroll on any short viewport. | `app/styles/public-other.css:234`; export query at `template.extracted.html:216` |
+| `app/error.tsx` and `app/not-found.tsx` exist. The export has no error state and no 404. Both compose the shared shell plus the export's off-home action pill; `h-*` classes stay home-only. | `app/not-found.tsx`, `app/error.tsx`, `app/styles/public-projects.css:191-227` |
 
 ### Why `svh` (2026-08-04, Session 52)
 
@@ -56,11 +57,9 @@ Both of these were real defects against the export, now fixed. They are recorded
 
 > **Lesson worth keeping, because it will recur: an empty-state fallback can hide an export deviation indefinitely.** The `.ctile` defect shipped through T46 and survived two security audits and a full test suite — not because anyone looked and missed it, but because it was **unreachable**. `stats` and `notes` were both at 0 rows, so `/other` rendered the `.cempty` state and the tile grid never existed in the DOM. The first real content is what surfaced it. Any public surface with an empty-state branch should be treated as **unverified against the export until it has been seen with real rows in it** — passing tests and a clean build say nothing about a branch that never rendered.
 
-### OPEN — `@designer` sign-off pending
+### Project-media captions removed, not deferred (2026-08-07)
 
-`app/error.tsx` and `app/not-found.tsx` shipped at T41 (`b369d47`) as public pages. **The export contains no precedent for either.** They are NOT accepted deviations; sign-off is outstanding and this entry stays until `@designer` rules on them.
-
-Both compose existing public classes only — no new tokens, no new CSS — but they are the first surfaces to reuse `.h-actions` / `.h-btn` off the home page, which is the specific thing needing a ruling.
+The `project_media` `caption` field was removed from the admin input and from the app-side code path this session. The export has no caption pattern at all — its slide model is `label` / `alt` / `key` only (`template.extracted.html:316-320`) — so drawing one would mean inventing a new design, the T46 embla-to-`ProjectFrame` rewrite had already silently dropped the render, and `project_media` holds 0 rows in production, so nothing was lost. The DB column is deliberately left in place (no migration), but re-adding a caption is a new design that goes through `@designer` first; it is not a form field to put back.
 
 ---
 

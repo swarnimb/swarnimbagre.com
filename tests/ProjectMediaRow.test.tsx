@@ -5,9 +5,9 @@ import type { ProjectMediaRowState } from '@/lib/admin-project-media-form-state'
 
 /**
  * T43.F acceptance — UI: `ProjectMediaRow` slot-shape, preview branches,
- * caption length/warn behavior, delete + drag callbacks. The child
- * `ImageUpload` widget has its own dedicated test file — coverage here
- * stays scoped to the row's local behavior.
+ * delete + drag callbacks. The child `ImageUpload` widget has its own
+ * dedicated test file — coverage here stays scoped to the row's local
+ * behavior.
  */
 
 vi.mock('sonner', () => ({
@@ -19,8 +19,6 @@ vi.mock('sonner', () => ({
 
 const TEST_PROJECT_ID = '00000000-0000-4000-8000-000000000a43';
 const TEST_ROW_UID = '00000000-0000-4000-8000-000000000777';
-const CAPTION_MAX = 280;
-const CAPTION_WARN_THRESHOLD = 140;
 
 afterEach(() => {
   cleanup();
@@ -35,7 +33,6 @@ function baseRow(overrides: Partial<ProjectMediaRowState> = {}): ProjectMediaRow
     imagePreview: null,
     image_after_id: null,
     imageAfterPreview: null,
-    caption: null,
     ...overrides,
   };
 }
@@ -112,41 +109,6 @@ describe('ProjectMediaRow — image preview branches', () => {
     const { container } = renderRow({ kind: 'single', imagePreview: null });
     expect(container.querySelector('img')).toBeNull();
     expect(screen.queryByText('New image saved. Preview refreshes after save.')).toBeNull();
-  });
-});
-
-describe('ProjectMediaRow — caption', () => {
-  it('caption textarea reflects row.caption value', () => {
-    renderRow({ caption: 'hello' });
-    const textarea = document.getElementById(`caption-${TEST_ROW_UID}`) as HTMLTextAreaElement;
-    expect(textarea.value).toBe('hello');
-  });
-
-  it('caption counter shows length/max', () => {
-    renderRow({ caption: 'hello' });
-    expect(screen.getByText(`5/${CAPTION_MAX}`)).toBeDefined();
-  });
-
-  it('caption counter soft-warn style at >= 140 chars', () => {
-    const longCaption = 'a'.repeat(150);
-    renderRow({ caption: longCaption });
-    const counter = screen.getByText(`150/${CAPTION_MAX}`);
-    // Soft-warn uses the admin destructive token (CONSTRAINT-16) — the
-    // counter drops the muted style once the threshold is crossed.
-    expect(counter.className).toContain('text-destructive');
-    expect(counter.className).not.toContain('text-muted-foreground');
-    // Sanity check the threshold constant matches what the component uses.
-    expect(longCaption.length).toBeGreaterThanOrEqual(CAPTION_WARN_THRESHOLD);
-  });
-
-  it('caption onChange collapses empty string to null', () => {
-    const onChange = vi.fn();
-    renderRow({ caption: 'x' }, { onChange });
-    const textarea = document.getElementById(`caption-${TEST_ROW_UID}`) as HTMLTextAreaElement;
-    fireEvent.change(textarea, { target: { value: '' } });
-    expect(onChange).toHaveBeenCalledTimes(1);
-    const callArg = onChange.mock.calls[0][0] as ProjectMediaRowState;
-    expect(callArg.caption).toBeNull();
   });
 });
 

@@ -62,12 +62,14 @@ const IMAGE_COLUMNS = 'id, bucket_path, alt_text, parent_id, parent_type, create
 /**
  * Column projection for `project_media` queries (T43.D).
  *
- * Snake-case mirror of the migration 010 row shape. Kept identical to the
- * admin-side projection in `lib/admin-queries-project-media.ts` so a single
+ * Snake-case mirror of the migration 010 row shape MINUS `caption`, which is
+ * deliberately not projected: no design pattern renders it (CONSTRAINT-05).
+ * The column still exists in the table. Kept identical to the admin-side
+ * projection in `lib/admin-queries-project-media.ts` so a single
  * `as ProjectMedia[]` cast on either side is a structural identity.
  */
 const PROJECT_MEDIA_COLUMNS =
-  'id, project_id, image_id, image_after_id, caption, order_index, created_at';
+  'id, project_id, image_id, image_after_id, order_index, created_at';
 
 /**
  * Fetch all published projects, ordered by manual `sort_order` ASC with

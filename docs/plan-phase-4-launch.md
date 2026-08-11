@@ -438,7 +438,7 @@ End state: site is live at `swarnimbagre.com`, monitored, the post-launch checkl
 
 > **Superseded at T46:** `embla-carousel-react` was uninstalled and the carousel hand-rolled in `ProjectFrame.tsx`. The public site is back to zero runtime JS dependencies, so **CONSTRAINT-22 now has no consumers** and Override 2 is retired. The `project_media` table, its RPC and the admin write surface all survive.
 >
-> The rewrite was not behaviour-for-behaviour. Six of T43.G's shipped behaviours did not survive it — captions, keyboard ←/→, the `aria-live` announcement, `prefers-reduced-motion`, `useId`-based `aria-controls` wiring, and no-loop / boundary-disabled arrows. Each is marked `[~]` in T43.G below with the code that proves it. Four of the six are accessibility regressions; none has been re-opened as a task.
+> The rewrite was not behaviour-for-behaviour. Six of T43.G's shipped behaviours did not survive it — captions, keyboard ←/→, the `aria-live` announcement, `prefers-reduced-motion`, `useId`-based `aria-controls` wiring, and no-loop / boundary-disabled arrows. Each is marked `[~]` in T43.G below with the code that proves it. Four of the six are accessibility regressions; none has been re-opened as a task. **Updated 2026-08-07:** the two non-accessibility items are settled rather than outstanding — captions were removed outright (the design export has no caption pattern; `project_media.caption` column retained, no migration run), and wrap-around looping is now the intended behaviour per `docs/prd.md:81`, so no-loop / boundary-disabled arrows is a superseded spec, not a defect. The four accessibility regressions — keyboard ←/→, `aria-live`, `prefers-reduced-motion`, `useId`-based `aria-controls` wiring — still stand.
 
 ---
 
@@ -446,7 +446,7 @@ End state: site is live at `swarnimbagre.com`, monitored, the post-launch checkl
 
 **Acceptance criteria:**
 - [x] Aspect-ratio policy resolved. Default proposal: 16:9 letterbox with `object-fit: contain` over `var(--surface)` background. `@designer` either confirms or specifies an alternative.
-- [x] Caption visual treatment specified: type size token, color token, position (below slide vs overlaid), padding values in px.
+- [~] Caption visual treatment specified: type size token, color token, position (below slide vs overlaid), padding values in px. — **Superseded 2026-08-07:** captions removed; the design export has no caption pattern. `project_media.caption` column retained, no migration run.
 - [x] Compact card-carousel chrome sized: dot size, dot spacing, arrow size, arrow position on `/projects` list cards vs detail-page card. Spec gives px values.
 - [x] Mobile touch-conflict resolution confirmed: embla `dragFree: false` + `direction: 'horizontal'` + `axis: 'x'`; vertical page scroll wins below ~10° touch angle. Pair-row drag-handle priority spec'd.
 - [x] First-class Override 2 boundary defined in draft: which files fall under Override 2.
@@ -494,7 +494,7 @@ End state: site is live at `swarnimbagre.com`, monitored, the post-launch checkl
 **Tests required:**
 - Manual: apply to dev DB, run inserts to confirm RLS + trigger behavior. No Vitest tests for migrations themselves (matches project precedent).
 
-**Depends on:** T43.A (caption hard-cap 280 — PRD-default if no override).
+**Depends on:** T43.A (caption hard-cap 280 — PRD-default if no override). — **Superseded 2026-08-07:** captions removed; the design export has no caption pattern. `project_media.caption` column retained, no migration run, so the CHECK shipped by this migration still stands unused.
 
 **Specialist:** `@supabase` (schema author), `@cto` (review before apply)
 
@@ -545,7 +545,7 @@ Four-file mutation module (`lib/admin-project-media-mutations{,-internal,-types,
 - [~] Voice check on operator-facing labels: "Save", "Saved." — dry, CONSTRAINT-13. — **N/A at T43.E** (no operator-facing labels in this surface); transfers to T43.F.
 
 **Tests required:**
-- [x] `tests/admin-project-media-mutations-schemas.test.ts` → happy path + error cases (caption >280 chars, row count >20, non-UUID image_id, missing image_id) (TS-01).
+- [~] `tests/admin-project-media-mutations-schemas.test.ts` → happy path + error cases (caption >280 chars, row count >20, non-UUID image_id, missing image_id) (TS-01). — **Partly superseded 2026-08-07:** captions removed; the design export has no caption pattern, so the `caption >280 chars` case is gone with the schema field. `project_media.caption` column retained, no migration run. The other three error cases and the happy path still pass.
 - [x] `tests/admin-project-media-mutations.test.ts` → happy path envelope, DB-throw envelope, validation-error envelope (TS-01).
 - [~] Manifest assertion: `tests/server-actions-manifest.test.ts` confirms exactly 13 action IDs post-T43. — verified at 12 at T43.E close (action not yet manifest-reachable); 13 at T43.F close.
 
@@ -563,7 +563,7 @@ Four-file mutation module (`lib/admin-project-media-mutations{,-internal,-types,
 - [x] PRD §3.5 G/W/T all pass in admin smoke:
   - 5 MB cap enforced on every upload (per existing `ImageUpload` precheck).
   - Required `alt_text` enforced per image (single OR pair, both slots).
-  - Caption soft-warning ≥140 chars, hard-block at 280 (server-side via zod, client-side soft-warn via inline counter).
+  - [~] Caption soft-warning ≥140 chars, hard-block at 280 (server-side via zod, client-side soft-warn via inline counter). — **Superseded 2026-08-07:** captions removed; the design export has no caption pattern. The admin input, the zod field and both thresholds are deleted. `project_media.caption` column retained, no migration run.
   - Soft-warning visible at 11+ rows; hard-block save at 21+ rows.
   - Drag-reorder updates visual order; persistence on form Save only (no auto-save).
   - Per-row delete + confirm modal (reuse existing `DeleteConfirmModal`).
@@ -594,10 +594,10 @@ Four-file mutation module (`lib/admin-project-media-mutations{,-internal,-types,
 ### Task T43.G: Public component — `ProjectMediaCarousel` (embla wrapper)
 
 **Acceptance criteria — PRD §2.3a G/W/T:**
-- [~] Multi-slide carousel: dots + arrows + horizontal swipe + keyboard ←/→ all functional. No auto-advance. No loop — `loop: false`; boundary slides disable the corresponding arrow button. — **T46 regression:** `components/public/ProjectFrame.tsx` ships dots, arrows and swipe, but has no keydown handler at all, and `go()` wraps modulo `slides.length`, so the carousel now loops and neither arrow is ever disabled at a boundary.
+- [~] Multi-slide carousel: dots + arrows + horizontal swipe + keyboard ←/→ all functional. No auto-advance. No loop — `loop: false`; boundary slides disable the corresponding arrow button. — **Half superseded, half regression.** *Superseded:* the no-loop / boundary-disabled-arrow clause is no longer the spec — `docs/prd.md:81` is newer and deliberate, and declares wrap-around looping the intended behaviour. `go()` wrapping modulo `slides.length` is correct, not a defect; neither arrow should be disabled at a boundary. *T46 regression:* `components/public/ProjectFrame.tsx` ships dots, arrows and swipe but registers no keydown handler at all, so keyboard ←/→ is genuinely lost.
 - [x] Single-slide carousel: no nav chrome. Renders the slide static. — still true: `ProjectFrame.tsx` gates all chrome behind `multi = slides.length > 1`.
 - [~] Zero-slide carousel: returns `null` (caller renders nothing). — **Changed at T46, deliberately (T46 Q7):** `ProjectFrame.tsx` returns a `.sb-frame` wrapper containing "no preview yet" rather than `null`.
-- [~] Active-slide caption renders below the image in muted meta type when present. — **T46 regression, not an unshipped slot:** `ProjectFrame.tsx` threads `caption` into the slide model (lines 26, 41, 48) but the JSX emits only `<img>` / `<span className="sb-slide-label">`; no caption element is rendered and no caption class exists in `app/styles/public-projects.css`.
+- [~] Active-slide caption renders below the image in muted meta type when present. — **Superseded 2026-08-07:** captions removed; the design export has no caption pattern (its slide model is `alt` + `label` only, `docs/design-source/redesign-2026-08/template.extracted.html:316-320`). The T46 rewrite had already silently dropped the render, and the whole app-side caption path — admin input, zod schema, form state, both column projections, the public/admin types and the `ProjectFrame` slide model — is now deleted. `project_media.caption` column retained, no migration run. Not an accessibility regression and not an unshipped slot.
 - [~] Screen-reader live region announces "Slide N of M, [alt text]" when active slide changes. — **T46 regression:** no `aria-live` region exists anywhere under `app/` or `components/`; slide changes are silent to screen readers.
 - [~] `prefers-reduced-motion: reduce` honored: embla `duration: 0` when the media query matches. — **T46 regression:** `prefers-reduced-motion` appears in no CSS file or component in the repo, so the `.4s cubic-bezier(.4, 0, .2, 1)` `.sb-track` transform runs unconditionally.
 - [~] Pair-row divider drag does NOT advance the carousel — drag within the divider hit area is consumed. — **Moot after T46:** `BeforeAfterMedia.tsx` and its divider were deleted; `toSlides()` flattens a before/after pair into two ordinary slides, so no divider hit area exists.

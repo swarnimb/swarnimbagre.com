@@ -6,11 +6,12 @@ import type { ProjectMedia } from './types';
 
 /**
  * Column projection for `project_media` admin queries. Snake-case mirror of
- * the migration 010 row shape; kept verbatim so `as ProjectMedia[]` is a
- * structural identity, not a coercion.
+ * the migration 010 row shape MINUS `caption` (still a column on the table,
+ * but nothing renders it — CONSTRAINT-05); kept verbatim otherwise so
+ * `as ProjectMedia[]` is a structural identity, not a coercion.
  */
 const PROJECT_MEDIA_COLUMNS =
-  'id, project_id, image_id, image_after_id, caption, order_index, created_at';
+  'id, project_id, image_id, image_after_id, order_index, created_at';
 
 /**
  * Fetch every media row attached to a project, ordered by `order_index` ASC.

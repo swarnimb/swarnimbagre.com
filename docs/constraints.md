@@ -1,11 +1,9 @@
 # Constraints: swarnimbagre.com
 
 **Date seeded:** 2026-05-06 (by `@plan` Phase 4)
-**Last updated:** 2026-08-07 (status notes re-verified against code and live DNS; of the three items flagged `> OPEN`, D-3 and D-11 are resolved by builder decision — D-6 remains open)
+**Last updated:** 2026-08-07 (status notes re-verified against code and live DNS; all three items formerly flagged `> OPEN` are now resolved — D-3 and D-11 by builder decision, D-6 by `@designer` sign-off. No open items remain.)
 
 > Loaded by `@session-start` every session. Active binding decisions only — not history, not options considered. New constraints are added when `@plan`, `@cto`, or the builder makes a binding decision. A constraint is removed only when the decision is explicitly reversed, with the reversal noted in `docs/session-log.md`.
->
-> Lines marked `> OPEN (D-n):` are unresolved questions awaiting the builder. They record a known contradiction so a reader is not misled; they do not change the rule above them.
 
 ---
 
@@ -80,12 +78,11 @@
 - Copy is first person throughout, including the home bio, which the export wrote in third person.
 - The home page root (`.hpage` in `app/styles/public-home.css`) is sized in `svh`, not `vh`. `vh` resolves to the LARGE viewport — the height with the browser's toolbars retracted — so on Chrome for Android/iOS the box was taller than the visible area and `.h-conv`'s `margin: auto 0` centred the conversation inside that oversized box, pushing one end off screen. `svh` is the height guaranteed visible WITH the bars present; `dvh` was rejected because it tracks the bars as they move and would slide the centred content during scroll. **The two `min-height` declarations in `.hpage` are a deliberate fallback pair:** `min-height: 100vh` sits directly above `min-height: 100svh` to serve engines without `svh`. Do not tidy the duplicate away. **The fallback pair propagated to `app/styles/base.css`** (`html, body`, lines 13–14) at `a499372`: leaving the body floor on plain `vh` undid the Home fix, because the floor then sat ~120px taller than Home's own `100svh` box and that gap was dead scrollable space. `app/styles/public-other.css` keeps `.cpage { height: 100vh; overflow: hidden }` at full height, but releases it to `height: auto; overflow: visible` under both `max-width: 640px` and `max-height: 600px` — the latter is what lets `/other` scroll on a phone held sideways.
 - `.cpage` in `app/styles/public-other.css` releases its height lock to `height: auto` under **both** `max-width: 640px` and `@media (max-height: 600px)`. The width release alone left a landscape phone (wider than 640px) locked, so `overflow: hidden` clipped the bottom tile rows with no scroll to recover them — width is the wrong question to ask about a height lock. The row `flex: none` inside that block is load-bearing, not cosmetic: rows divide a fixed height with `flex: 1`, so once the height goes `auto` there is no free space to divide and a `flex-basis: 0` row collapses to nothing.
+- `app/error.tsx` and `app/not-found.tsx` exist. The export ships four pages and neither an error state nor a 404, so both are new compositions. They introduce no new class, token, hex, px or `clamp()`: the shell is `.container` + `SiteHeader` + `.title-block` / `.page-title` / `.page-lede`, and the escape row is the export's off-home action pill (`.sb-actions` / `.sb-action` / `--primary` / `--secondary`, export `:358-367`), not home's `.h-actions` / `.h-btn`. Home's pills stay home-only on purpose: they are the navigation home does not otherwise have (`public-home.css:5-6`), and they carry no `min-height`, which computes to ~31.5px on mobile and is wrong for the one control a dead-end page exists to offer. `.sb-action` is 44px / 42px. One CSS line was added under this sign-off: `cursor: pointer` on `.sb-action` (`app/styles/public-projects.css`), needed because the retry on `error.tsx` is a `<button>` and the export only ever renders that pill as an `<a>`. Standing rule: system pages (404, error, future `loading.tsx`) compose the shared shell plus `.sb-action`; `h-*` classes never leave the home page. Signed off by `@designer`, 2026-08-07 (closes D-6).
 
 > **Lesson worth keeping, because it will recur: an empty-state fallback can hide an export deviation indefinitely.** `.ctile` / `.ttile` shipped missing the export's `justify-content: center` (`template.extracted.html:447` and `:463`), pinning every tile's content to the top of a box several times its own height. It survived T46, two security audits and a full test suite — not because anyone looked and missed it, but because it was **unreachable**: `stats` and `notes` were both at 0 rows, so `/other` rendered the `.cempty` state and the tile grid never existed in the DOM. The first real content is what surfaced it. Treat any public surface with an empty-state branch as **unverified against the export until it has been seen with real rows in it** — passing tests and a clean build say nothing about a branch that never rendered.
 
 **Overrides:** none active. Overrides 1, 2 and 3 were retired with the bundle they amended.
-
-> **OPEN (D-6):** `@designer` sign-off pending on whether `app/error.tsx` and `app/not-found.tsx` (shipped at T41, commit `b369d47`) belong in the recorded-deviations list above. The export has no pattern for either surface. Until that sign-off lands they are NOT accepted deviations — do not add them here.
 
 **Who decided and when:** Kickoff + `@designer`, 2026-05-05. Re-baselined onto the new export at T46, 2026-08-04, after real user feedback that the original design was confusing and disliked.
 
@@ -358,7 +355,7 @@ or a re-evaluation of header uniformity under PKCE.
 | 02 | Single Supabase + Vercel project | No staging environment | `@plan` | 2026-05-06 |
 | 03 | Tailwind scoped to admin only | No Tailwind on public site | `@plan` | 2026-05-06 |
 | 04 | OpenClaw via Edge Function | Shared-secret header only write path | `@plan` | 2026-05-06 |
-| 05 | Public design source verbatim | No library substitutions on public site. Re-baselined onto `docs/design-source/redesign-2026-08/` at T46; Overrides 1/2/3 retired | `@designer` + `@plan`, re-baselined T46 | 2026-05-06 / 2026-08-04 |
+| 05 | Public design source verbatim | No library substitutions on public site. Re-baselined onto `docs/design-source/redesign-2026-08/` at T46; Overrides 1/2/3 retired. **Closed 2026-08-07 (D-6):** `app/error.tsx` + `app/not-found.tsx` are accepted deviations — system pages compose the shared shell plus `.sb-action`; `h-*` classes stay home-only | `@designer` + `@plan`, re-baselined T46, D-6 signed off by `@designer` | 2026-05-06 / 2026-08-04 / 2026-08-07 |
 | 06 | Markdown via marked + DOMPurify | Whitelist enforced; DB stores raw MD | `@plan` | 2026-05-06 |
 | 07 | Image bucket path scheme | Path encodes parent type and id | `@plan` | 2026-05-06 |
 | 08 | RLS default-deny on all tables | Every new table needs explicit policies | `@plan` | 2026-05-06 |

@@ -70,6 +70,11 @@ test.describe('/writing/[slug]', () => {
     const response = await page.goto('/writing/this-slug-does-not-exist');
     expect(response, 'no response for missing slug').not.toBeNull();
     expect(response!.status(), 'expected 404 for missing slug').toBe(404);
-    await expect(page.getByText(/this page could not be found/i)).toBeVisible();
+    // Assert OUR 404, not Next's default. This line asserted the framework
+    // fallback ("This page could not be found") until T41 shipped
+    // `app/not-found.tsx`; the swap went unnoticed because that session never
+    // ran Playwright. A 404 status with the stock page would be a real defect.
+    await expect(page.getByRole('heading', { name: 'Nothing here.' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Back to the start' })).toBeVisible();
   });
 });

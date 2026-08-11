@@ -49,7 +49,6 @@ async function toPublicMediaItem(row: ProjectMedia): Promise<PublicProjectMediaI
     imageAlt: primary.alt ?? '',
     imageAfterUrl: after.url,
     imageAfterAlt: after.alt,
-    caption: row.caption,
     orderIndex: row.order_index,
   };
 }

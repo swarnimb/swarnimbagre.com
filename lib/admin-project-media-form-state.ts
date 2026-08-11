@@ -9,10 +9,10 @@ export type ProjectMediaRowKind = 'single' | 'pair';
 
 /**
  * In-form state shape for one media row. Mirrors the wire payload
- * (`{ image_id, image_after_id, caption }`) plus local-only fields the
- * form needs. `image_id` is `string | null` because new rows start
- * without an uploaded image — the DB column is NOT NULL, so save is
- * blocked until the upload completes.
+ * (`{ image_id, image_after_id }`) plus local-only fields the form needs.
+ * `image_id` is `string | null` because new rows start without an uploaded
+ * image — the DB column is NOT NULL, so save is blocked until the upload
+ * completes.
  */
 export interface ProjectMediaRowState {
   /** Stable React key + DOM-id base. The `project_media` row id for loaded
@@ -24,7 +24,6 @@ export interface ProjectMediaRowState {
   imagePreview: AdminMediaPreview;
   image_after_id: string | null;
   imageAfterPreview: AdminMediaPreview;
-  caption: string | null;
 }
 
 /** Wire-format row sent to `saveProjectMedia`. Order in the array is the
@@ -32,7 +31,6 @@ export interface ProjectMediaRowState {
 export interface ProjectMediaWireRow {
   image_id: string;
   image_after_id: string | null;
-  caption: string | null;
 }
 
 /**
@@ -51,7 +49,6 @@ export function fromLoaderRow(row: AdminProjectMediaRow): ProjectMediaRowState {
     image_after_id: row.image_after_id,
     imagePreview: row.imagePreview,
     imageAfterPreview: row.imageAfterPreview,
-    caption: row.caption,
   };
 }
 
@@ -64,7 +61,6 @@ export function newRow(kind: ProjectMediaRowKind): ProjectMediaRowState {
     image_after_id: null,
     imagePreview: null,
     imageAfterPreview: null,
-    caption: null,
   };
 }
 
@@ -80,13 +76,12 @@ export function isRowComplete(row: ProjectMediaRowState): boolean {
   return true;
 }
 
-/** Convert form rows to the wire payload. Empty/whitespace captions
- *  collapse to null (matches the schema's nullable contract). */
+/** Convert form rows to the wire payload, dropping local-only fields. The
+ *  boundary schema is `.strict()`, so nothing extra may ride along. */
 export function toWirePayload(rows: ProjectMediaRowState[]): ProjectMediaWireRow[] {
   return rows.filter(isRowComplete).map((row) => ({
     image_id: row.image_id as string,
     image_after_id: row.kind === 'pair' ? row.image_after_id : null,
-    caption: row.caption?.trim().length ? row.caption : null,
   }));
 }
 

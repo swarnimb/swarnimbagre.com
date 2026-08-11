@@ -33,8 +33,7 @@ export type ProjectMediaMutationFieldName =
   | 'project_id'
   | 'rows'
   | 'image_id'
-  | 'image_after_id'
-  | 'caption';
+  | 'image_after_id';
 
 /**
  * Discriminated state shape returned by the project_media save Server Action.
@@ -50,7 +49,7 @@ export type ProjectMediaMutationFieldName =
  *   - `'rows'`                  — array-level (max 20 row-cap rejection)
  *   - `'rows.<index>.<field>'`  — per-row field error
  * where `<index>` is the row's 0-based array position and `<field>` is one
- * of `image_id`, `image_after_id`, `caption`. The path roots are constrained
+ * of `image_id`, `image_after_id`. The path roots are constrained
  * to {@link ProjectMediaMutationFieldName} by the wrapper's allowlist; any
  * unexpected root is dropped to avoid shape leakage.
  */
@@ -78,11 +77,3 @@ export const PROJECT_MEDIA_MUTATION_INITIAL_STATE: ProjectMediaMutationState = {
  * bundle — architecture §6.6.6: the form imports from `-types.ts` only.
  */
 export const PROJECT_MEDIA_MAX_ROWS = 20;
-
-/**
- * Maximum caption length per row. Mirrors the `project_media_caption_length`
- * CHECK constraint in migration 010 (`char_length(caption) <= 280`). Lives
- * in this client-safe module for the same reason as
- * {@link PROJECT_MEDIA_MAX_ROWS}.
- */
-export const PROJECT_MEDIA_CAPTION_MAX_LENGTH = 280;
