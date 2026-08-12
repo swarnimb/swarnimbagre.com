@@ -349,6 +349,22 @@ or a re-evaluation of header uniformity under PKCE.
 
 ---
 
+### [CONSTRAINT-25] Lint gates the build
+
+**Decision:** `eslint.config.mjs` exists at the repo root, so `next build` runs a lint pass over `app/`, `components/` and `lib/`. An error-level violation fails the build. **Do not set `eslint.ignoreDuringBuilds` in `next.config`**, and do not silence a rule to get a build green.
+
+**What it means in practice:** Before 2026-08-12 there was no ESLint config in the repo, so `npm run lint` dropped into an interactive setup prompt and `next build` silently skipped its lint pass — lint had been doing nothing at all for the life of the project. Restoring the config restored the build-time gate as a side effect, and that gate is kept deliberately: it is the only automated check standing between a lint-class defect and production, and this project's error-handling rule is that failures are loud.
+
+Two consequences worth knowing. First, `npm test` shells out to `npm run build` (via `tests/server-actions-manifest.test.ts`), so a lint error fails the test suite too — that is one gate, not two. Second, rule suppressions belong in `eslint.config.mjs` with a comment stating why, not as inline `eslint-disable` directives scattered through source. Inline directives outlive the problems they suppress: the two removed at S59 were both dead, and one had drifted three lines away from the violation it was aimed at.
+
+Current deliberate suppressions, each carrying its reason in the config: `next-env.d.ts` and `supabase/functions/**` ignored (generated file; Deno toolchain), `^_` honoured as the unused-binding convention, and `@next/next/no-img-element` off because public images are short-TTL signed Storage URLs per CONSTRAINT-15 that `next/image` cannot optimise.
+
+**Who decided and when:** Builder, 2026-08-12, Session 59, on restoring the lint config at `bc97b8c`.
+
+**What this closes off:** Treating a red build as a lint configuration problem. If lint fails the build, the fix is the code or a justified config-level rule change with a written reason — not disabling the gate. Reversing this means accepting that lint runs only when someone remembers to run it, which is the state that let it rot unnoticed in the first place.
+
+---
+
 ## Summary Table
 
 | # | Decision | Practical impact | Decided by | Date |
@@ -377,3 +393,4 @@ or a re-evaluation of header uniformity under PKCE.
 | 22 | Public-site JS libraries require a named Override + ≤15 KB gzip route-chunk budget | Every public-site npm dep gets a Surface boundary doc and a measured route-chunk delta. **Zero consumers as of T46**: embla was uninstalled and the carousel hand-rolled, so the public site has no runtime JS dependencies | `@cto` S34, codified at T43.I | 2026-05-20 / codified 2026-05-23 / zeroed 2026-08-04 |
 | 23 | Admin Server Actions call `assertAdminSession()` first, inside the `try` | Two-layer authorization (app check + RLS) on all 17 admin mutation actions; `lib/auth.ts` sign-in/sign-out exempt | `@security` audit 24 (F-39) | 2026-08-04 |
 | 24 | Review outputs stay local; design outputs get committed | State-of-the-work docs (security / QA findings, logs, handoff, framework issues) are gitignored; what-to-build docs are committed. The repo is public, so a findings file is an attack guide | Builder (on F-49) | 2026-08-06 |
+| 25 | Lint gates the build | `next build` runs ESLint; an error fails the build, and `npm test` with it. No `eslint.ignoreDuringBuilds`. Suppressions go in `eslint.config.mjs` with a stated reason, not as inline `eslint-disable` directives | Builder | 2026-08-12 |
