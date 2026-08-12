@@ -10,7 +10,7 @@
 
 **Overall:** [x] Complete — all assumptions resolved or accepted
 
-**Last updated:** 2026-05-06
+**Last updated:** 2026-08-11 (audit run 2026-05-06; see "Post-`@plan` Amendments" at the foot of this file)
 
 **Categories audited:** All 5. User behavior surfaced no critical assumptions (Swarnim is the only authenticated user and the builder; using his own admin panel is self-evidently motivated, and public visitors are passive readers with no behavioral dependency). The other four categories produced 6 critical assumptions, listed below.
 
@@ -85,9 +85,11 @@ Five categories are audited by `@assumptions`. Each critical assumption found fa
 
 Builder selected option B. INSERT-only preserves append-only stat semantics, removes the worst-case LLM-hallucination damage scenarios (no edits to historical data, no other tables touched), and keeps OpenClaw's plain-English flexibility. Stat corrections, if ever needed, happen via the admin panel.
 
-**Outcome:** Original Edge Function + shared-secret pattern is **superseded**. OpenClaw uses Supabase REST (PostgREST) with an INSERT-only credential scoped to `stats`. Implementation mechanism is a `@plan`-time choice — see ASSUMPTION-06.
+**Outcome (as recorded 2026-05-06):** Original Edge Function + shared-secret pattern is **superseded**. OpenClaw uses Supabase REST (PostgREST) with an INSERT-only credential scoped to `stats`. Implementation mechanism is a `@plan`-time choice — see ASSUMPTION-06.
 
-**Status:** [x] Resolved
+> **Reversed at `@plan`. What shipped is Option A, not Option B.** `@cto` + `@supabase` + `@security` chose ASSUMPTION-06 option (a) — the thin Edge Function gateway — because the publishable key is public by design and a literal Option B lets anyone holding it insert into `stats`. The shipped path is Edge Function `stats-ingest`: shared-secret header, constant-time comparison, INSERT via service role, no SELECT / UPDATE / DELETE, no other tables. The INSERT-only *semantics* Option B was chosen for are preserved; only the mechanism differs. Binding record: **CONSTRAINT-04** and `docs/architecture.md` §3.3. The kickoff brief's original pattern therefore stands after all.
+
+**Status:** [x] Resolved — outcome later reversed at `@plan`; see the note above.
 
 ---
 
@@ -172,7 +174,9 @@ Sources verified: Supabase API Keys docs; API key migration changelog; Securing 
 
 **Outcome:** Validated. Implementation mechanism deferred to `@plan`.
 
-**Status:** [x] Resolved
+> **Decided at `@plan`: option (a), the Edge Function gateway.** Options (b) and (c) were rejected — (b) because a key that must never reach browser code is one deployment mistake away from being public, (c) because unauthenticated public write invites spam the admin then has to clean up by hand. Shipped as `supabase/functions/stats-ingest/`. Binding record: **CONSTRAINT-04** and `docs/architecture.md` §3.3.
+
+**Status:** [x] Resolved — mechanism settled at `@plan`; see the note above.
 
 ---
 
@@ -182,7 +186,7 @@ Sources verified: Supabase API Keys docs; API key migration changelog; Securing 
 |---|---|---|---|---|
 | 01 | OpenClaw stat payload schema | Data availability | Research | Resolved |
 | 02 | OpenClaw outbound HTTPS | Service capability | Research | Resolved |
-| 03 | OpenClaw access model (kickoff supersession to Option B) | Service capability | Research | Resolved |
+| 03 | OpenClaw access model (Option B chosen here, reversed to the Edge Function gateway at `@plan`) | Service capability | Research | Resolved |
 | 04 | Tailwind/shadcn isolation in Next.js | Technical feasibility | Research | Resolved |
 | 05 | Supabase free tier capacity | Cost | Research | Resolved |
 | 06 | Supabase INSERT-only scoping for OpenClaw | Service capability | Research | Resolved |
@@ -207,5 +211,13 @@ Implementation details deferred from this audit, to be decided at `@plan`:
 
 1. **`stats` table schema** — single typed table vs. KV vs. per-category tables (ASSUMPTION-01). Owner: `@cto` + `@supabase`.
 2. **Tailwind Preflight scoping** — adopt `tailwindcss-scoped-preflight` plugin at the time of Next.js migration (ASSUMPTION-04). Owner: `@cto`.
-3. **OpenClaw access mechanism** — choose between (a) thin Edge Function gateway, (b) OpenClaw-only publishable key, or (c) open-public-write-with-spam-tolerance (ASSUMPTION-06). Owner: `@cto` + `@supabase` + `@security`.
-4. **Kickoff-brief language is partially superseded.** `docs/kickoff-brief.md` describes OpenClaw writing via "Edge Function with shared-secret auth — sole entry point." That pattern is replaced by ASSUMPTION-03 Option B. `@plan` should record the new architecture in `docs/architecture.md` and `docs/constraints.md`. The kickoff brief is a frozen-in-time record and is left as-is.
+3. **OpenClaw access mechanism** — choose between (a) thin Edge Function gateway, (b) OpenClaw-only publishable key, or (c) open-public-write-with-spam-tolerance (ASSUMPTION-06). Owner: `@cto` + `@supabase` + `@security`. **Decided: (a).** See CONSTRAINT-04.
+4. **Kickoff-brief language is partially superseded.** `docs/kickoff-brief.md` describes OpenClaw writing via "Edge Function with shared-secret auth — sole entry point." That pattern is replaced by ASSUMPTION-03 Option B. `@plan` should record the new architecture in `docs/architecture.md` and `docs/constraints.md`. The kickoff brief is a frozen-in-time record and is left as-is. **Outcome: the supersession did not hold.** `@plan` picked the Edge Function gateway, so the kickoff brief's description is accurate again and needed no amendment.
+
+---
+
+## Post-`@plan` Amendments
+
+| Date | What changed |
+|---|---|
+| 2026-08-11 | ASSUMPTION-03 / -06 reconciled against shipped code. Both recorded Option B (direct PostgREST INSERT) as the outcome; `@plan` had reversed that to the Edge Function gateway (CONSTRAINT-04, architecture §3.3) and this file was never updated. The assumptions themselves stay Resolved — the *capability* claims were and are validated. Only the recorded mechanism was wrong. |
