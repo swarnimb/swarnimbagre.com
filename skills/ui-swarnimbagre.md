@@ -1,102 +1,113 @@
 # Skill: @ui-swarnimbagre
 
 ## Purpose
-Routes UI tasks for swarnimbagre.com to the correct mode based on target path. Replaces the standard global `@ui` skill for this project. The public site (`components/public/*` plus the non-`/admin` route pages under `app/`) uses the verbatim design bundle; the admin panel (`/admin/*`) uses shadcn/ui + Tailwind. This skill enforces that split — it does not invent patterns, and it does not let one mode bleed into the other.
+
+Routes UI tasks for swarnimbagre.com to the correct mode and enforces the split between them. The public site uses the design export verbatim; the admin panel uses shadcn/ui + Tailwind. This skill replaces the standard global `@ui`, which defaults to shadcn / Aceternity for everything and would violate the public-site rule on its first invocation.
 
 ---
 
-## Modes
+## This file restates no facts — and that is deliberate
 
-### `@ui-swarnimbagre` (reference / no-arg invocation)
-Reports the two modes (Public, Admin), restates the canonical-source rule from `docs/design-decisions.md`, and asks which mode the task targets. Does nothing else until a target path is confirmed.
+Three earlier versions of this skill went stale the same way: they copied paths, font names, hex values, transition timings and token lists out of the project docs, and every re-baseline silently invalidated the copy with no update trigger. See `docs/framework-issues.md`, the 2026-05-07 entry and its 2026-08-11 third occurrence.
 
-### `@ui-swarnimbagre public [target]`
-Mode A — Public site work. Touches files under `components/public/*` or any non-`/admin` route page under `app/`. Uses the existing component bundle verbatim — no library substitutions, no improvisation.
+So this file carries **no concrete values**. It carries mode routing, the consult gate, and the reporting contract — the things it genuinely owns. Everything else is a pointer.
 
-### `@ui-swarnimbagre admin [target]`
-Mode B — Admin panel work. Touches files under `/admin/*`. Uses shadcn/ui + Tailwind with eight namespaced `--admin-*` tokens (4 brand + 4 semantic) defined in `app/styles/admin.css`. Hex values for 3 of the 4 semantic tokens (`--admin-destructive`, `--admin-border`, `--admin-muted-fg`) match public palette siblings in `app/styles/colors_and_type.css` for brand coherence. See CONSTRAINT-16.
+**Rule for anyone editing this file:** if you are about to write a path, a hex code, a font name, a px value, a breakpoint or a timing function into this skill, you are re-creating the defect. Put the value in its owner document and link to it here instead. A sentence that would need editing after a future project re-baseline is a sentence that should have been a pointer.
 
 ---
 
-## Pre-conditions
+## Fact owners — read these, do not trust this file for values
 
-Before executing:
-1. Read `docs/design-decisions.md` — this is the only valid pattern source for both modes. If it is missing or stale, stop and surface this.
-2. Confirm the target path of the task. If the path is ambiguous (e.g., a shared utility, a top-level layout file), ask the builder which mode applies before writing any code.
-3. Confirm the correct mode (Public vs Admin) explicitly with the builder before writing any code. Do not infer mode silently.
-4. For Public mode: confirm the ported bundle components under `components/public/*.tsx` (desktop) and `components/public/mobile/*.tsx` (mobile), and the CSS variables in `app/styles/colors_and_type.css`, exist and are readable. The canonical design source is the bundle at `docs/design-source/personal-site-web/`. If a needed pattern does not exist in the bundle, stop and recommend `@designer` — do not improvise.
-5. For Admin mode: confirm shadcn/ui + Tailwind are set up in the project. If admin tooling is not yet in place, surface this to `@cto` / `@supabase` as a setup prerequisite before proceeding.
+| What you need | Where it is owned |
+|---|---|
+| Canonical design-source location; the verbatim rule; the recorded deviations; the system-page carve-out; the one-breakpoint rule and its height-guard exception | `docs/constraints.md` → **CONSTRAINT-05** |
+| Deviation table with `file:line` proof-in-code anchors | `docs/design-decisions.md` → *Deliberate deviations from the export* |
+| Agent-facing summary of design rules: fonts, breakpoint, which stylesheet owns what, admin rules, voice | `CLAUDE.md` → *Project-Specific Conventions* |
+| Repo layout; the complete public-component inventory; the single-responsive-tree render architecture | `docs/architecture.md` → **§4.1**, **§4.10** |
+| Admin color tokens — namespacing, the eight values, declaration site, and the standing rule that they are admin-owned and must not be resynced to the public palette | `docs/constraints.md` → **CONSTRAINT-16** (mechanics in `docs/architecture.md` **§4.2**) |
+| Tailwind scoping / isolation between admin and public bundles | `docs/constraints.md` → **CONSTRAINT-03**; `docs/architecture.md` **§4.2** |
+| Voice, including the em-dash and assistive-technology sub-rules | `docs/constraints.md` → **CONSTRAINT-13** |
+| Adding a JS library to the public site — Override requirement and gzip budget | `docs/constraints.md` → **CONSTRAINT-22** |
+| Anti-patterns to enforce (public) and anti-patterns relaxed (admin) | `docs/design-decisions.md` → *What to Avoid*, *Admin Panel* |
 
----
-
-## Process
-
-### Mode A — Public site (`components/public/*` or any non-`/admin` route page under `app/`)
-
-**Gate — does this surface exist in the export? Run this before step 1.**
-
-Before building any public surface, establish whether that surface EXISTS in the design export at `docs/design-source/redesign-2026-08/` (`template.extracted.html` is the readable markup). If it does not, STOP and consult `@designer` before assembling it out of existing classes.
-
-Reusing only pre-existing classes does NOT satisfy CONSTRAINT-05. Class reuse is a claim about the CSS; it says nothing about whether the right pattern was picked, and a surface absent from the export has no right pattern to find by reading it. "Nothing was improvised, every class already exists" is the exact reasoning that shipped T41's 404 and error boundary using home-only `.h-btn` pills (~31.5px mobile) where the export's off-home `.sb-action` (44px, 42px at 640px) was correct — the only escape route on a dead-end page, rendered at the smallest tap target on the site.
-
-**Standing carve-out (from the 2026-08-07 `@designer` consult — do not re-run this consult per surface):** system pages — 404, error boundaries, any future `loading.tsx` or maintenance surface — compose the shared shell (`.container` + `SiteHeader` + `.title-block` / `.page-title` / `.page-lede`) plus `.sb-actions` / `.sb-action`. `h-*` classes are home-only and never leave the home page. A system page built to that recipe needs no consult; anything outside it does.
-
-1. Use the existing ported bundle components under `components/public/*.tsx` (desktop) and `components/public/mobile/*.tsx` (mobile) verbatim. Import and compose; do not duplicate or reimplement.
-2. Style only via the CSS variables defined in `app/styles/colors_and_type.css`. No new tokens. No overrides. No "close enough" substitutes.
-3. NO Tailwind. NO shadcn. NO Aceternity. NO Magic UI. NO library substitutions of any kind. The bundle is the library.
-4. New public components are added as their own `.tsx` files under `components/public/` (desktop) or `components/public/mobile/` (mobile) — one component per file, matching the existing post-Next.js-migration structure. Do not replace or rewrite the existing ported components.
-5. Match the bundle exactly: same hex codes, same px values, same font weights (Fraunces / Inter / JetBrains Mono only), same spacing tokens, same animation timing (220ms `cubic-bezier(.2, .7, .2, 1)`). "Similar-looking" is not acceptable.
-6. Enforce the bundle's anti-patterns: no rounded pill cards (max 12px on mobile section buttons, 4px or 0 elsewhere), no shadows, no SaaS phrases, no emoji, no logo brands, no external images, no external fonts beyond the three already used, no page-load animations, no scroll-triggered animations, no opacity-based hover states, no deep-shadow buttons, no standard form chrome, no background gradients (except inside `DemoLoop` SVG scenes), no nested anchors, no blue.
-7. If a needed pattern does not exist in the bundle: STOP. Do not improvise. Recommend `@designer` consult before continuing.
-
-### Mode B — Admin (`/admin/*`)
-
-1. Use shadcn/ui components and Tailwind for all layout, forms, tables, modals, dropdowns, file upload UIs, and any other CRUD chrome. Use shadcn defaults — do not customize back toward the public-site aesthetic.
-2. Borrow ONLY these four color tokens from `app/styles/colors_and_type.css` (apply via Tailwind theme config or CSS custom properties):
-   - Background: `--bg` (#1C1712)
-   - Surface: `--surface` (#252018)
-   - Body text: `--fg` (#E8E0D0)
-   - Accent / primary action: `--accent` (#C9A84C)
-3. Use shadcn defaults for everything else: typography (Inter or system font — NOT Fraunces, NOT JetBrains Mono), spacing, component shapes, focus rings, form chrome.
-4. Anti-patterns relaxed for admin (permitted): rounded corners (typically 6–8px shadcn defaults), subtle shadows on modals/dropdowns/popovers, default focus rings, shadcn-styled inputs / selects / checkboxes / radios, toasts via shadcn's `sonner` for save confirmations and errors.
-5. Anti-patterns still enforced in admin: no SaaS phrases ("AI-powered", "next-gen", "seamless", "powerful", etc.) — voice discipline applies even in single-user admin; no emoji in admin UI labels (typographic symbols if any decoration is needed, but admin generally needs none).
-6. Style isolation: admin Tailwind / shadcn styles must not bleed into the public site bundle. Confirm the build setup keeps these scoped (separate Tailwind content paths, or Tailwind loaded only in the admin route layout post-Next.js migration). If isolation is not yet configured, surface to `@cto` before proceeding.
+If any of the above is missing, contradicts another, or reads as stale, **stop and surface it**. Do not resolve the contradiction by picking one.
 
 ---
 
-## Approval Before Writing
+## Mode routing
 
-For both modes: present the planned approach (which components used or extended, which tokens applied, which files touched) before writing any code. Wait for explicit builder approval. If the builder requests changes, revise and re-present. Never write a file without confirmation.
+This is the skill's own decision, and the only thing it decides.
 
----
+- **No argument** — report that two modes exist, cite CONSTRAINT-05 and CONSTRAINT-16 as their respective rule sets, ask which the task targets. Do nothing else.
+- **Mode A — public.** Any surface a visitor sees: public components, public route pages, public stylesheets.
+- **Mode B — admin.** Anything under the admin route group.
 
-## Output Format
-
-- Public mode: edits land in `components/public/*.tsx` (desktop components), `components/public/mobile/*.tsx` (mobile components), `app/*/page.tsx` (public route pages), and `app/styles/colors_and_type.css` (CSS variables). Each new component is its own `.tsx` file under `components/public/`.
-- Admin mode: edits land in `app/(admin)/*/page.tsx` (admin route pages) and `components/admin/*.tsx` (admin components). Tailwind config and shadcn component installs go in their conventional locations; admin styles live in `app/styles/admin.css`.
-
-Every output starts with: which mode applies, which files will be touched, and which tokens or components will be reused.
+Determine mode from the target path against `docs/architecture.md` §4.1. If the path is ambiguous — a shared layout, a shared utility, a file that feeds both trees — **ask the builder**. Never infer mode silently, and never write to both trees in one pass without saying so first.
 
 ---
 
-## When To Invoke
+## Mode A — public site
 
-- Any UI task targeting the public site (any of the 4 pages: Home, Projects, Writing, Other; either desktop or mobile entry point)
-- Any UI task targeting the admin panel (`/admin/*` routes — CRUD forms, tables, file upload UIs, auth screens)
-- When in doubt whether a UI task is public or admin — invoke this skill first; it will ask which mode and route correctly
+### Gate: does this surface exist in the export? Run this before anything else.
+
+Establish whether the surface you are about to build **exists in the design export at all** (the canonical location and its readable-markup file are named in CONSTRAINT-05). If it does not, **STOP and consult `@designer`** before assembling it out of existing classes.
+
+Reusing only pre-existing classes does **not** satisfy CONSTRAINT-05. Class reuse is a claim about the CSS; it says nothing about whether the right pattern was chosen, and a surface absent from the export has no right pattern to find by reading it. *"Nothing was improvised, every class already exists"* is the exact reasoning that shipped the 404 and error boundary using home-only action pills where the export's off-home equivalent — the larger tap target — was correct. On a dead-end page that action row is the only escape route, and it rendered at the smallest tap size on the site.
+
+**Standing carve-out:** system pages have a signed-off recipe and do **not** need a per-surface consult. The recipe is recorded in CONSTRAINT-05 (see the `app/error.tsx` / `app/not-found.tsx` deviation bullet). Build to that recipe and proceed; anything outside it needs the consult.
+
+### Then
+
+1. **Reuse before you add.** Compose the existing public components (inventory: `docs/architecture.md` §4.10). Do not duplicate, reimplement or fork them. There is one responsive tree — no device fork, no second component set.
+2. **Style only through the existing tokens and component classes** (which file owns which: `CLAUDE.md`, *Design — canonical source rule*). No new tokens, no overrides, no "close enough" substitutes.
+3. **Copy rules property-by-property, not by eye.** When you reproduce a rule from the export, diff your declaration list against the export's declaration list one property at a time, and cite the export line number in a comment. A single dropped declaration inside an otherwise faithful rule is the documented failure mode here, and it survives review, tests and a clean build.
+4. **A branch that never rendered is unverified.** Any surface with an empty-state fallback has not been checked against the export until it has been rendered with real rows. Green tests do not cover a branch that did not enter the DOM.
+5. **No Tailwind, no shadcn, no component library, no substitutions.** The export is the library. Adding any runtime JS dependency requires CONSTRAINT-22's Override and budget, not this skill's permission.
+6. **Enforce the public anti-patterns** listed in `docs/design-decisions.md` → *What to Avoid*, and the voice rules in CONSTRAINT-13 — including the assistive-technology sub-rule, which exempts screen-reader-only strings from the terseness half while keeping every other prohibition.
+7. **If a needed pattern is not in the export: STOP.** Do not improvise. Consult `@designer`.
 
 ---
 
-## When Not To Invoke
+## Mode B — admin panel
 
-- Backend / database / RLS / Edge Function work — use `@supabase`
-- Visual design decisions for the public site — those are locked in `docs/design-decisions.md` and the source bundle; do not seek inspiration elsewhere
-- Visual design decisions for the admin panel — defer to shadcn defaults; do not custom-design admin chrome in the public-site aesthetic
-- Content / copy / voice — use `@content-writer`
-- The standard global `@ui` skill — do not invoke; this project's `@ui-swarnimbagre` replaces it (standard `@ui` defaults to shadcn/Aceternity for everything, which violates the public-site bundle rule)
+1. **Use shadcn/ui + Tailwind defaults** for all CRUD chrome — layout, forms, tables, modals, dropdowns, file upload, toasts. Do not customize back toward the public-site aesthetic.
+2. **Use the admin tokens as defined in CONSTRAINT-16.** They are admin-owned constants. They mirror nothing on the public site and must never be "resynced" to it.
+3. **Use shadcn typography defaults.** The public site's signature fonts do not appear in admin — using them dilutes the public site's identity. The current font list is in `CLAUDE.md`; do not hardcode it here or there.
+4. **Relaxed in admin:** rounded corners, subtle shadows, default focus rings, standard form chrome. See `docs/design-decisions.md` → *Admin Panel*.
+5. **Still enforced in admin:** CONSTRAINT-13 in full. Voice discipline does not stop at the login screen.
+6. **Style isolation is a hard requirement.** Admin Tailwind must not reach the public bundle. The mechanism is CONSTRAINT-03 / architecture §4.2 — verify it still holds rather than assuming it; if isolation looks broken, surface to `@cto` before proceeding.
 
 ---
 
-## Closing
+## Approval before writing
 
-After execution, report: which mode was used, which files were touched, which existing components were reused vs extended, and confirmation that the relevant anti-patterns were enforced (public mode) or that shadcn defaults were used without drift back toward the public aesthetic (admin mode). Note any patterns that did not exist in the bundle and were escalated to `@designer`.
+Both modes: present the plan before writing any code — which mode applies, which existing components are being reused versus extended, which files will be touched, and (Mode A) which export lines the work is being matched against. Wait for explicit builder approval. Revise and re-present on request. Never write a file without confirmation.
+
+---
+
+## Output format
+
+Every response opens with: **mode**, **files to be touched**, **what is being reused**.
+
+Where edits land is defined by the repo layout in `docs/architecture.md` §4.1 — read it rather than assuming a path. If the work needs a file in a location §4.1 does not describe, that is a layout change, not a UI task: surface it before writing.
+
+---
+
+## When to invoke
+
+- Any UI task on any public page.
+- Any UI task in the admin panel.
+- Any UI task where you are unsure which of the two it is — this skill routes it.
+
+## When not to invoke
+
+- Backend, database, RLS or Edge Function work — `@supabase`.
+- Choosing a new visual pattern — that is `@designer`, reached through the Mode A gate above, not a decision this skill makes.
+- Copy and voice — `@content-writer`, bound by CONSTRAINT-13.
+- The global `@ui` — never, in this project.
+
+---
+
+## Closing report
+
+After execution, report: mode used; files touched; components reused versus extended; for Mode A, the export lines each copied rule was diffed against, and whether any surface was escalated to `@designer`; for Mode B, confirmation that shadcn defaults were used without drift toward the public aesthetic.
