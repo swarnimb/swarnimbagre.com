@@ -57,6 +57,7 @@ Entries are listed in decision order. The `#` column is a stable ID, not a sort 
 | 39 | The e2e suite runs one file at a time (T47) | [§4.7](architecture.md#47-test-infrastructure-node_env-gated-dev-only-routes) + `playwright.config.ts` |
 | 40 | Discoverability and public-route resilience (T41) | `app/robots.ts` + `app/sitemap.ts` + `app/opengraph-image.tsx` + `app/icon.svg` + `app/error.tsx` + `app/not-found.tsx` + `app/layout.tsx` |
 | 41 | The way back into a locked-out admin is a service-role script (NB-16) | [`auth-flow.md`](auth-flow.md) §5 + `scripts/recover-admin-session.ts` + CONSTRAINT-09 |
+| 42 | The dry voice stops at what people can see | [`architecture.md`](architecture.md) §4.9 + CONSTRAINT-13 |
 
 ---
 
@@ -784,6 +785,25 @@ The reason to fix a zero-exposure finding is that the function runs with elevate
 - **Open for you:** CONSTRAINT-09 still describes the lockout fallback as manual session invalidation in the Supabase dashboard, which is now narrower than what §5 documents. It was left untouched because it is a binding constraint and yours to amend.
 
 **What this closes off:** Dashboard password recovery as a fallback of any kind, for as long as CONSTRAINT-09 keeps the site magic-link-only. Recovery now depends on the service-role key being available locally, which makes that key load-bearing for a second reason beyond the e2e suite (#38). The mechanism is not new — it is the same server-side minting the Playwright fixture has used since T19.2 (#43).
+
+---
+
+## 42. The dry voice stops at what people can see
+
+**Date:** 2026-08-11
+**Architecture link:** [`architecture.md`](architecture.md) §4.9 + CONSTRAINT-13 assistive-technology sub-rule
+
+**Decided:** Text that exists only for screen readers — the arrow and dot labels on the project carousel, and the new announcement that says which image just arrived — is exempt from the terse half of the voice rule. It has to be unambiguous first. The shipped wording (`Previous image of {title}`, `Image N of M: {alt}`) stands; the `Slide 1` phrasing specified back in May is retired rather than restored.
+
+**What this means for your product:** Your voice rule exists to shape what a visitor reads on screen. These strings are never on screen. Several project carousels stack down the `/projects` page, and a blind visitor hearing only "Slide 1" has no idea which project they are paging through — the terseness was buying a style nobody can perceive at the cost of the one job those strings have. Nothing visible changed: the arrows are still bare `‹` and `›` glyphs, and the no-emoji and no-em-dash bans still apply to these strings. The same pass added the announcement itself and made the slide stop gliding for anyone whose device is set to reduce motion.
+
+**Check before approving:**
+- Two of the five regressions found in this area were **declined, not deferred**: keyboard ←/→ never came back, and the dots are still not programmatically wired to the image strip. Both are recorded at their plan lines with explicit do-not-re-raise notes, because a bare superseded marker reads as unfinished work to the next session. If a future audit flags either, the answer is already on file.
+- The declined keyboard handler is the one worth revisiting if the site ever gets meaningful desktop traffic from keyboard-only users. Click, tap and swipe all work, so nobody is blocked today.
+- The announcement wording is duplicated across three call sites in `ProjectFrame.tsx` — the two arrows and the live region. Change one, change all three, or a screen reader hears two vocabularies for the same widget.
+- Not verified with a real screen reader. The behaviour is asserted by two render tests and by the markup being the standard pattern, which is weaker evidence than someone actually listening to it.
+
+**What this closes off:** Applying voice discipline uniformly across every string in the codebase. There are now two tiers — what is seen, and what is only heard — and future copy work has to know which tier it is editing. Reversing means rewriting the three carousel labels and accepting that a blind visitor cannot tell your project carousels apart.
 
 ---
 
