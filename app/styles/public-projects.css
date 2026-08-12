@@ -44,6 +44,21 @@
   transition: transform var(--dur-carousel) var(--ease-carousel);
 }
 
+/*
+   The track's 0.4s glide is the only real travel on the public site, so it is
+   the only thing the reduce-motion setting needs to switch off. Paging still
+   works; the next slide simply arrives instead of sliding in. The hover fades
+   elsewhere are colour and opacity at 0.18s and stay as drawn.
+
+   Not a second breakpoint under CONSTRAINT-05 — that rule governs width
+   queries, and this asks about the viewer, not the viewport.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .sb-track {
+    transition: none;
+  }
+}
+
 .sb-slide {
   flex: 0 0 100%;
   width: 100%;
@@ -80,6 +95,24 @@
   font: var(--meta);
   letter-spacing: var(--ls-tag);
   color: var(--fg-muted);
+}
+
+/*
+   Screen-reader-only announcement region for the carousel. It has no design
+   in the export because it is never seen — it is removed from the visual
+   layout while staying in the accessibility tree, which `display: none` and
+   `visibility: hidden` would not do.
+*/
+.sb-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .sb-arrow {

@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { toSlides } from '@/components/public/ProjectFrame';
+import { describe, it, expect, afterEach } from 'vitest';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { ProjectFrame, toSlides } from '@/components/public/ProjectFrame';
 import type { PublicProjectMediaItem } from '@/lib/types';
 
 /**
@@ -7,7 +8,15 @@ import type { PublicProjectMediaItem } from '@/lib/types';
  * renders. A row carrying a before/after pair is two things a viewer can page
  * through, so it has to count as two slides; the counter and dots read off
  * this list.
+ *
+ * The second block covers the live region added for the T46 accessibility
+ * regression: paging the track moves no focus, so without it a screen reader
+ * is told nothing when the image changes.
  */
+
+afterEach(() => {
+  cleanup();
+});
 
 /** Build a render-ready media item with sensible defaults for tests. */
 function mediaItem(overrides: Partial<PublicProjectMediaItem> = {}): PublicProjectMediaItem {
@@ -62,5 +71,37 @@ describe('toSlides', () => {
 
   it('returns an empty list for a project with no media rows', () => {
     expect(toSlides([])).toEqual([]);
+  });
+});
+
+describe('ProjectFrame live region', () => {
+  const pair = [
+    mediaItem({
+      id: 'pair',
+      imageAlt: 'the list view',
+      imageAfterUrl: 'https://example.com/after.jpg',
+      imageAfterAlt: 'the same view rebuilt',
+    }),
+  ];
+
+  it('announces the active slide and updates when the viewer pages on', () => {
+    render(<ProjectFrame media={pair} title="Thing" />);
+
+    const live = screen.getByText(/^Image 1 of 2:/);
+    expect(live).toHaveAttribute('aria-live', 'polite');
+    expect(live).toHaveAttribute('aria-atomic', 'true');
+    expect(live.textContent).toBe('Image 1 of 2: the list view');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next image of Thing' }));
+
+    expect(screen.getByText(/^Image 2 of 2:/).textContent).toBe(
+      'Image 2 of 2: the same view rebuilt',
+    );
+  });
+
+  it('renders no live region when there is nothing to page through', () => {
+    render(<ProjectFrame media={[mediaItem({ imageAlt: 'only one' })]} title="Thing" />);
+
+    expect(screen.queryByText(/^Image \d+ of/)).toBeNull();
   });
 });

@@ -115,6 +115,18 @@ export function ProjectFrame({
             {current + 1} / {slides.length}
           </span>
 
+          {/*
+            The counter above is the sighted viewer's position indicator. A
+            screen reader gets nothing from it, because paging the track moves
+            no focus — so this off-screen region carries the same fact plus the
+            alt text of the slide that just arrived, and the reader announces
+            it on change. Wording tracks the arrow and dot labels ("image",
+            not "slide"); keep the three in step if that phrasing is revisited.
+          */}
+          <span className="sb-live" aria-live="polite" aria-atomic="true">
+            {`Image ${current + 1} of ${slides.length}: ${slides[current].alt}`}
+          </span>
+
           <button
             type="button"
             className="sb-arrow sb-arrow--prev"
