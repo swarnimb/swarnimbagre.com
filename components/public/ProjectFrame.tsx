@@ -98,9 +98,8 @@ export function ProjectFrame({
         {slides.map((slide) => (
           <div className="sb-slide" key={slide.key}>
             {slide.url ? (
-              // eslint-disable-next-line @next/next/no-img-element -- Storage
-              // URLs are signed and short-lived, so next/image's optimizer
-              // cannot cache them usefully.
+              // Storage URLs are signed and short-lived, so next/image's
+              // optimizer cannot cache them usefully.
               <img src={slide.url} alt={slide.alt} />
             ) : (
               <span className="sb-slide-label">{slide.alt}</span>

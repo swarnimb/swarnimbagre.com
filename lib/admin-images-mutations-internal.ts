@@ -151,7 +151,6 @@ export function sanitizeFilename(raw: string): string {
   // Then trim leading/trailing separators.
   const sanitiseSegment = (s: string): string =>
     s
-      // eslint-disable-next-line no-control-regex
       .replace(/[\x00-\x1f\x7f/\\]/g, '_')
       .replace(/[^A-Za-z0-9._-]/g, '_')
       .replace(/^[._-]+|[._-]+$/g, '');
