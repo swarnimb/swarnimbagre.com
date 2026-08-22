@@ -1,7 +1,7 @@
 # Plan Index: swarnimbagre.com
 
 **Date:** 2026-05-06 — **last updated 2026-08-07.**
-**Total tasks:** 50 across 4 phases — T1–T47, plus T10.5 (testing infrastructure, inserted 2026-05-07) and T19.1 + T19.2 (auth hardening, inserted 2026-05-12).
+**Total tasks:** 51 across 4 phases — T1–T48, plus T10.5 (testing infrastructure, inserted 2026-05-07) and T19.1 + T19.2 (auth hardening, inserted 2026-05-12).
 **Entry point for `@session-start`** — load this file first. It states whether any phase is active before you open a phase file.
 
 ---
@@ -13,7 +13,7 @@
 | 1 — Foundation | [`plan-phase-1-foundation.md`](plan-phase-1-foundation.md) | T1–T14 + T10.5 (15 tasks) | External-deps prep, Next.js scaffold, Supabase project + schema + RLS, public reads, Markdown render, Storage integration, testing harness, first deploy | Done (2026-05-11) |
 | 2 — Admin panel | [`plan-phase-2-admin.md`](plan-phase-2-admin.md) | T15–T28 + T19.1 + T19.2 (16 tasks) | Admin layout, Tailwind scoping, shadcn install, magic link auth, projects + posts CRUD, stats view + manual insert, image upload, orphan cleanup | Done (2026-05-14) |
 | 3 — OpenClaw ingestion | [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md) | T29–T31 (3 tasks) | Edge Function `stats-ingest`, OpenClaw config notes, monitoring setup | **Deferred** — T30 done; T29 + T31 await the OpenClaw operator gate |
-| 4 — Polish + launch | [`plan-phase-4-launch.md`](plan-phase-4-launch.md) | T32–T47 (16 tasks) | Error monitoring, README, env checklist, launch checklist, security review, code review, doc audit, production deploy, post-launch ops, project content-model expansion, project media carousel, manual project/post drag-reorder, project writeup embedding, full public-site redesign (T46), discoverability + public-route resilience (T41), reliable e2e teardown (T47) | **Complete (2026-08-06)** — every task closed or superseded |
+| 4 — Polish + launch | [`plan-phase-4-launch.md`](plan-phase-4-launch.md) | T32–T48 (17 tasks) | Error monitoring, README, env checklist, launch checklist, security review, code review, doc audit, production deploy, post-launch ops, project content-model expansion, project media carousel, manual project/post drag-reorder, project writeup embedding, full public-site redesign (T46), discoverability + public-route resilience (T41), reliable e2e teardown (T47), full-screen image viewer (T48) | **Reopened 2026-08-22** — T32–T47 closed or superseded; T48 added as an `@plan` follow-up and is open. Phase 4 was reopened rather than starting a Phase 5: T48 is a small addition to surfaces this phase already built, not the beginning of new phase-scale work. |
 
 ---
 

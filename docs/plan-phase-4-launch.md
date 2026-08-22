@@ -968,7 +968,115 @@ Plus: no footer anywhere, blinking cursor removed, email corrected to `bagreswar
 
 ---
 
+## T48 — Full-screen image viewer (lightbox) [ ]
+
+**Added 2026-08-22, via `@plan` follow-up.** Phase 4 was marked complete on 2026-08-06; its exit criteria state that future work happens via individual `@plan` follow-up tasks against the same docs, so this is appended here rather than opening a Phase 5. Single task, no sub-steps: if it grows past one sitting, split it then rather than pre-splitting now.
+
+### Governing decisions (both gates closed 2026-08-22)
+
+**Gate 1 — PRD reversal. CLOSED.** `docs/prd.md` section 7.2 lists "Lightbox / full-screen zoom on image click" as an explicit non-goal, added at T43. The builder reversed it on 2026-08-22. Moving that bullet out of section 7.2, with a dated note recording the reversal, is a deliverable of this task. Do not build past a live non-goal and leave the PRD contradicting the code.
+
+**Gate 2 — new visual pattern. CLOSED without an `@designer` consult.** CONSTRAINT-05 offers two routes for a new public-site pattern: find it in the export, or stop and consult `@designer`. A full-screen overlay is not in `docs/design-source/redesign-2026-08/`. It was resolved instead by the mechanism CONSTRAINT-05 already carries — its "Deliberate, recorded deviations from the export" list, which holds seven prior entries of exactly this kind (the removed caret, the dropped footers, `/writing/[slug]` existing, the hand-rolled carousel). This task adds the eighth. A full consult was judged heavier than the surface warrants, because almost every element is already specified elsewhere: the `‹` / `›` glyphs, the counter, the assistive-technology wording, the `.4s cubic-bezier(.4, 0, .2, 1)` timing, and the whole token set are reused verbatim from `ProjectFrame` and `app/styles/`.
+
+### Design rule: project media is content, not design input
+
+**The single genuinely new visual decision is the scrim, and it is derived from the site palette alone.** The public site is light — cream `#F4F1EA` with the deep-green accent `#1F3D2F` (CONSTRAINT-05, T46). The scrim is built from those tokens. It is **not** a dark scrim, despite that being the near-universal lightbox convention.
+
+**Why this is written as a rule and not just an outcome:** the first draft of this decision reached the right answer for the wrong reason — it reasoned from the fact that the AmIBroke screenshots are near-black dashboards, and concluded a cream scrim would separate them best. That is content-driven design and it is invalid here. **Every project on this site has its own design and its own palette; project media must never influence a design decision about swarnimbagre.com.** The next project's screenshots may be light, and any rule derived from AmIBroke's would invert.
+
+The content-agnostic consequence: because the viewer must display arbitrary imagery it knows nothing about, **the image carries its own defined edge** — a hairline border or soft shadow in the existing token set — so it reads as a distinct object against the scrim regardless of what it contains. The edge is not a workaround for dark screenshots. It is the property that makes the viewer indifferent to project design, which is the whole point.
+
+### What it does
+
+Tapping or clicking any public-site image opens it full screen over the page. Navigation moves through the images in that one group. Dismissing returns to the page.
+
+- **Groups.** Two, and they never mix: the slides of one project's carousel (`ProjectFrame`), and the images inside one post body (`MarkdownContent`). There is no site-wide gallery.
+- **Navigate.** Prev/next controls, `ArrowLeft` / `ArrowRight`, and horizontal swipe.
+- **Wrapping matches the carousel.** `ProjectFrame.go()` already wraps with `(next + slides.length) % slides.length`. The viewer wraps identically. Two different bound behaviors on the same set of images would be a defect, not a preference. A single-image group renders no navigation controls at all.
+- **Dismiss.** Click the backdrop, press `Escape`, or swipe down. Focus returns to the exact image that opened it.
+- **Carousel sync.** Closing the viewer leaves `ProjectFrame` on the image last shown. The viewer consumes the array `toSlides()` already produces, so a before/after pair flattens into two entries identically in both places.
+
+### Explicitly out of scope
+
+- **Custom zoom.** No pinch-to-zoom handler, no wheel-zoom, no pan, no transform matrix, no double-tap toggle. This is the entire reason the feature is small: with no zoom state there is no gesture conflict between panning, swipe-to-navigate and swipe-to-dismiss, which is where every bug in a hand-rolled lightbox lives. `app/layout.tsx` sets no viewport meta, so mobile keeps native pinch-zoom and desktop keeps ctrl+scroll. That is the zoom story, and it costs nothing. **Do not add a zoom implementation under this task.**
+- **The side-by-side compare slider.** The builder's "added mechanic of sliding" referred to a before/after compare slider with a draggable divider. No such component exists: `ProjectFrame.toSlides()` flattens a pair into two ordinary slides. Building it is a separate feature; T48 must not be widened to include it.
+- Captions, a thumbnail strip, download, share, or any counter beyond what the carousel already renders.
+- The admin panel. Public site only.
+- **Expired signed URLs.** Storage URLs carry a 3600s TTL (CONSTRAINT-15), so a tab left open for over an hour already shows broken thumbnails. The viewer inherits that unchanged. Not made worse, not fixed here.
+
+### Files
+
+- `components/public/ImageLightbox.tsx` (create) — the overlay. `'use client'`.
+- `lib/lightbox-slides.ts` (create) — pure helpers, so the logic is unit-testable without a DOM harness.
+- `components/public/ProjectFrame.tsx` (modify) — make the current slide activatable, open the viewer at that index, accept the index back on close.
+- `components/public/MarkdownContent.tsx` (modify) — the post-body path. See the wiring notes below; this is the only non-obvious part of the task.
+- `app/styles/public-lightbox.css` (create) — overlay styles, imported alongside the other `public*.css` files. Existing tokens only, per CONSTRAINT-05.
+- `docs/prd.md` (modify) — Gate 1.
+- `docs/constraints.md` (modify) — Gate 2, as CONSTRAINT-05 recorded deviation #8, including the content-is-not-design-input rule above.
+- `docs/design-decisions.md` (modify) — the decision record for a hand-rolled viewer over a library.
+- `tests/lightbox-slides.test.ts` (create).
+
+### Functions to implement
+
+- `collectPostImages(container: HTMLElement): LightboxSlide[]` — reads `src` and `alt` off the rendered `<img>` nodes in document order. Skips any node with an empty `src`.
+- `indexOfImage(container: HTMLElement, target: EventTarget | null): number | null` — resolves a click to a slide index; `null` when the click was not on an eligible image.
+- `wrapIndex(index: number, count: number): number` — the wrapping bound, matching `ProjectFrame.go()`.
+- `ImageLightbox({ slides, startIndex, onClose, onIndexChange })` — the overlay component.
+
+### Wiring notes — the five things that will otherwise ship as bugs
+
+1. **A carousel swipe must not open the viewer.** `ProjectFrame` resolves swipes on `onTouchEnd`, and a touch sequence also emits a synthetic click afterward. Adding a naive click handler to the slide means every swipe opens the viewer. The swipe path must mark the gesture and the click handler must ignore it.
+2. **Native pinch-zoom versus swipe-to-dismiss.** Dropping custom zoom removes the pan-versus-swipe conflict but not this one: once a visitor has pinch-zoomed natively, a one-finger pan can still register as swipe-down and close the viewer under them. Guard the swipe handlers on `window.visualViewport?.scale`, treating anything above 1 as "do not act on swipe". Feature-detect; `visualViewport` may be absent.
+3. **Collect post images at click time, not on mount.** `MarkdownContent` injects its HTML inside a `useEffect`, so the `<img>` nodes do not exist during the first render. Building the slide list on mount yields an empty viewer. The list is built when the click is handled.
+4. **A linked image follows its link.** Markdown permits `[![alt](img)](url)`. If the clicked image has an ancestor `<a>`, the viewer does not open and navigation proceeds normally.
+5. **Only real images are eligible.** `ProjectFrame` renders a `<span class="sb-slide-label">` instead of an `<img>` when a URL fails to resolve (`lib/public-project-media.ts` nulls it per-item). Those placeholders are not clickable and are excluded from the slide list, or the viewer opens on nothing.
+
+### Acceptance criteria
+
+- [ ] `docs/prd.md` no longer lists the lightbox as a non-goal, and the reversal is dated and attributed.
+- [ ] CONSTRAINT-05 carries an eighth recorded deviation covering the overlay, and it states the content-is-not-design-input rule, not merely the scrim outcome.
+- [ ] Clicking a carousel slide or a post-body image opens the viewer at that image; the group is that carousel or that post only.
+- [ ] `Escape`, backdrop click, and swipe down each close it. Focus returns to the originating image, not to `document.body`.
+- [ ] Keyboard arrows and the prev/next controls navigate, wrapping at both ends exactly as `ProjectFrame` does. A one-image group renders no navigation controls.
+- [ ] Closing the viewer leaves `ProjectFrame` showing the image the viewer was last on.
+- [ ] All five wiring notes above are demonstrably handled.
+- [ ] Modal semantics: `role="dialog"`, `aria-modal="true"`, focus trapped while open, background scroll locked and released on close. The T46 carousel accessibility settlement is the precedent for treating this as part of the task, not as later polish.
+- [ ] Assistive-technology strings follow the sub-rule added to `docs/constraints.md` on 2026-08-11: unambiguous before terse. Several carousels stack on `/projects`, so a bare "Close" or "Next" carries too little context.
+- [ ] Scrim and controls use existing tokens only. No new hex value, no new timing curve, no new breakpoint. The site has exactly one breakpoint (640px).
+- [ ] The displayed image carries its own edge treatment and reads as a distinct object against the scrim for both a light-background and a dark-background image. Verify with two contrasting samples.
+- [ ] **Zero new runtime dependencies.** CONSTRAINT-22 stands with zero consumers and the public site returned to zero runtime JS dependencies at T46. A lightbox library would require a named Override in `docs/design-decisions.md` plus a route-chunk measurement inside the 15 KB gzip budget. This task does not take that route.
+- [ ] Swipe reuses the carousel's existing threshold (`SWIPE_THRESHOLD_PX = 40`) rather than introducing a second gesture style.
+- [ ] No viewport meta is added. `user-scalable=no` or `maximum-scale` would silently delete the only zoom this feature has.
+- [ ] Nothing regresses when the viewer never opens: with JS unavailable or the overlay failing to mount, the carousel and post body render and behave exactly as they do today.
+- [ ] CONSTRAINT-25: `npm run lint` passes. CQ-01: no function over 50 lines. CQ-05: no debug `console.log` left behind.
+- [ ] EH-01 / EH-02: no silent catch. A slide that cannot resolve fails with context naming the group and the index, matching the per-item isolation already used in `lib/public-project-media.ts`.
+
+### Tests required
+
+- `collectPostImages returns one slide per rendered image, in document order` (TS-01 happy).
+- `collectPostImages skips an image with an empty src` (TS-01 error).
+- `indexOfImage returns null for a click that is not on an image` (TS-01 error) — the case that would otherwise open an empty viewer on any stray click in the body.
+- `indexOfImage returns null for an image inside an anchor` (TS-01 error) — wiring note 4.
+- `wrapIndex wraps at both ends and matches ProjectFrame.go` (TS-01 happy + error).
+- Interaction coverage (open, Escape, focus restore) belongs in the Playwright suite only if it can run without writing production rows; T47's teardown rules apply if it does.
+
+### Known gap accepted at spec time
+
+`npm run lint` currently fails outright — `eslint` is absent from `node_modules` despite the flat config landing at `bc97b8c`. An `npm install` is a prerequisite, since CONSTRAINT-25 gates the build on lint.
+
+### Depends on
+
+None. T43 (carousel) and T46 (redesign) are both closed and supply the surfaces this attaches to.
+
+### Specialist
+
+None required. Gate 2 was resolved by recorded deviation rather than an `@designer` consult; the reasoning is above and is reviewable.
+
+---
+
 ## Phase 4 Exit Criteria
+
+**Reopened 2026-08-22 for T48** (full-screen image viewer). The criteria below describe the original exit on 2026-08-06 and are unchanged; T48 is a follow-up task added under the exit clause that future work happens via individual `@plan` follow-ups against the same docs. Phase 4 closes again when T48 closes.
 
 - [x] T32–T40 + T42–T47 complete. T40 closed by superseding two criteria (voice check on live copy, `docs/launch-checklist.md` post-launch section) as continuous work rather than one-time gates — they were not completed, and that work continues outside the plan. T41 was trigger-gated and never blocked exit; it shipped at Session 55 with two criteria unsatisfiable as written (they name `/projects/[slug]`, deleted at T46) and one still open — Google Search Console verification, which needs the builder's account.
 - [x] Site is live at `swarnimbagre.com`, monitored, with content rendering against the expanded project schema.
