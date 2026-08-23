@@ -114,7 +114,11 @@ export default async function PostDetailPage({ params }: DetailParams) {
       </header>
 
       <div style={{ maxWidth: BODY_MAX }}>
-        <MarkdownContent md={post.content} className="post-body" />
+        <MarkdownContent
+          md={post.content}
+          className="post-body"
+          imageLabel={post.title}
+        />
       </div>
     </div>
   );

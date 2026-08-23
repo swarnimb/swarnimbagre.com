@@ -1,13 +1,13 @@
 # Plan — Phase 4: Polish + Launch
 
-**Date:** 2026-05-06 — **last updated 2026-08-07.**
+**Date:** 2026-05-06 — **last updated 2026-08-22.**
 **Status:** Complete.
 
-- **Closed:** T32–T40, T42–T47.
+- **Closed:** T32–T40, T42–T48. T48 (full-screen image viewer) was added as an `@plan` follow-up on 2026-08-22 and closed the same day, which closes the phase again.
 - **T41** shipped 2026-08-06 (Session 55, commit `b369d47`). Two of its criteria are unsatisfiable as written and two are still open — see the T41 block.
 - **Outstanding work not tracked by any open task:** none.
 
-**Tasks:** T32–T47 (16 tasks). T41 was trigger-gated and never blocked Phase 4 exit — same pattern as Phase 3's T29/T31 operator-gated deferrals.
+**Tasks:** T32–T48 (17 tasks). T41 was trigger-gated and never blocked Phase 4 exit — same pattern as Phase 3's T29/T31 operator-gated deferrals.
 **Predecessor:** [`plan-phase-3-ingestion.md`](plan-phase-3-ingestion.md)
 **Successor:** none — final phase
 
@@ -968,7 +968,7 @@ Plus: no footer anywhere, blinking cursor removed, email corrected to `bagreswar
 
 ---
 
-## T48 — Full-screen image viewer (lightbox) [ ]
+## T48 — Full-screen image viewer (lightbox) [x]
 
 **Added 2026-08-22, via `@plan` follow-up.** Phase 4 was marked complete on 2026-08-06; its exit criteria state that future work happens via individual `@plan` follow-up tasks against the same docs, so this is appended here rather than opening a Phase 5. Single task, no sub-steps: if it grows past one sitting, split it then rather than pre-splitting now.
 
@@ -1033,23 +1033,23 @@ Tapping or clicking any public-site image opens it full screen over the page. Na
 
 ### Acceptance criteria
 
-- [ ] `docs/prd.md` no longer lists the lightbox as a non-goal, and the reversal is dated and attributed.
-- [ ] CONSTRAINT-05 carries an eighth recorded deviation covering the overlay, and it states the content-is-not-design-input rule, not merely the scrim outcome.
-- [ ] Clicking a carousel slide or a post-body image opens the viewer at that image; the group is that carousel or that post only.
-- [ ] `Escape`, backdrop click, and swipe down each close it. Focus returns to the originating image, not to `document.body`.
-- [ ] Keyboard arrows and the prev/next controls navigate, wrapping at both ends exactly as `ProjectFrame` does. A one-image group renders no navigation controls.
-- [ ] Closing the viewer leaves `ProjectFrame` showing the image the viewer was last on.
-- [ ] All five wiring notes above are demonstrably handled.
-- [ ] Modal semantics: `role="dialog"`, `aria-modal="true"`, focus trapped while open, background scroll locked and released on close. The T46 carousel accessibility settlement is the precedent for treating this as part of the task, not as later polish.
-- [ ] Assistive-technology strings follow the sub-rule added to `docs/constraints.md` on 2026-08-11: unambiguous before terse. Several carousels stack on `/projects`, so a bare "Close" or "Next" carries too little context.
-- [ ] Scrim and controls use existing tokens only. No new hex value, no new timing curve, no new breakpoint. The site has exactly one breakpoint (640px).
-- [ ] The displayed image carries its own edge treatment and reads as a distinct object against the scrim for both a light-background and a dark-background image. Verify with two contrasting samples.
-- [ ] **Zero new runtime dependencies.** CONSTRAINT-22 stands with zero consumers and the public site returned to zero runtime JS dependencies at T46. A lightbox library would require a named Override in `docs/design-decisions.md` plus a route-chunk measurement inside the 15 KB gzip budget. This task does not take that route.
-- [ ] Swipe reuses the carousel's existing threshold (`SWIPE_THRESHOLD_PX = 40`) rather than introducing a second gesture style.
-- [ ] No viewport meta is added. `user-scalable=no` or `maximum-scale` would silently delete the only zoom this feature has.
-- [ ] Nothing regresses when the viewer never opens: with JS unavailable or the overlay failing to mount, the carousel and post body render and behave exactly as they do today.
-- [ ] CONSTRAINT-25: `npm run lint` passes. CQ-01: no function over 50 lines. CQ-05: no debug `console.log` left behind.
-- [ ] EH-01 / EH-02: no silent catch. A slide that cannot resolve fails with context naming the group and the index, matching the per-item isolation already used in `lib/public-project-media.ts`.
+- [x] `docs/prd.md` no longer lists the lightbox as a non-goal, and the reversal is dated and attributed.
+- [x] CONSTRAINT-05 carries an eighth recorded deviation covering the overlay, and it states the content-is-not-design-input rule, not merely the scrim outcome.
+- [x] Clicking a carousel slide or a post-body image opens the viewer at that image; the group is that carousel or that post only.
+- [x] `Escape`, backdrop click, and swipe down each close it. Focus returns to the originating image, not to `document.body`.
+- [x] Keyboard arrows and the prev/next controls navigate, wrapping at both ends exactly as `ProjectFrame` does. A one-image group renders no navigation controls.
+- [x] Closing the viewer leaves `ProjectFrame` showing the image the viewer was last on.
+- [x] All five wiring notes above are demonstrably handled.
+- [x] Modal semantics: `role="dialog"`, `aria-modal="true"`, focus trapped while open, background scroll locked and released on close. The T46 carousel accessibility settlement is the precedent for treating this as part of the task, not as later polish.
+- [x] Assistive-technology strings follow the sub-rule added to `docs/constraints.md` on 2026-08-11: unambiguous before terse. Several carousels stack on `/projects`, so a bare "Close" or "Next" carries too little context.
+- [x] Scrim and controls use existing tokens only. No new hex value, no new timing curve, no new breakpoint. The site has exactly one breakpoint (640px).
+- [x] The displayed image carries its own edge treatment and reads as a distinct object against the scrim for both a light-background and a dark-background image. Verify with two contrasting samples.
+- [x] **Zero new runtime dependencies.** CONSTRAINT-22 stands with zero consumers and the public site returned to zero runtime JS dependencies at T46. A lightbox library would require a named Override in `docs/design-decisions.md` plus a route-chunk measurement inside the 15 KB gzip budget. This task does not take that route.
+- [x] Swipe reuses the carousel's existing threshold (`SWIPE_THRESHOLD_PX = 40`) rather than introducing a second gesture style.
+- [x] No viewport meta is added. `user-scalable=no` or `maximum-scale` would silently delete the only zoom this feature has.
+- [x] Nothing regresses when the viewer never opens: with JS unavailable or the overlay failing to mount, the carousel and post body render and behave exactly as they do today.
+- [x] CONSTRAINT-25: `npm run lint` passes. CQ-01: no function over 50 lines. CQ-05: no debug `console.log` left behind.
+- [x] EH-01 / EH-02: no silent catch. A slide that cannot resolve fails with context naming the group and the index, matching the per-item isolation already used in `lib/public-project-media.ts`.
 
 ### Tests required
 
@@ -1064,6 +1064,10 @@ Tapping or clicking any public-site image opens it full screen over the page. Na
 
 `npm run lint` currently fails outright — `eslint` is absent from `node_modules` despite the flat config landing at `bc97b8c`. An `npm install` is a prerequisite, since CONSTRAINT-25 gates the build on lint.
 
+**Closed:** 2026-08-22, Session 56. `components/public/ImageLightbox.tsx` + `lib/lightbox-slides.ts` + `app/styles/public-lightbox.css`, wired into `ProjectFrame` and `MarkdownContent`. Zero new runtime dependencies; `npm run lint` and `next build` both clean. The scrim/edge criterion was verified by rendering the real overlay CSS against a near-black and a near-white sample side by side.
+
+**Known gap at close:** the `.env.local` this machine needs is absent, so `npm run build` only runs with placeholder Supabase values and `tests/server-actions-manifest.test.ts` (which shells out to a real build) fails on that missing env, not on this change. Real-device pinch-zoom and swipe behaviour is reasoned and guarded (`visualViewport.scale`), not physically tested.
+
 ### Depends on
 
 None. T43 (carousel) and T46 (redesign) are both closed and supply the surfaces this attaches to.
@@ -1076,7 +1080,7 @@ None required. Gate 2 was resolved by recorded deviation rather than an `@design
 
 ## Phase 4 Exit Criteria
 
-**Reopened 2026-08-22 for T48** (full-screen image viewer). The criteria below describe the original exit on 2026-08-06 and are unchanged; T48 is a follow-up task added under the exit clause that future work happens via individual `@plan` follow-ups against the same docs. Phase 4 closes again when T48 closes.
+**Reopened 2026-08-22 for T48** (full-screen image viewer). The criteria below describe the original exit on 2026-08-06 and are unchanged; T48 is a follow-up task added under the exit clause that future work happens via individual `@plan` follow-ups against the same docs. Phase 4 closes again when T48 closes. **T48 closed 2026-08-22; the phase is closed again.**
 
 - [x] T32–T40 + T42–T47 complete. T40 closed by superseding two criteria (voice check on live copy, `docs/launch-checklist.md` post-launch section) as continuous work rather than one-time gates — they were not completed, and that work continues outside the plan. T41 was trigger-gated and never blocked exit; it shipped at Session 55 with two criteria unsatisfiable as written (they name `/projects/[slug]`, deleted at T46) and one still open — Google Search Console verification, which needs the builder's account.
 - [x] Site is live at `swarnimbagre.com`, monitored, with content rendering against the expanded project schema.

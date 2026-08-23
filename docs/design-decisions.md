@@ -36,6 +36,7 @@ These are the design as built, not drift. Anything not listed here is bundle-ver
 | Viewport units are `svh`, not `vh` — see below. | `app/styles/public-home.css:34-35`, `app/styles/base.css:13-14` |
 | `/other` carries a `max-height: 600px` release on the `.cpage` height lock. The export has exactly one media query — `max-width: 640px` — and asks no height question at all, so its one-screen Other grid clips with no scroll on any short viewport. | `app/styles/public-other.css:234`; export query at `template.extracted.html:216` |
 | `app/error.tsx` and `app/not-found.tsx` exist. The export has no error state and no 404. Both compose the shared shell plus the export's off-home action pill; `h-*` classes stay home-only. | `app/not-found.tsx`, `app/error.tsx`, `app/styles/public-projects.css:191-227` |
+| The full-screen image viewer exists and is hand-rolled. The export ships no overlay pattern; the scrim is cream/deep-green off the site palette, not the conventional dark — see below. | `components/public/ImageLightbox.tsx`, `app/styles/public-lightbox.css` |
 
 ### Why `svh` (2026-08-04, Session 52)
 
@@ -60,6 +61,14 @@ Both of these were real defects against the export, now fixed. They are recorded
 ### Project-media captions removed, not deferred (2026-08-07)
 
 The `project_media` `caption` field was removed from the admin input and from the app-side code path this session. The export has no caption pattern at all — its slide model is `label` / `alt` / `key` only (`template.extracted.html:316-320`) — so drawing one would mean inventing a new design, the T46 embla-to-`ProjectFrame` rewrite had already silently dropped the render, and `project_media` holds 0 rows in production, so nothing was lost. The DB column is deliberately left in place (no migration), but re-adding a caption is a new design that goes through `@designer` first; it is not a form field to put back.
+
+### The image viewer is hand-rolled, not a lightbox library (2026-08-22, T48)
+
+**Zero new runtime dependencies.** `ImageLightbox` is written against the same raw-React + token-CSS approach as everything else under `components/public/`. No `photoswipe`, no `yet-another-react-lightbox`, no `react-image-lightbox`. CONSTRAINT-22 therefore still stands at **zero consumers** — the public site went back to zero runtime JS dependencies at T46 when embla was uninstalled, and T48 keeps it there. This is deliberately **not** an Override: an Override plus a route-chunk measurement inside the 15 KB gzip budget is what a library would have cost, and nothing was installed, so nothing is being amended.
+
+**What keeps it small is dropping custom zoom.** The viewer has no pinch handler, no wheel-zoom, no pan and no transform matrix, so there is no gesture state to arbitrate between panning, swipe-to-navigate and swipe-to-dismiss. That three-way conflict is where the bugs in a hand-rolled lightbox actually live, and it is the reason a library looks attractive. Removed, the remaining surface is a fixed overlay, an index, keyboard handlers and the carousel's existing 40px swipe threshold — less code than configuring and restyling a library would have been. Native zoom survives because `app/layout.tsx` sets no viewport meta.
+
+**Radix Dialog was not reusable, despite already being in `package.json`.** `@radix-ui/react-dialog` ships with the shadcn admin stack and would have supplied the modal semantics for free. It is unusable on the public site for the same reason every other library is: the wrapper in `components/ui/` is Tailwind-classed and admin-scoped, and CONSTRAINT-03 keeps Tailwind out of the public bundle while CONSTRAINT-05 bans library defaults there outright. Importing it would have meant either leaking Tailwind into the public bundle or stripping the component back to unstyled primitives — at which point the only thing left is the focus trap and scroll lock, which are a handful of lines. Modal semantics (`role="dialog"`, `aria-modal`, focus trap, scroll lock, focus restored to the originating image) are implemented directly instead.
 
 ---
 

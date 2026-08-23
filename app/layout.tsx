@@ -6,6 +6,7 @@ import "./styles/public.css";
 import "./styles/public-home.css";
 import "./styles/public-projects.css";
 import "./styles/public-writing.css";
+import "./styles/public-lightbox.css";
 import "./styles/public-other.css";
 
 // T46: Instrument Serif (display) + Space Grotesk (body/UI) + Space Mono

@@ -1,0 +1,83 @@
+/* ============================================================
+   Full-screen image viewer (T48)
+
+   CONSTRAINT-05 recorded deviation #8. The export ships no overlay
+   pattern, so this composition uses existing tokens only: no new
+   hex, no new timing curve, no new breakpoint. The controls reuse
+   the carousel's own classes (.sb-arrow, .sb-counter, .sb-live)
+   rather than restating their pixels, so the two surfaces cannot
+   drift apart.
+   ============================================================ */
+
+:root {
+  /* The one new number here. The public bundle has no z-index scale —
+     the only value in it is .mmenu's 50 (public.css) — and a viewer
+     that covers the page has to clear the mobile menu. */
+  --z-lightbox: 100;
+}
+
+.sb-lb {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-lightbox);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--pad-page);
+
+  /* The scrim is derived from the site palette alone, not from what the
+     images happen to look like: cream with a breath of the deep-green
+     accent, never the conventional dark scrim. Project media is content,
+     not design input — see CONSTRAINT-05 deviation #8. The plain var(--bg)
+     line above is the fallback for engines without color-mix, the same
+     deliberate pair as the vh/svh floors in base.css. Do not tidy it away. */
+  background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 92%, var(--accent));
+
+  /* Native pinch-zoom is the only zoom this feature has, so the overlay must
+     not claim the gesture — `touch-action: none` would delete it as surely as
+     a viewport meta would. `manipulation` keeps pinch and pan and drops only
+     the double-tap delay; the pan-versus-swipe hazard it leaves is what the
+     visualViewport.scale guard in ImageLightbox handles. The body is already
+     scroll-locked, and overscroll-behavior stops the chain to the page. */
+  touch-action: manipulation;
+  overscroll-behavior: contain;
+}
+
+/* The image carries its own edge so it reads as a distinct object against
+   the scrim whatever it contains — a near-black dashboard or a white
+   mockup. That is what makes the viewer indifferent to project design. */
+.sb-lb-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: var(--surface);
+  border: var(--border);
+  border-radius: var(--r-card);
+}
+
+/* Close sits where the carousel's counter pill sits, so the counter moves
+   to the opposite corner. Both keep the carousel's 12px inset. */
+.sb-lb-close {
+  top: 12px;
+  right: 12px;
+  transform: none;
+}
+
+.sb-lb-counter {
+  right: auto;
+  left: 12px;
+}
+
+/* The current carousel slide is activatable, so its image sits inside a
+   button. The button contributes no box of its own — `.sb-slide img` still
+   fills the same 100% of the padded slide, so the pixels are unchanged. */
+.sb-slide-open {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
