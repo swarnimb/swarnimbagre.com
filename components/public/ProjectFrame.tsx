@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PublicProjectMediaItem } from '@/lib/types';
 import { ImageLightbox } from './ImageLightbox';
 import {
@@ -45,6 +45,19 @@ export function ProjectFrame({
   const [openIndex, setOpenIndex] = useState<number | null>(null);
   const touchStartX = useRef<number | null>(null);
   const swiped = useRef(false);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const restoreTo = useRef<number | null>(null);
+
+  // Runs on the commit that closed the viewer, so the opener is queried from
+  // the live DOM rather than held across renders.
+  useEffect(() => {
+    if (openIndex !== null || restoreTo.current === null) return;
+    const index = restoreTo.current;
+    restoreTo.current = null;
+    frameRef.current
+      ?.querySelectorAll<HTMLElement>('.sb-slide-open')
+      [index]?.focus();
+  }, [openIndex]);
 
   if (slides.length === 0) {
     return (
@@ -86,14 +99,15 @@ export function ProjectFrame({
     }
     const index = openable.findIndex((slide) => slide.sourceIndex === trackIndex);
     if (index === -1) return;
-    // Safari does not focus a button on click, and the viewer restores focus
-    // to whatever was focused when it mounted.
+    // Safari does not focus a button on click.
     opener.focus();
+    restoreTo.current = index;
     setOpenIndex(index);
   }
 
   return (
     <div
+      ref={frameRef}
       className="sb-frame"
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}

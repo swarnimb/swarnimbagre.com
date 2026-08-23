@@ -21,6 +21,16 @@ describe('MarkdownContent — full-screen viewer', () => {
     expect(dialog.textContent).toContain('2 / 2');
   });
 
+  it('returns focus to the image that opened it, not to the body', () => {
+    render(<MarkdownContent md={`![a chart](/one.png)
+
+![a photo](/two.png)`} imageLabel="A Post" />);
+    fireEvent.click(screen.getByAltText('a photo'));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByAltText('a photo'));
+  });
+
   it('ignores a click that is not on an image', () => {
     render(<MarkdownContent md={'some words\n\n![a chart](/one.png)'} imageLabel="A Post" />);
     fireEvent.click(screen.getByText('some words'));

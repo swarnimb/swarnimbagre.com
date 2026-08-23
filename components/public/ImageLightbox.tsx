@@ -55,14 +55,16 @@ export function ImageLightbox({
   const dialogRef = useRef<HTMLDivElement>(null);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
 
+  // Focus restoration is the caller's job, not this component's: capturing
+  // `document.activeElement` here and re-focusing it on unmount looks correct
+  // and fails in a real browser, because the element can be replaced between
+  // mount and unmount and `focus()` on a detached node silently does nothing.
   useEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     dialogRef.current?.focus();
     return () => {
       document.body.style.overflow = previousOverflow;
-      opener?.focus?.();
     };
   }, []);
 
