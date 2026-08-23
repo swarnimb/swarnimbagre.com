@@ -355,7 +355,7 @@ Dry, self-deprecating, anti-LinkedIn. Applies to public site copy AND admin labe
 - Caption markdown / hyperlinks (captions are plain text only).
 - Multi-image cards on the home page. *(T46 note: Home no longer lists projects at all, so this is moot.)*
 
-> **"Lightbox / full-screen zoom on image click" was removed from this list on 2026-08-22.** The builder reversed the non-goal and the full-screen image viewer was built under T48. The reversal covers the lightbox only: **custom zoom remains out of scope.** T48 ships no pinch-to-zoom handler, no wheel-zoom, no pan and no transform matrix — `app/layout.tsx` sets no viewport meta, so the viewer inherits native pinch-zoom on mobile and ctrl+scroll on desktop, and that is the whole zoom story. See `docs/plan-phase-4-launch.md` → T48 and CONSTRAINT-05's eighth recorded deviation.
+> **"Lightbox / full-screen zoom on image click" was removed from this list on 2026-08-22.** The builder reversed the non-goal and the full-screen image viewer was built under T48. The reversal covers the lightbox only: **custom zoom remains out of scope.** T48 ships no pinch-to-zoom handler, no wheel-zoom, no pan and no transform matrix — `app/layout.tsx` sets no viewport meta, so the viewer inherits native pinch-zoom on mobile and ctrl+scroll on desktop, and that is the whole zoom story. See `docs/plan-phase-4-launch.md` → T48 and CONSTRAINT-05's tenth recorded deviation.
 
 ### 7.3 Added at T46 (redesign)
 

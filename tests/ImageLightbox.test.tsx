@@ -41,11 +41,42 @@ describe('ProjectFrame — full-screen viewer', () => {
     const dialog = screen.getByRole('dialog', { name: 'Image viewer for Thing' });
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(document.body.style.overflow).toBe('hidden');
+    // Focus really moved off the opener, so the restore below proves itself.
+    expect(document.activeElement).toBe(dialog);
 
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(opener);
     expect(document.body.style.overflow).toBe('');
+  });
+
+  it('closes on a backdrop click but not on a click on the image itself', () => {
+    render(<ProjectFrame media={[mediaItem()]} title="Thing" />);
+    fireEvent.click(openControl(1));
+    const dialog = screen.getByRole('dialog');
+
+    // The carousel slide behind carries the same alt, so target the overlay's
+    // own image rather than the ambiguous query.
+    fireEvent.click(dialog.querySelector('.sb-lb-image') as HTMLElement);
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+
+    fireEvent.click(dialog);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('closes on a downward swipe and stays open on a short one', () => {
+    render(<ProjectFrame media={[mediaItem()]} title="Thing" />);
+    fireEvent.click(openControl(1));
+    const dialog = screen.getByRole('dialog');
+
+    // Under the 40px threshold: not a dismissal.
+    fireEvent.touchStart(dialog, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchEnd(dialog, { changedTouches: [{ clientX: 0, clientY: 20 }] });
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+
+    fireEvent.touchStart(dialog, { touches: [{ clientX: 0, clientY: 0 }] });
+    fireEvent.touchEnd(dialog, { changedTouches: [{ clientX: 0, clientY: 120 }] });
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 
   it('renders no navigation controls for a one-image group', () => {

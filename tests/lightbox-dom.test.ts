@@ -52,6 +52,18 @@ describe('trapTab', () => {
     expect(event.defaultPrevented).toBe(true);
   });
 
+  it('wraps forward from the dialog itself into the first control', () => {
+    // Without this the first Tab falls through to browser default, which only
+    // happens to land inside the dialog because the portal is body's last
+    // child. Anything mounted after it would take focus out of the modal.
+    const dialog = dialogWith(3);
+    dialog.focus();
+    const event = new KeyboardEvent('keydown', { key: 'Tab', cancelable: true });
+    trapTab(event, dialog);
+    expect(document.activeElement).toBe(dialog.querySelectorAll('button')[0]);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it('wraps backward from the dialog itself to the last control', () => {
     const dialog = dialogWith(3);
     dialog.focus();

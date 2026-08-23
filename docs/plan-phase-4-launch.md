@@ -976,7 +976,7 @@ Plus: no footer anywhere, blinking cursor removed, email corrected to `bagreswar
 
 **Gate 1 — PRD reversal. CLOSED.** `docs/prd.md` section 7.2 lists "Lightbox / full-screen zoom on image click" as an explicit non-goal, added at T43. The builder reversed it on 2026-08-22. Moving that bullet out of section 7.2, with a dated note recording the reversal, is a deliverable of this task. Do not build past a live non-goal and leave the PRD contradicting the code.
 
-**Gate 2 — new visual pattern. CLOSED without an `@designer` consult.** CONSTRAINT-05 offers two routes for a new public-site pattern: find it in the export, or stop and consult `@designer`. A full-screen overlay is not in `docs/design-source/redesign-2026-08/`. It was resolved instead by the mechanism CONSTRAINT-05 already carries — its "Deliberate, recorded deviations from the export" list, which holds seven prior entries of exactly this kind (the removed caret, the dropped footers, `/writing/[slug]` existing, the hand-rolled carousel). This task adds the eighth. A full consult was judged heavier than the surface warrants, because almost every element is already specified elsewhere: the `‹` / `›` glyphs, the counter, the assistive-technology wording, the `.4s cubic-bezier(.4, 0, .2, 1)` timing, and the whole token set are reused verbatim from `ProjectFrame` and `app/styles/`.
+**Gate 2 — new visual pattern. CLOSED without an `@designer` consult.** CONSTRAINT-05 offers two routes for a new public-site pattern: find it in the export, or stop and consult `@designer`. A full-screen overlay is not in `docs/design-source/redesign-2026-08/`. It was resolved instead by the mechanism CONSTRAINT-05 already carries — its "Deliberate, recorded deviations from the export" list, which holds seven prior entries of exactly this kind (the removed caret, the dropped footers, `/writing/[slug]` existing, the hand-rolled carousel). This task adds the tenth. A full consult was judged heavier than the surface warrants, because almost every element is already specified elsewhere: the `‹` / `›` glyphs, the counter, the assistive-technology wording, the `.4s cubic-bezier(.4, 0, .2, 1)` timing, and the whole token set are reused verbatim from `ProjectFrame` and `app/styles/`.
 
 ### Design rule: project media is content, not design input
 
@@ -1012,7 +1012,7 @@ Tapping or clicking any public-site image opens it full screen over the page. Na
 - `components/public/MarkdownContent.tsx` (modify) — the post-body path. See the wiring notes below; this is the only non-obvious part of the task.
 - `app/styles/public-lightbox.css` (create) — overlay styles, imported alongside the other `public*.css` files. Existing tokens only, per CONSTRAINT-05.
 - `docs/prd.md` (modify) — Gate 1.
-- `docs/constraints.md` (modify) — Gate 2, as CONSTRAINT-05 recorded deviation #8, including the content-is-not-design-input rule above.
+- `docs/constraints.md` (modify) — Gate 2, as CONSTRAINT-05 recorded deviation #10, including the content-is-not-design-input rule above.
 - `docs/design-decisions.md` (modify) — the decision record for a hand-rolled viewer over a library.
 - `tests/lightbox-slides.test.ts` (create).
 
@@ -1034,7 +1034,7 @@ Tapping or clicking any public-site image opens it full screen over the page. Na
 ### Acceptance criteria
 
 - [x] `docs/prd.md` no longer lists the lightbox as a non-goal, and the reversal is dated and attributed.
-- [x] CONSTRAINT-05 carries an eighth recorded deviation covering the overlay, and it states the content-is-not-design-input rule, not merely the scrim outcome.
+- [x] CONSTRAINT-05 carries an tenth recorded deviation covering the overlay, and it states the content-is-not-design-input rule, not merely the scrim outcome.
 - [x] Clicking a carousel slide or a post-body image opens the viewer at that image; the group is that carousel or that post only.
 - [x] `Escape`, backdrop click, and swipe down each close it. Focus returns to the originating image, not to `document.body`.
 - [x] Keyboard arrows and the prev/next controls navigate, wrapping at both ends exactly as `ProjectFrame` does. A one-image group renders no navigation controls.

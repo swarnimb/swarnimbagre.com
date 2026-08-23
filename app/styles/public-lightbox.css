@@ -1,7 +1,7 @@
 /* ============================================================
    Full-screen image viewer (T48)
 
-   CONSTRAINT-05 recorded deviation #8. The export ships no overlay
+   CONSTRAINT-05 recorded deviation #10. The export ships no overlay
    pattern, so this composition uses existing tokens only: no new
    hex, no new timing curve, no new breakpoint. The controls reuse
    the carousel's own classes (.sb-arrow, .sb-counter, .sb-live)
@@ -28,7 +28,7 @@
   /* The scrim is derived from the site palette alone, not from what the
      images happen to look like: cream with a breath of the deep-green
      accent, never the conventional dark scrim. Project media is content,
-     not design input — see CONSTRAINT-05 deviation #8. The plain var(--bg)
+     not design input — see CONSTRAINT-05 deviation #10. The plain var(--bg)
      line above is the fallback for engines without color-mix, the same
      deliberate pair as the vh/svh floors in base.css. Do not tidy it away. */
   background: var(--bg);

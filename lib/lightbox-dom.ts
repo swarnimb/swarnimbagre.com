@@ -50,7 +50,7 @@ export function trapTab(event: KeyboardEvent, dialog: HTMLElement): void {
   if (event.shiftKey && (active === first || active === dialog)) {
     last.focus();
     event.preventDefault();
-  } else if (!event.shiftKey && active === last) {
+  } else if (!event.shiftKey && (active === last || active === dialog)) {
     first.focus();
     event.preventDefault();
   }
