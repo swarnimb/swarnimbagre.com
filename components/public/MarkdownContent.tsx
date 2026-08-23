@@ -8,6 +8,7 @@ import {
   indexOfImage,
   type LightboxSlide,
 } from '@/lib/lightbox-slides'
+import { useRestoreFocus } from '@/lib/use-restore-focus'
 
 interface MarkdownContentProps {
   md: string
@@ -44,24 +45,15 @@ export function MarkdownContent({
   const [slides, setSlides] = useState<LightboxSlide[]>([])
   const [openIndex, setOpenIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const restoreTo = useRef<number | null>(null)
 
   useEffect(() => {
     setHtml(renderMarkdown(md))
   }, [md])
 
-  // Restoration re-queries the body on the commit that closed the viewer.
-  // React replaces the injected nodes across renders, so the element handed to
-  // the click handler is detached by then and focusing it does nothing.
-  useEffect(() => {
-    if (openIndex !== null || restoreTo.current === null) return
-    const sourceIndex = restoreTo.current
-    restoreTo.current = null
-    const image = containerRef.current?.querySelectorAll('img')[sourceIndex]
-    if (!(image instanceof HTMLElement)) return
-    image.tabIndex = -1
-    image.focus()
-  }, [openIndex])
+  const rememberOpener = useRestoreFocus(
+    openIndex !== null,
+    (sourceIndex) => containerRef.current?.querySelectorAll('img')[sourceIndex],
+  )
 
   function onClick(event: React.MouseEvent<HTMLDivElement>) {
     const container = containerRef.current
@@ -74,7 +66,7 @@ export function MarkdownContent({
     image.tabIndex = -1
     image.focus()
     const postSlides = collectPostImages(container)
-    restoreTo.current = postSlides[index].sourceIndex
+    rememberOpener(postSlides[index].sourceIndex)
     setSlides(postSlides)
     setOpenIndex(index)
   }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { PublicProjectMediaItem } from '@/lib/types';
 import { ImageLightbox } from './ImageLightbox';
 import {
@@ -9,16 +9,15 @@ import {
   toSlides,
   wrapIndex,
 } from '@/lib/lightbox-slides';
+import { useRestoreFocus } from '@/lib/use-restore-focus';
 
 /**
  * The media frame at the top of a project card.
  *
- * Hand-rolled rather than embla-backed. The export's carousel is a single
- * transformed track with dots, arrows and a swipe threshold — about sixty
- * lines — so matching it directly is both more faithful (exact 0.4s
- * cubic-bezier, exact 40px threshold) and one fewer dependency than
- * restyling embla to imitate it. That retires the T43 embla wrapper and,
- * with it, CONSTRAINT-22's 15KB route-chunk budget.
+ * Hand-rolled rather than embla-backed: matching the export's single
+ * transformed track directly is both more faithful (exact 0.4s cubic-bezier,
+ * exact 40px threshold) and one fewer dependency than restyling embla to
+ * imitate it. See docs/design-decisions.md for the full rationale.
  *
  * Per T46 Q7 the card renders photographs only: a project with no media
  * rows shows "no preview yet" rather than falling back to an SVG motif.
@@ -46,18 +45,10 @@ export function ProjectFrame({
   const touchStartX = useRef<number | null>(null);
   const swiped = useRef(false);
   const frameRef = useRef<HTMLDivElement>(null);
-  const restoreTo = useRef<number | null>(null);
-
-  // Runs on the commit that closed the viewer, so the opener is queried from
-  // the live DOM rather than held across renders.
-  useEffect(() => {
-    if (openIndex !== null || restoreTo.current === null) return;
-    const index = restoreTo.current;
-    restoreTo.current = null;
-    frameRef.current
-      ?.querySelectorAll<HTMLElement>('.sb-slide-open')
-      [index]?.focus();
-  }, [openIndex]);
+  const rememberOpener = useRestoreFocus(
+    openIndex !== null,
+    (index) => frameRef.current?.querySelectorAll<HTMLElement>('.sb-slide-open')[index],
+  );
 
   if (slides.length === 0) {
     return (
@@ -101,7 +92,7 @@ export function ProjectFrame({
     if (index === -1) return;
     // Safari does not focus a button on click.
     opener.focus();
-    restoreTo.current = index;
+    rememberOpener(index);
     setOpenIndex(index);
   }
 
