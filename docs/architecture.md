@@ -24,7 +24,7 @@ This document cannot change without a corresponding update to [`founder-brief.md
 
 ### 1.2 Frontend libraries
 
-- **Public site:** raw React with custom components under `components/public/`. Styling is exclusively the token layer in `app/styles/colors_and_type.css` plus the component sheets `app/styles/public.css`, `public-home.css`, `public-projects.css`, `public-writing.css` and `public-other.css`. No Tailwind, no component library, **zero runtime JS dependencies**. The project media carousel is hand-rolled in `ProjectFrame.tsx` (§4.9); its admin save path uses a Postgres RPC (`save_project_media`, migration `010a`) for atomic delete-then-insert (§6.6.9).
+- **Public site:** raw React with custom components under `components/public/`. Styling is exclusively the token layer in `app/styles/colors_and_type.css` plus the component sheets `app/styles/public.css`, `public-home.css`, `public-projects.css`, `public-writing.css`, `public-other.css` and `public-lightbox.css`. No Tailwind, no component library, **zero runtime JS dependencies**. The project media carousel is hand-rolled in `ProjectFrame.tsx` (§4.9), as is the full-screen image viewer it opens (`ImageLightbox.tsx`, T48); its admin save path uses a Postgres RPC (`save_project_media`, migration `010a`) for atomic delete-then-insert (§6.6.9).
 - **Public fonts:** Instrument Serif (display), Space Grotesk (body and UI), Space Mono (kickers, dates, tile labels). Loaded through `next/font/google` in `app/layout.tsx`, which self-hosts the files at build time, so there is no runtime request to Google and no render-blocking `@import`. See §4.10 for the `<html>`-vs-`<body>` placement rule, which is load-bearing.
 - **Admin panel:** shadcn/ui + Tailwind CSS, scoped to `/admin/*` only.
 - **Markdown renderer:** `marked` + DOMPurify (§7).
@@ -153,7 +153,7 @@ Six tables: `projects`, `posts`, `stats`, `images`, `project_media`, `notes`. RL
 | `order_index` | `integer` | NOT NULL, CHECK `order_index >= 0` — derived by the `save_project_media` RPC from array position via `WITH ORDINALITY`, not trusted from the client |
 | `created_at` | `timestamptz` | NOT NULL, default `now()` |
 
-**Shape discriminator.** `project_media` carries no explicit `kind` enum column. A row is a "single" when `image_after_id IS NULL` and a "pair" when it is non-NULL; the render path branches on that nullability. Keeping the discriminator implicit in FK nullability avoids a redundant column that could disagree with FK presence, and removes the need for a synchronizing CHECK constraint. `toSlides()` in `components/public/ProjectFrame.tsx` flattens each row into one slide, or two when `imageAfterUrl` is present — a pair is presented as two sequential slides, not a draggable slider.
+**Shape discriminator.** `project_media` carries no explicit `kind` enum column. A row is a "single" when `image_after_id IS NULL` and a "pair" when it is non-NULL; the render path branches on that nullability. Keeping the discriminator implicit in FK nullability avoids a redundant column that could disagree with FK presence, and removes the need for a synchronizing CHECK constraint. `toSlides()` in `lib/lightbox-slides.ts` (re-exported from `components/public/ProjectFrame.tsx`) flattens each row into one slide, or two when `imageAfterUrl` is present — a pair is presented as two sequential slides, not a draggable slider.
 
 **Image FK delete semantics.** Both `image_id` and `image_after_id` use `ON DELETE RESTRICT` — deleting an `images` row still referenced by any `project_media` row raises an error. This is the inverse of the legacy `projects.image_id` / `projects.image_after_id` columns (migrations 001 + 009), which use `ON DELETE SET NULL`. The RESTRICT posture makes media-row removal explicit: the admin must delete the `project_media` row first, which releases the FK and lets the image be cleaned. This protects published carousel slides from silent breakage during orphan cleanup at `/admin/images`.
 
@@ -301,6 +301,7 @@ swarnimbagre.com/
 │   │   ├── public-projects.css
 │   │   ├── public-writing.css
 │   │   ├── public-other.css
+│   │   ├── public-lightbox.css       # T48 full-screen viewer overlay
 │   │   └── admin.css                 # Tailwind + scoped-preflight, imported only by admin layout
 │   └── (admin)/                      # route group — admin layout owns Tailwind import
 │       ├── layout.tsx                # admin-only Tailwind/shadcn CSS, Inter font
@@ -319,6 +320,7 @@ swarnimbagre.com/
 │   │   ├── SiteHeader.tsx
 │   │   ├── ProjectCard.tsx
 │   │   ├── ProjectFrame.tsx          # hand-rolled carousel
+│   │   ├── ImageLightbox.tsx         # full-screen image viewer, portalled to body (§4.9)
 │   │   ├── MarkdownContent.tsx
 │   │   ├── home/SocialIcons.tsx
 │   │   └── pages/{Home,Projects,Writing,Other}.tsx
@@ -331,6 +333,9 @@ swarnimbagre.com/
 │   ├── db-internal.ts                # shared client/logging helpers (breaks the db ↔ db-posts cycle)
 │   ├── public-projects.ts            # loadPublicProjects — render-ready project shape (§4.6)
 │   ├── public-project-media.ts       # media resolution for the carousel
+│   ├── lightbox-slides.ts            # slide model: toSlides, collectPostImages, indexOfImage, wrapIndex
+│   ├── lightbox-dom.ts               # viewer DOM guards: isPinchZoomed, trapTab
+│   ├── use-restore-focus.ts          # returns focus to the viewer's opener by re-query
 │   ├── post-summary.ts               # formatPostDate + excerptFromContent
 │   ├── safe-load.ts                  # UI-boundary wrapper (§4.4, CONSTRAINT-14)
 │   ├── admin-queries.ts              # admin reads — thin barrel re-exporting the per-resource modules (§6.6.8)
@@ -483,9 +488,11 @@ E2E tests log in via a server-side magic-link flow that mirrors the production c
 
 ### 4.9 Carousel surface: hand-rolled
 
-The project media carousel lives entirely in `components/public/ProjectFrame.tsx` (`'use client'`, no npm dependency). It imports `useRef` and `useState` from React and a type from `lib/types`, and nothing else.
+The project media carousel lives entirely in `components/public/ProjectFrame.tsx` (`'use client'`, no npm dependency). It imports `useRef` and `useState` from React, a type from `lib/types`, and — since T48 — `ImageLightbox`, the slide helpers in `lib/lightbox-slides.ts` and the focus hook in `lib/use-restore-focus.ts`. Still no npm dependency.
 
 **Mechanics.** A single track element is translated with `transform: translateX(-current * 100%)`, where `current` is a `useState` index. Navigation wraps modulo slide count. Dots (`.sb-dot`, one per slide, `aria-current` on the active one), previous / next arrows and a `n / total` counter render only when there is more than one slide. Touch handling is a `touchstart` / `touchend` delta with a named `SWIPE_THRESHOLD_PX = 40` constant; a smaller delta is treated as a tap and ignored. `toSlides(media)` flattens the `project_media` rows into the slide array, emitting two slides for a row with an `imageAfterUrl` (§2.5).
+
+**Full-screen viewer (T48).** The current slide is a `<button>` wrapping its `<img>`; activating it opens `ImageLightbox` on that carousel's images alone. Three things about it are load-bearing and easy to undo by accident. **It is portalled to `document.body`** — `.sb-track` is transformed, and a transformed ancestor makes `position: fixed` resolve against it rather than the viewport, so rendered in place the overlay is clipped inside the card. It themes correctly there only because the public tokens are declared at `:root` (§4.2 makes the same point for admin). **Focus restoration belongs to the caller, not the viewer** (`lib/use-restore-focus.ts`): capturing `document.activeElement` on mount and re-focusing it on unmount fails in a real browser, because React re-creates the nodes `MarkdownContent` injects and `focus()` on a detached node does nothing, silently — jsdom does not re-create the node, so a unit test will not catch it. **Slides whose URL never resolved are excluded**, so viewer indices and track indices diverge; `sourceIndex` on each slide is what maps one back to the other. The second group is the images inside one post body, collected at click time because `MarkdownContent` injects its HTML in an effect.
 
 **Accessibility (settled 2026-08-11).** Paging the track moves no focus, so a screen reader would otherwise be told nothing when the image changes. A clipped live region — `<span className="sb-live" aria-live="polite" aria-atomic="true">`, inside the same `multi &&` block as the rest of the chrome — announces `Image N of M: {alt}`. `.sb-live` hides it with `clip-path: inset(50%)` rather than `display: none`, which would remove it from the accessibility tree and defeat the purpose. Travel is suppressed for `prefers-reduced-motion: reduce` by a `transition: none` override on `.sb-track` in `public-projects.css`; the criterion at `plan-phase-4-launch.md:602` specifies embla's `duration: 0`, which no longer exists. Two of the five T46 regressions here were declined outright rather than deferred — no keydown handler for ←/→, and no `aria-controls` linkage — both with do-not-re-raise notes at their plan lines. Phrasing follows the CONSTRAINT-13 assistive-technology sub-rule, not the terse `Slide N of M` T43.A specified. See `founder-brief.md` entry 42.
 
@@ -507,7 +514,7 @@ The project media carousel lives entirely in `components/public/ProjectFrame.tsx
 
 **Middleware does not run on public requests.** The matcher is `['/admin/:path*']`; middleware is exactly the admin session gate (§6.2). One fewer edge invocation per public page view, and it removes a whole class of "did middleware do something to this response" question from public-route debugging.
 
-**Stylesheet split.** Tokens live in `app/styles/colors_and_type.css`. Component classes are split across `app/styles/public.css` (the shared shell: header, nav, page frame) plus one sheet per page: `public-home.css`, `public-projects.css`, `public-writing.css`, `public-other.css`. Each page sheet owns its own responsive block, so a page's desktop and mobile rules sit next to each other in one file rather than in a shared bottom-of-file media query. All seven public sheets are imported by `app/layout.tsx`.
+**Stylesheet split.** Tokens live in `app/styles/colors_and_type.css`. Component classes are split across `app/styles/public.css` (the shared shell: header, nav, page frame) plus one sheet per page: `public-home.css`, `public-projects.css`, `public-writing.css`, `public-other.css`. Each page sheet owns its own responsive block, so a page's desktop and mobile rules sit next to each other in one file rather than in a shared bottom-of-file media query. All eight public sheets are imported by `app/layout.tsx`.
 
 **Font variables go on `<html>`, not `<body>`.** `colors_and_type.css` composes `--font-serif`, `--font-sans` and `--font-mono` at `:root` from the three `next/font` variables. A CSS custom property is substituted where it is **declared**, not where it is used: with the variable classes on `<body>`, `--font-instrument-serif` and friends are out of scope at `:root`, the composed families resolve to the guaranteed-invalid value, and every `font:` shorthand referencing them silently falls back — the whole site rendered in Times New Roman with no console error. Do not move them back.
 
@@ -524,7 +531,7 @@ The project media carousel lives entirely in `components/public/ProjectFrame.tsx
 
 `app/layout.tsx` sets `metadataBase`, plus site-wide `openGraph` and `twitter` defaults; `metadataBase` is what lets the `opengraph-image` convention resolve to an absolute URL. `/writing/[slug]` is the only route with per-post overrides, and it must name `images: ['/opengraph-image']` explicitly because a per-route `openGraph` object replaces the inherited one wholesale — omitting it would strip the card rather than keep it.
 
-**Public components.** `SiteHeader`, `ProjectCard`, `ProjectFrame`, `MarkdownContent`, `home/SocialIcons`, and `pages/{Home,Projects,Writing,Other}` — nine files, and that is the complete inventory. T46 deleted the entire `mobile/` tree plus `BeforeAfterMedia`, `BeforeAfterMediaScenes`, `DemoLoop`, `Footer`, `MorePointer`, `Nav`, `Page`, `PostImage`, `ProgressRing`, `ProjectImage`, `ProjectMedia`, `ProjectMediaCarousel`, `ProjectMediaCarouselParts`, `ProjectRow`, `ProjectThumb`, `SectionHead`, `SocialIcon`, `StatusPill`, `StillMedia`, `TweaksPanel`, `TypoIcon`, `Wordmark`, and `lib/thumb-kinds.ts`. Anything importing those names is stale.
+**Public components.** `SiteHeader`, `ProjectCard`, `ProjectFrame`, `ImageLightbox`, `MarkdownContent`, `home/SocialIcons`, and `pages/{Home,Projects,Writing,Other}` — ten files, and that is the complete inventory. T46 deleted the entire `mobile/` tree plus `BeforeAfterMedia`, `BeforeAfterMediaScenes`, `DemoLoop`, `Footer`, `MorePointer`, `Nav`, `Page`, `PostImage`, `ProgressRing`, `ProjectImage`, `ProjectMedia`, `ProjectMediaCarousel`, `ProjectMediaCarouselParts`, `ProjectRow`, `ProjectThumb`, `SectionHead`, `SocialIcon`, `StatusPill`, `StillMedia`, `TweaksPanel`, `TypoIcon`, `Wordmark`, and `lib/thumb-kinds.ts`. Anything importing those names is stale.
 
 ---
 

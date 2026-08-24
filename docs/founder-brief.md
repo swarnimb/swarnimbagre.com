@@ -58,6 +58,7 @@ Entries are listed in decision order. The `#` column is a stable ID, not a sort 
 | 40 | Discoverability and public-route resilience (T41) | `app/robots.ts` + `app/sitemap.ts` + `app/opengraph-image.tsx` + `app/icon.svg` + `app/error.tsx` + `app/not-found.tsx` + `app/layout.tsx` |
 | 41 | The way back into a locked-out admin is a service-role script (NB-16) | [`auth-flow.md`](auth-flow.md) §5 + `scripts/recover-admin-session.ts` + CONSTRAINT-09 |
 | 42 | The dry voice stops at what people can see | [`architecture.md`](architecture.md) §4.9 + CONSTRAINT-13 |
+| 44 | Images open full screen, and the viewer is hand-rolled (T48) | [§4.9](architecture.md#49-carousel-surface-hand-rolled) + CONSTRAINT-05 deviation #10 + `components/public/ImageLightbox.tsx` |
 
 ---
 
@@ -804,6 +805,27 @@ The reason to fix a zero-exposure finding is that the function runs with elevate
 - Not verified with a real screen reader. The behaviour is asserted by two render tests and by the markup being the standard pattern, which is weaker evidence than someone actually listening to it.
 
 **What this closes off:** Applying voice discipline uniformly across every string in the codebase. There are now two tiers — what is seen, and what is only heard — and future copy work has to know which tier it is editing. Reversing means rewriting the three carousel labels and accepting that a blind visitor cannot tell your project carousels apart.
+
+
+---
+
+## 44. Images open full screen, and the viewer is hand-rolled
+
+**Date:** 2026-08-22 (fixes and QA sign-off 2026-08-23)
+**Architecture link:** [`architecture.md` §4.9](architecture.md#49-carousel-surface-hand-rolled) + CONSTRAINT-05 (tenth recorded deviation) + CONSTRAINT-22
+
+**Decided:** Tapping any public-site image opens it full screen, in two groups that never mix — one project's carousel, or one post's body. The overlay is written by hand rather than pulled from a library, and it implements no zoom of its own: native pinch-zoom on mobile and ctrl+scroll on desktop are the entire zoom story. The PRD listed a lightbox as a non-goal since T43; you reversed that on 2026-08-22 and the reversal is dated in `prd.md` §7.2.
+
+**What this means for your product:** Project screenshots and post images are readable at full size instead of at card size, which is the whole reason for putting them on the site. The public pages still ship zero runtime JavaScript dependencies, so nothing about page weight changed. Visitors on a phone can pinch to zoom exactly as they can anywhere else on the web — that is deliberate, and it is why the overlay does not claim the touch gesture for itself.
+
+**Check before approving:**
+- Open a project card image and a post image on your phone. Swipe sideways to move, swipe down to dismiss, pinch to zoom in on detail.
+- Close the viewer and check you are back where you were on the page, not at the top of it.
+- The scrim behind the image is cream, not the dark grey most sites use. That is a decision, not an oversight: your site is light, and project screenshots are content, not design input — a scrim chosen to flatter AmIBroke's near-black dashboards would be wrong for the next project's light ones.
+
+**What this closes off:** A before/after compare slider with a draggable divider — the "sliding" mechanic discussed at spec time — is explicitly not this feature; a pair still flattens into two ordinary slides. Adding custom zoom later means taking on the pan-versus-swipe-versus-dismiss gesture conflict this deliberately avoids. Adding a lightbox library later would need a named Override plus a route-chunk measurement under CONSTRAINT-22, which currently stands at zero consumers.
+
+**Implementation note:** T48, commits `1ac9d1c` → `8fa3ff4`. Three defects were found after the first commit and are worth remembering, because two of them passed their tests. `touch-action: none` on the overlay would have silently deleted the native pinch-zoom the whole design depends on. Focus restoration by holding a DOM node across the viewer's lifetime does not work — React re-creates the nodes `MarkdownContent` injects, so the held element is detached and `focus()` on it does nothing at all; jsdom does not re-create the node, so the unit test passed while the shipped feature was broken, and only browser verification against the live deploy caught it (`lib/use-restore-focus.ts` is the fix). QA signed off APPROVED on 2026-08-23.
 
 ---
 
