@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useRef, useState } from 'react';
 import type { PublicProjectMediaItem } from '@/lib/types';
 import { ImageLightbox } from './ImageLightbox';
@@ -123,10 +124,17 @@ export function ProjectFrame({
                 onClick={(event) => openViewer(index, event.currentTarget)}
               >
                 {/*
-                  Storage URLs are signed and short-lived, so next/image's
-                  optimizer cannot cache them usefully.
+                  The images bucket is public (migration 017), so these URLs
+                  are permanent and next/image can optimise and edge-cache
+                  them. `sizes` reflects the real grid: full width on phones,
+                  two-up on tablets, ~420px tracks in the 1240px container.
                 */}
-                <img src={slide.url} alt={slide.alt} />
+                <Image
+                  src={slide.url}
+                  alt={slide.alt}
+                  fill
+                  sizes="(max-width: 640px) 100vw, (max-width: 1000px) 50vw, 420px"
+                />
               </button>
             ) : (
               <span className="sb-slide-label">{slide.alt}</span>

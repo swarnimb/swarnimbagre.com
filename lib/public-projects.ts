@@ -6,7 +6,7 @@ import type { Project, PublicProjectMediaItem } from './types';
 /**
  * Public-render-ready project shape.
  *
- * Built from a `Project` row plus pre-resolved signed Storage URLs for the
+ * Built from a `Project` row plus pre-resolved public Storage URLs for the
  * primary and after images. Pages call `loadPublicProjects` from inside a
  * `safeLoad` block; the result is passed straight to client-side card
  * components (`ProjectRow`, `ProjectCard`) without any further DB or
@@ -82,8 +82,8 @@ export async function loadPublicProjects(): Promise<PublicProject[]> {
  */
 async function toPublicProject(row: Project): Promise<PublicProject> {
   const [imageUrl, imageAfterUrl, media] = await Promise.all([
-    resolveImageUrl(row.image_id, row.id, 'image_id'),
-    resolveImageUrl(row.image_after_id, row.id, 'image_after_id'),
+    resolveImageUrl(row.image_id),
+    resolveImageUrl(row.image_after_id),
     loadProjectMediaSafe(row.id),
   ]);
   return {
@@ -106,35 +106,19 @@ async function toPublicProject(row: Project): Promise<PublicProject> {
 }
 
 /**
- * Resolve an image id to a signed URL. Returns `null` (and logs) on any
- * lookup or signing failure so a single missing image cannot fail the
- * whole project list render.
+ * Resolve an image id to a public URL. Returns `null` when the column is
+ * unset or the image record is missing. URL construction cannot fail at
+ * runtime now that the bucket is public (migration 017), so genuine failures
+ * propagate to the caller's `safeLoad` boundary rather than rendering as a
+ * silently absent image.
  *
- * @param imageId      The image record id, or null.
- * @param projectId    The owning project id, used only for log context.
- * @param columnName   The column being resolved, used only for log context.
+ * @param imageId The image record id, or null.
  */
-async function resolveImageUrl(
-  imageId: string | null,
-  projectId: string,
-  columnName: 'image_id' | 'image_after_id',
-): Promise<string | null> {
+async function resolveImageUrl(imageId: string | null): Promise<string | null> {
   if (!imageId) return null;
-  try {
-    const record = await getImageById(imageId);
-    if (!record) return null;
-    return await getImageUrl(record.bucket_path);
-  } catch (error) {
-    console.error('[public-projects] image url resolution failed', {
-      operation: 'resolveImageUrl',
-      projectId,
-      columnName,
-      imageId,
-      errorMessage: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-    return null;
-  }
+  const record = await getImageById(imageId);
+  if (!record) return null;
+  return getImageUrl(record.bucket_path);
 }
 
 /**

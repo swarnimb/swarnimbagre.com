@@ -207,9 +207,22 @@
 
 ---
 
-### [CONSTRAINT-15] Image reads use signed URLs (TTL 3600s), not public URLs
+### [CONSTRAINT-15] Image reads use public Storage URLs
 
-Image URLs are generated at request time via Supabase Storage `createSignedUrl(bucketPath, 3600)`. `getPublicUrl` must not be used for the `images` bucket — the bucket is private per migration `005_rls_images.sql` and public URLs return 404. Signed-URL generation is centralized in `lib/images.ts::getImageUrl`. TTL is fixed at 3600 seconds: long enough for a typical reading session, short enough to limit leaked-URL exposure. Components consuming images must call `getImageUrl` rather than constructing URLs directly. (T46 note: the named `ProjectImage` / `PostImage` components were deleted with the old bundle. Public image URLs are now resolved server-side in `lib/public-projects.ts` and handed to `ProjectFrame` pre-signed; the rule is unchanged, only the caller moved.)
+**AMENDED 2026-08-25 (Session 61). This reverses the original rule, which required `createSignedUrl(bucketPath, 3600)` and forbade `getPublicUrl`.**
+
+The `images` bucket is public as of migration `017_public_images_bucket.sql`. `lib/images.ts::getImageUrl` returns `getPublicUrl(bucketPath)`. Resolution is now pure string construction with no network call, so it cannot fail transiently. Components must still call `getImageUrl` rather than building URLs by hand, so the bucket name and path shape stay in one place.
+
+**Why it was reversed.** Signed URLs cost two things:
+
+1. `/projects` is `force-dynamic`, so every request re-signed every image. `resolveImageUrl` and `resolveMediaImage` each wrapped that call in a try/catch that returned `null`, so one transient Storage failure rendered as a silently missing image. Images appeared and disappeared between reloads and nothing surfaced except a server log.
+2. A URL carrying a 1-hour token cannot be optimised or edge-cached by `next/image`, so every cold visitor downloaded full-size originals. The largest carousel PNG is roughly 441KB.
+
+Every object in this bucket is a screenshot of a public demo already linked from the site, so the private bucket protected nothing that was not already published.
+
+**Accepted trade-off.** Objects belonging to unpublished drafts are readable by anyone who knows the path. Row-level security on `public.images` (migration 005) still hides the *records* from `anon`, so drafts never surface in the UI; only direct object URLs are reachable. Builder approved 2026-08-25.
+
+**What this closes off.** Reintroducing signed URLs for this bucket, and reintroducing catch-and-null around image resolution. A failure to resolve an image is now a real fault and must reach the page's `safeLoad` boundary rather than rendering as an absent image.
 
 ---
 
@@ -358,7 +371,7 @@ or a re-evaluation of header uniformity under PKCE.
 
 Two consequences worth knowing. First, `npm test` shells out to `npm run build` (via `tests/server-actions-manifest.test.ts`), so a lint error fails the test suite too — that is one gate, not two. Second, rule suppressions belong in `eslint.config.mjs` with a comment stating why, not as inline `eslint-disable` directives scattered through source. Inline directives outlive the problems they suppress: the two removed at S59 were both dead, and one had drifted three lines away from the violation it was aimed at.
 
-Current deliberate suppressions, each carrying its reason in the config: `next-env.d.ts` and `supabase/functions/**` ignored (generated file; Deno toolchain), `^_` honoured as the unused-binding convention, and `@next/next/no-img-element` off because public images are short-TTL signed Storage URLs per CONSTRAINT-15 that `next/image` cannot optimise.
+Current deliberate suppressions, each carrying its reason in the config: `next-env.d.ts` and `supabase/functions/**` ignored (generated file; Deno toolchain), `^_` honoured as the unused-binding convention, and `@next/next/no-img-element` off. **Amended 2026-08-25:** the original reason (short-TTL signed URLs `next/image` cannot optimise) died with the CONSTRAINT-15 amendment, and the carousel in `ProjectFrame.tsx` now uses `next/image` with `fill`. The rule stays off because four `<img>` sites remain and each has a standing reason: `MarkdownContent.tsx` injects image nodes imperatively into the DOM, where a React component cannot be used at all; `ImageLightbox.tsx` and the two admin previews size themselves from the image's intrinsic dimensions via `max-width`/`max-height`, which `fill` would break and which `width`/`height` cannot supply because the `images` table stores no dimensions. Turning the rule on would mean four scattered file-level disables, which hides the reasoning rather than recording it. Revisit if image dimensions are ever persisted at upload.
 
 **Who decided and when:** Builder, 2026-08-12, Session 59, on restoring the lint config at `bc97b8c`.
 

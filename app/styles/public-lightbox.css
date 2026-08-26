@@ -74,6 +74,10 @@
    fills the same 100% of the padded slide, so the pixels are unchanged. */
 .sb-slide-open {
   display: block;
+  /* next/image `fill` positions the image absolutely against its nearest
+     positioned ancestor, which is this button. Without this the image would
+     escape the slide and size against the page. */
+  position: relative;
   width: 100%;
   height: 100%;
   padding: 0;

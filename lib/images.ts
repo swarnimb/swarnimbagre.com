@@ -5,21 +5,21 @@ import { ServiceError } from './errors';
 /** Storage bucket holding all images. */
 const IMAGES_BUCKET = 'images';
 
-/** Signed URL lifetime in seconds. 1 hour balances render flexibility and leak window. */
-const SIGNED_URL_TTL_SECONDS = 3600;
-
 /**
- * Resolve a Supabase Storage bucket path to a time-limited signed URL.
+ * Resolve a Supabase Storage bucket path to a public, permanent URL.
  *
- * Throws on empty path and on any storage error. Callers in Server Components
- * should let the throw propagate to the page-level `safeLoad` boundary, or
- * catch locally if the component is meant to degrade silently.
+ * The `images` bucket is public as of migration 017, so this is a pure string
+ * build with no network call and nothing to retry. Callers that used to guard
+ * against transient signing failures no longer need to.
+ *
+ * Throws only on an empty path, which is a programming error rather than a
+ * runtime condition.
  *
  * @param bucketPath Path within the `images` bucket. Must be non-empty.
  * @param client     Optional injected client (for tests). Defaults to a
  *                   request-scoped server client.
- * @returns A signed URL valid for `SIGNED_URL_TTL_SECONDS`.
- * @throws  ServiceError if `bucketPath` is empty or storage fails.
+ * @returns A public URL with no expiry.
+ * @throws  ServiceError if `bucketPath` is empty or the SDK returns no URL.
  */
 export async function getImageUrl(
   bucketPath: string,
@@ -33,20 +33,12 @@ export async function getImageUrl(
     });
   }
   const supabase = client ?? (await createServerClient());
-  const { data, error } = await supabase.storage
-    .from(IMAGES_BUCKET)
-    .createSignedUrl(bucketPath, SIGNED_URL_TTL_SECONDS);
-  if (error || !data?.signedUrl) {
-    console.error(`[storage] ${operation} failed`, {
-      operation,
-      bucketPath,
-      errorMessage: error?.message ?? 'no signedUrl returned',
-      stack: new Error().stack,
-    });
+  const { data } = supabase.storage.from(IMAGES_BUCKET).getPublicUrl(bucketPath);
+  if (!data?.publicUrl) {
     throw new ServiceError(`${operation} failed`, {
       operation,
-      cause: error ?? new Error('no signedUrl returned'),
+      cause: new Error('no publicUrl returned'),
     });
   }
-  return data.signedUrl;
+  return data.publicUrl;
 }

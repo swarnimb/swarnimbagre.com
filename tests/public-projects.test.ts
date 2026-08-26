@@ -159,15 +159,16 @@ describe('loadPublicProjects — happy path', () => {
 });
 
 describe('loadPublicProjects — failure isolation', () => {
-  it('returns the row with imageUrl=null and logs when image resolution fails', async () => {
+  it('propagates when image resolution fails', async () => {
+    // Public bucket (migration 017) means URL construction makes no network
+    // call. A throw is a real fault and must reach safeLoad, not render as a
+    // silently absent card image.
     vi.mocked(getPublishedProjects).mockResolvedValueOnce([
       makeRow({ image_id: 'broken' }),
     ]);
     vi.mocked(getImageById).mockRejectedValueOnce(new Error('storage down'));
 
-    const result = await loadPublicProjects();
-    expect(result[0].imageUrl).toBeNull();
-    expect(consoleErrorSpy).toHaveBeenCalled();
+    await expect(loadPublicProjects()).rejects.toThrow('storage down');
   });
 
   it('returns the row with imageUrl=null when the image record is missing', async () => {

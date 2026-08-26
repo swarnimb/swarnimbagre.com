@@ -1,50 +1,50 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getImageUrl } from '@/lib/images';
 import { ServiceError } from '@/lib/errors';
 
 /**
- * Build a stub Supabase client whose `.storage.from(bucket).createSignedUrl(path, ttl)`
- * resolves with the given `{ data, error }` payload.
+ * Build a stub Supabase client whose `.storage.from(bucket).getPublicUrl(path)`
+ * returns the given `{ data }` payload.
+ *
+ * `getPublicUrl` is synchronous in supabase-js and has no error channel: the
+ * `images` bucket is public as of migration 017, so resolving a path is pure
+ * string construction with nothing to fail.
  */
-function makeStorageStub(result: {
-  data: { signedUrl: string } | null;
-  error: { message: string } | null;
-}): SupabaseClient {
+function makeStorageStub(result: { data: { publicUrl: string } | null }): SupabaseClient {
   return {
     storage: {
       from: () => ({
-        createSignedUrl: () => Promise.resolve(result),
+        getPublicUrl: () => result,
       }),
     },
   } as unknown as SupabaseClient;
 }
 
-let consoleErrorSpy: ReturnType<typeof vi.spyOn> | undefined;
-
-beforeEach(() => {
-  consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-});
-
-afterEach(() => {
-  consoleErrorSpy?.mockRestore();
-});
-
 describe('getImageUrl', () => {
-  it('returns a valid URL for a known path', async () => {
+  it('returns a public URL for a known path', async () => {
     const stub = makeStorageStub({
-      data: { signedUrl: 'https://example.supabase.co/signed/abc' },
-      error: null,
+      data: { publicUrl: 'https://example.supabase.co/storage/v1/object/public/images/abc' },
     });
     const url = await getImageUrl('projects/p1/abc_photo.jpg', stub);
-    expect(url).toBe('https://example.supabase.co/signed/abc');
+    expect(url).toBe('https://example.supabase.co/storage/v1/object/public/images/abc');
+  });
+
+  it('returns a URL with no expiry token', async () => {
+    const stub = makeStorageStub({
+      data: { publicUrl: 'https://example.supabase.co/storage/v1/object/public/images/abc' },
+    });
+    const url = await getImageUrl('projects/p1/abc_photo.jpg', stub);
+    expect(url).not.toContain('token=');
   });
 
   it('throws when path is empty', async () => {
-    const stub = makeStorageStub({
-      data: { signedUrl: 'unused' },
-      error: null,
-    });
+    const stub = makeStorageStub({ data: { publicUrl: 'unused' } });
     await expect(getImageUrl('', stub)).rejects.toBeInstanceOf(ServiceError);
+  });
+
+  it('throws when the SDK returns no URL', async () => {
+    const stub = makeStorageStub({ data: null });
+    await expect(getImageUrl('projects/p1/abc.jpg', stub)).rejects.toBeInstanceOf(ServiceError);
   });
 });

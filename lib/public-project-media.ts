@@ -40,8 +40,8 @@ export async function loadPublicProjectMedia(
  */
 async function toPublicMediaItem(row: ProjectMedia): Promise<PublicProjectMediaItem> {
   const [primary, after] = await Promise.all([
-    resolveMediaImage(row.image_id, row.project_id, row.id, 'image_id'),
-    resolveMediaImage(row.image_after_id, row.project_id, row.id, 'image_after_id'),
+    resolveMediaImage(row.image_id),
+    resolveMediaImage(row.image_after_id),
   ]);
   return {
     id: row.id,
@@ -54,38 +54,19 @@ async function toPublicMediaItem(row: ProjectMedia): Promise<PublicProjectMediaI
 }
 
 /**
- * Resolve a single image id (within a `project_media` row) to a signed URL
- * and its alt text. Returns `{ url: null, alt: null }` on any lookup or
- * signing failure so a single bad image cannot fail the surrounding item or
- * any other item in the carousel.
+ * Resolve a single image id (within a `project_media` row) to a public URL
+ * and its alt text. Returns `{ url: null, alt: null }` when the column is
+ * unset or the image record is missing. URL construction itself cannot fail
+ * at runtime now that the bucket is public (migration 017), so genuine
+ * failures propagate instead of being swallowed.
  *
  * @param imageId    The image record id, or null when the column is unset.
- * @param projectId  The owning project id — used only as log context.
- * @param mediaId    The owning media row id — used only as log context.
- * @param columnName Which column is being resolved — used only as log context.
  */
 async function resolveMediaImage(
   imageId: string | null,
-  projectId: string,
-  mediaId: string,
-  columnName: 'image_id' | 'image_after_id',
 ): Promise<{ url: string | null; alt: string | null }> {
   if (!imageId) return { url: null, alt: null };
-  try {
-    const record = await getImageById(imageId);
-    if (!record) return { url: null, alt: null };
-    const url = await getImageUrl(record.bucket_path);
-    return { url, alt: record.alt_text };
-  } catch (error) {
-    console.error('[public-project-media] image url resolution failed', {
-      operation: 'resolveMediaImage',
-      projectId,
-      mediaId,
-      columnName,
-      imageId,
-      errorMessage: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-    return { url: null, alt: null };
-  }
+  const record = await getImageById(imageId);
+  if (!record) return { url: null, alt: null };
+  return { url: await getImageUrl(record.bucket_path), alt: record.alt_text };
 }

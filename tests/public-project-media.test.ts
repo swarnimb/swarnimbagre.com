@@ -116,7 +116,11 @@ describe('loadPublicProjectMedia — happy path', () => {
 });
 
 describe('loadPublicProjectMedia — failure isolation', () => {
-  it('nulls only the failing item URL when one image lookup throws', async () => {
+  it('propagates when an image lookup throws', async () => {
+    // The bucket is public (migration 017), so URL construction has no network
+    // call and nothing transient to absorb. A throw here is a real fault and
+    // must reach the caller's safeLoad boundary rather than rendering as a
+    // silently missing image, which is the bug this replaced.
     vi.mocked(getProjectMediaByProject).mockResolvedValueOnce([
       makeMedia({ id: 'm1', image_id: 'good' }),
       makeMedia({ id: 'm2', image_id: 'broken' }),
@@ -124,32 +128,9 @@ describe('loadPublicProjectMedia — failure isolation', () => {
     vi.mocked(getImageById)
       .mockResolvedValueOnce(makeImage('good', 'projects/p1/m1.jpg', 'main'))
       .mockRejectedValueOnce(new Error('storage down'));
-    vi.mocked(getImageUrl).mockResolvedValueOnce('https://signed.example/m1');
+    vi.mocked(getImageUrl).mockResolvedValueOnce('https://public.example/m1');
 
-    const result = await loadPublicProjectMedia('p1');
-
-    expect(result).toHaveLength(2);
-    expect(result[0].imageUrl).toBe('https://signed.example/m1');
-    expect(result[1].imageUrl).toBeNull();
-    expect(result[1].imageAlt).toBe('');
-    expect(consoleErrorSpy).toHaveBeenCalled();
-  });
-
-  it('nulls only image_after_url when the after-image lookup fails but the primary succeeds', async () => {
-    vi.mocked(getProjectMediaByProject).mockResolvedValueOnce([
-      makeMedia({ image_after_id: 'broken-after' }),
-    ]);
-    vi.mocked(getImageById)
-      .mockResolvedValueOnce(makeImage('img-1', 'projects/p1/before.jpg', 'before'))
-      .mockRejectedValueOnce(new Error('storage down'));
-    vi.mocked(getImageUrl).mockResolvedValueOnce('https://signed.example/before');
-
-    const result = await loadPublicProjectMedia('p1');
-
-    expect(result[0].imageUrl).toBe('https://signed.example/before');
-    expect(result[0].imageAfterUrl).toBeNull();
-    expect(result[0].imageAfterAlt).toBeNull();
-    expect(consoleErrorSpy).toHaveBeenCalled();
+    await expect(loadPublicProjectMedia('p1')).rejects.toThrow('storage down');
   });
 
   it('nulls the URL (does not throw) when the image record is missing', async () => {
