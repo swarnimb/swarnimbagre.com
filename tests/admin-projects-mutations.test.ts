@@ -33,8 +33,6 @@ const PUBLISHED_ROW: Project = {
   updated_at: '2026-01-02T00:00:00.000Z',
   github_url: null,
   live_url: null,
-  post_url: null,
-  progress_percent: null,
   thumb_kind: null,
   image_after_id: null,
   post_id: null,
@@ -55,8 +53,6 @@ const DRAFT_ROW: Project = {
   updated_at: '2026-04-01T00:00:00.000Z',
   github_url: null,
   live_url: null,
-  post_url: null,
-  progress_percent: null,
   thumb_kind: null,
   image_after_id: null,
   post_id: null,
@@ -78,8 +74,6 @@ const DRAFT_ROW: Project = {
 const NULL_CONTENT_FIELDS = {
   github_url: null,
   live_url: null,
-  post_url: null,
-  progress_percent: null,
   // T46: `subtitle` and `tags` are nullable but NOT optional on either
   // schema, so every payload has to carry them.
   subtitle: null,
@@ -252,8 +246,6 @@ describe('createProjectInternal', () => {
       updated_at: '2026-05-13T00:00:00.000Z',
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       thumb_kind: null,
       image_after_id: null,
       post_id: null,
@@ -321,8 +313,6 @@ describe('createProjectInternal', () => {
       updated_at: '2026-05-13T00:00:00.000Z',
       github_url: 'https://example.com',
       live_url: 'https://example.com/live',
-      post_url: '/writing/foo',
-      progress_percent: 75,
       thumb_kind: null,
       image_after_id: null,
       post_id: null,
@@ -342,8 +332,6 @@ describe('createProjectInternal', () => {
         status: 'draft',
         github_url: 'https://example.com',
         live_url: 'https://example.com/live',
-        post_url: '/writing/foo',
-        progress_percent: 75,
         subtitle: 'One short line',
         tags: ['next', 'supabase'],
         post_id: null,
@@ -356,8 +344,11 @@ describe('createProjectInternal', () => {
     const payload = insertCall?.args[0] as Record<string, unknown>;
     expect(payload.github_url).toBe('https://example.com');
     expect(payload.live_url).toBe('https://example.com/live');
-    expect(payload.post_url).toBe('/writing/foo');
-    expect(payload.progress_percent).toBe(75);
+    // post_url and progress_percent were removed from the admin form and the
+    // mutation payloads. The columns still exist, so the payload must NOT name
+    // them: writing them would clobber stored values with form blanks.
+    expect(payload).not.toHaveProperty('post_url');
+    expect(payload).not.toHaveProperty('progress_percent');
     expect(payload.subtitle).toBe('One short line');
     expect(payload.tags).toEqual(['next', 'supabase']);
   });
@@ -377,8 +368,6 @@ describe('createProjectInternal', () => {
       updated_at: '2026-05-28T00:00:00.000Z',
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       thumb_kind: null,
       image_after_id: null,
       post_id: POST_ID,
@@ -648,8 +637,6 @@ describe('updateProjectInternal', () => {
         image_id: null,
         github_url: 'https://example.com',
         live_url: 'https://example.com/live',
-        post_url: '/writing/foo',
-        progress_percent: 75,
         subtitle: 'One short line',
         tags: ['next', 'supabase'],
         image_after_id: IMAGE_AFTER_ID,
@@ -663,8 +650,11 @@ describe('updateProjectInternal', () => {
     const payload = updateCall?.args[0] as Record<string, unknown>;
     expect(payload.github_url).toBe('https://example.com');
     expect(payload.live_url).toBe('https://example.com/live');
-    expect(payload.post_url).toBe('/writing/foo');
-    expect(payload.progress_percent).toBe(75);
+    // post_url and progress_percent were removed from the admin form and the
+    // mutation payloads. The columns still exist, so the payload must NOT name
+    // them: writing them would clobber stored values with form blanks.
+    expect(payload).not.toHaveProperty('post_url');
+    expect(payload).not.toHaveProperty('progress_percent');
     expect(payload.subtitle).toBe('One short line');
     expect(payload.tags).toEqual(['next', 'supabase']);
     expect(payload.image_after_id).toBe(IMAGE_AFTER_ID);
@@ -697,8 +687,6 @@ describe('updateProjectInternal', () => {
         image_id: null,
         github_url: null,
         live_url: null,
-        post_url: null,
-        progress_percent: null,
         subtitle: null,
         tags: null,
         image_after_id: NEW_AFTER_ID,
@@ -759,8 +747,6 @@ describe('updateProjectInternal', () => {
         image_id: null,
         github_url: null,
         live_url: null,
-        post_url: null,
-        progress_percent: null,
         subtitle: null,
         tags: null,
         image_after_id: SAME_AFTER_ID,

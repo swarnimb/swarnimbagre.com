@@ -43,8 +43,6 @@ export type ProjectMutationFieldName =
   | 'status'
   | 'github_url'
   | 'live_url'
-  | 'post_url'
-  | 'progress_percent'
   | 'subtitle'
   | 'tags'
   | 'image_after_id'

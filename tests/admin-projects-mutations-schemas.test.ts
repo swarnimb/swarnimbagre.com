@@ -39,8 +39,6 @@ describe('projectCreateSchema', () => {
       status: 'draft' as const,
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: null,
       tags: null,
       post_id: null,
@@ -55,8 +53,6 @@ describe('projectCreateSchema', () => {
       status: 'published' as const,
       github_url: 'https://example.com',
       live_url: 'https://example.com/live',
-      post_url: '/writing/foo',
-      progress_percent: 50,
       subtitle: 'one short line',
       tags: ['next', 'supabase'],
       post_id: null,
@@ -71,8 +67,6 @@ describe('projectCreateSchema', () => {
       status: 'draft' as const,
       github_url: 'http://example.com',
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: null,
       tags: null,
     };
@@ -86,146 +80,11 @@ describe('projectCreateSchema', () => {
       status: 'draft' as const,
       github_url: null,
       live_url: 'http://example.com',
-      post_url: null,
-      progress_percent: null,
       subtitle: null,
       tags: null,
     };
     expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
   });
-
-  it('rejects post_url that does not start with https or /', () => {
-    const input = {
-      title: 'Thing',
-      description: 'desc',
-      status: 'draft' as const,
-      github_url: null,
-      live_url: null,
-      post_url: 'ftp://example.com',
-      progress_percent: null,
-      subtitle: null,
-      tags: null,
-    };
-    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
-  });
-
-  it('accepts post_url with a /-relative path', () => {
-    const input = {
-      title: 'Thing',
-      description: 'desc',
-      status: 'draft' as const,
-      github_url: null,
-      live_url: null,
-      post_url: '/writing/foo',
-      progress_percent: null,
-      subtitle: null,
-      tags: null,
-      post_id: null,
-    };
-    expect(() => projectCreateSchema.parse(input)).not.toThrow();
-  });
-
-  it('accepts post_url with an https URL', () => {
-    const input = {
-      title: 'Thing',
-      description: 'desc',
-      status: 'draft' as const,
-      github_url: null,
-      live_url: null,
-      post_url: 'https://example.com/foo',
-      progress_percent: null,
-      subtitle: null,
-      tags: null,
-      post_id: null,
-    };
-    expect(() => projectCreateSchema.parse(input)).not.toThrow();
-  });
-
-  // F-36 (audit 17): protocol-relative URLs (`//host`) are NOT relative
-  // paths — browsers route them to the named host. The refine excludes
-  // the `//` prefix from the relative-path branch.
-  it('rejects post_url that starts with // (protocol-relative)', () => {
-    const input = {
-      title: 'Thing',
-      description: 'desc',
-      status: 'draft' as const,
-      github_url: null,
-      live_url: null,
-      post_url: '//evil.com',
-      progress_percent: null,
-      subtitle: null,
-      tags: null,
-    };
-    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
-  });
-
-  it('rejects progress_percent below 0', () => {
-    const input = {
-      title: 'Thing',
-      description: 'desc',
-      status: 'draft' as const,
-      github_url: null,
-      live_url: null,
-      post_url: null,
-      progress_percent: -1,
-      subtitle: null,
-      tags: null,
-    };
-    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
-  });
-
-  it('rejects progress_percent above 100', () => {
-    const input = {
-      title: 'Thing',
-      description: 'desc',
-      status: 'draft' as const,
-      github_url: null,
-      live_url: null,
-      post_url: null,
-      progress_percent: 101,
-      subtitle: null,
-      tags: null,
-    };
-    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
-  });
-
-  it('rejects progress_percent that is not an integer', () => {
-    const input = {
-      title: 'Thing',
-      description: 'desc',
-      status: 'draft' as const,
-      github_url: null,
-      live_url: null,
-      post_url: null,
-      progress_percent: 50.5,
-      subtitle: null,
-      tags: null,
-    };
-    expect(() => projectCreateSchema.parse(input)).toThrow(ZodError);
-  });
-
-  it('accepts progress_percent at 0, 50, 100, and null', () => {
-    const base = {
-      title: 'Thing',
-      description: 'desc',
-      status: 'draft' as const,
-      github_url: null,
-      live_url: null,
-      post_url: null,
-      subtitle: null,
-      tags: null,
-      post_id: null,
-    };
-    for (const pct of [0, 50, 100, null]) {
-      expect(() =>
-        projectCreateSchema.parse({ ...base, progress_percent: pct }),
-      ).not.toThrow();
-    }
-  });
-
-  // T46: `subtitle` and `tags` replaced `thumb_kind` on this boundary. Both
-  // are nullable but not optional, so the null case is the baseline covered by
-  // every other payload above; the cases here exercise the fragments.
 
   it('rejects a subtitle longer than the CHECK ceiling', () => {
     const base = {
@@ -234,8 +93,6 @@ describe('projectCreateSchema', () => {
       status: 'draft' as const,
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       tags: null,
       post_id: null,
     };
@@ -255,8 +112,6 @@ describe('projectCreateSchema', () => {
       status: 'draft' as const,
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: '   ',
       tags: null,
       post_id: null,
@@ -274,8 +129,6 @@ describe('projectCreateSchema', () => {
       status: 'draft' as const,
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: null,
       post_id: null,
     };
@@ -297,8 +150,6 @@ describe('projectCreateSchema', () => {
       status: 'draft' as const,
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: null,
       tags: Array.from({ length: TAGS_MAX_COUNT }, (_, i) => `tag-${i}`),
       post_id: null,
@@ -315,8 +166,6 @@ describe('projectCreateSchema', () => {
       status: 'draft' as const,
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: null,
       tags: null,
       post_id: null,
@@ -338,8 +187,6 @@ describe('projectCreateSchema', () => {
       status: 'draft' as const,
       github_url: tooLong,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: null,
       tags: null,
     };
@@ -356,8 +203,6 @@ describe('projectUpdateSchema', () => {
       image_id: null,
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: null,
       tags: null,
       image_after_id: null,
@@ -374,8 +219,6 @@ describe('projectUpdateSchema', () => {
       image_id: VALID_UUID_A,
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: null,
       tags: null,
       image_after_id: VALID_UUID_B,
@@ -392,8 +235,6 @@ describe('projectUpdateSchema', () => {
       image_id: null,
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: null,
       tags: null,
       image_after_id: 'not-a-uuid',
@@ -428,8 +269,6 @@ describe('projectUpdateSchema', () => {
       image_id: null,
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: null,
       tags: null,
       image_after_id: null,
@@ -475,26 +314,6 @@ describe('projectUpdateSchema', () => {
       image_id: null,
       github_url: 'http://example.com',
       live_url: null,
-      post_url: null,
-      progress_percent: null,
-      subtitle: null,
-      tags: null,
-      image_after_id: null,
-      post_id: null,
-    };
-    expect(() => projectUpdateSchema.parse(input)).toThrow(ZodError);
-  });
-
-  it('rejects progress_percent above 100 (update side)', () => {
-    const input = {
-      title: 'Thing',
-      description: 'desc',
-      status: 'draft' as const,
-      image_id: null,
-      github_url: null,
-      live_url: null,
-      post_url: null,
-      progress_percent: 101,
       subtitle: null,
       tags: null,
       image_after_id: null,
@@ -511,8 +330,6 @@ describe('projectUpdateSchema', () => {
       image_id: null,
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: null,
       tags: ['next', '   '],
       image_after_id: null,
@@ -529,8 +346,6 @@ describe('projectUpdateSchema', () => {
       image_id: null,
       github_url: null,
       live_url: null,
-      post_url: null,
-      progress_percent: null,
       subtitle: 'one short line',
       tags: ['next', 'supabase'],
       image_after_id: null,

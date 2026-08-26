@@ -14,10 +14,6 @@ import type { ProjectMutationState } from '@/lib/admin-projects-mutations-types'
 import { TAGS_MAX_COUNT } from '@/lib/admin-projects-mutations-schemas';
 import type { Project } from '@/lib/types';
 
-/** Lower bound for the progress_percent input — matches DB CHECK. */
-const PERCENT_MIN = 0;
-/** Upper bound for the progress_percent input — matches DB CHECK. */
-const PERCENT_MAX = 100;
 /** Sentinel value rendered when `post_id` is null (project has no linked post). */
 const POST_ID_UNSET = '__unset__';
 
@@ -32,7 +28,7 @@ export interface ProjectFormDisplayProps {
 }
 
 /**
- * The display-controlling inputs: `progress_percent`, `subtitle`, `tags`, and
+ * The display-controlling inputs: `subtitle`, `tags`, and
  * `post_id` (the "Linked writeup" FK into `posts`, T45.B). Split out of
  * `ProjectForm.tsx` to keep that file under CQ-02 (200-line component cap).
  *
@@ -56,15 +52,10 @@ export default function ProjectFormDisplay({
   const initialPostId: string | null = project?.post_id ?? null;
   const [postId, setPostId] = useState<string>(initialPostId ?? POST_ID_UNSET);
 
-  const progressError = state.fieldErrors?.progress_percent ?? '';
   const subtitleError = state.fieldErrors?.subtitle ?? '';
   const tagsError = state.fieldErrors?.tags ?? '';
   const postIdError = state.fieldErrors?.post_id ?? '';
 
-  const initialProgress =
-    typeof project?.progress_percent === 'number'
-      ? String(project.progress_percent)
-      : '';
 
   const initialTags = project?.tags?.join(', ') ?? '';
 
@@ -73,36 +64,6 @@ export default function ProjectFormDisplay({
 
   return (
     <>
-      <div className="space-y-2">
-        <Label htmlFor="project-progress-percent">Progress</Label>
-        <Input
-          id="project-progress-percent"
-          name="progress_percent"
-          type="number"
-          defaultValue={initialProgress}
-          aria-invalid={Boolean(progressError)}
-          aria-describedby="project-progress-percent-error"
-          min={PERCENT_MIN}
-          max={PERCENT_MAX}
-          step={1}
-          className="w-32"
-          placeholder="0-100"
-        />
-        {progressError ? (
-          <p
-            id="project-progress-percent-error"
-            role="alert"
-            className="text-sm text-destructive"
-          >
-            {progressError}
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Leave empty to hide the progress ring.
-          </p>
-        )}
-      </div>
-
       <div className="space-y-2">
         <Label htmlFor="project-subtitle">Subtitle</Label>
         <Input

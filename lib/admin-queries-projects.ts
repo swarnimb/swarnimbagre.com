@@ -24,13 +24,27 @@ const PROJECT_LIST_COLUMNS =
   'id, title, slug, status, image_id, created_at, updated_at, sort_order';
 
 /**
- * Column projection for {@link getProjectById}. Includes `description` —
- * the edit form needs it. Kept separate from `PROJECT_LIST_COLUMNS` so the
- * list view does not pay the bandwidth cost of every body on every page
- * load.
+ * Column projection for {@link getProjectById}. Kept separate from
+ * `PROJECT_LIST_COLUMNS` so the list view does not pay the bandwidth cost of
+ * every description on every page load.
+ *
+ * MUST list every field on the `Project` interface. `getProjectById` casts its
+ * result to `Project`, so a missing column is invisible to the type checker
+ * and arrives at the edit form as `undefined`.
+ *
+ * That is not a cosmetic problem. `ProjectFormDisplay` and `ProjectFormLinks`
+ * seed their inputs from `project?.<field> ?? ''`, and `updateProject` writes
+ * `subtitle`, `tags`, `github_url`, `live_url`, `post_url`, `progress_percent`
+ * and `post_id` unconditionally. A column absent here therefore renders blank
+ * and is then saved as blank, silently destroying the stored value on every
+ * edit. This projection drifted behind migrations 009, 011, 012 and 013 and
+ * did exactly that. When a column is added to `projects`, add it here.
  */
-const PROJECT_DETAIL_COLUMNS =
-  'id, title, slug, description, status, image_id, created_at, updated_at';
+/* Kept on one line on purpose: supabase-js infers column types from a string
+   literal, and concatenating or splitting this collapses the inference to
+   GenericStringError, which silently disables checking on the cast below. */
+export const PROJECT_DETAIL_COLUMNS =
+  'id, title, slug, description, status, image_id, image_after_id, created_at, updated_at, github_url, live_url, post_url, progress_percent, thumb_kind, post_id, sort_order, subtitle, tags';
 
 /** PostgREST error code for "no rows returned" — treat as a 404, not an error. */
 const PGRST_NO_ROWS = 'PGRST116';

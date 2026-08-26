@@ -38,10 +38,6 @@ export const TAG_MAX_LENGTH = 24;
  */
 export const URL_MAX_LENGTH = 2048;
 
-/** Lower bound for `progress_percent` (matches DB CHECK in migration 009). */
-export const PROGRESS_PERCENT_MIN = 0;
-/** Upper bound for `progress_percent` (matches DB CHECK in migration 009). */
-export const PROGRESS_PERCENT_MAX = 100;
 
 /**
  * HTTPS-only URL fragment used by `github_url` and `live_url`. Rejects
@@ -54,31 +50,6 @@ const httpsUrlSchema = z
   .url('must be a valid URL')
   .startsWith('https://', 'must use https://')
   .max(URL_MAX_LENGTH, `must be at most ${URL_MAX_LENGTH} characters`);
-
-/**
- * `post_url` fragment — accepts either an absolute https:// URL (external
- * writeup) or a single-`/`-prefixed relative path (internal post slug,
- * e.g. `/writing/some-slug`). A standard `z.string().url()` would reject
- * the relative form; this refine carries both shapes intentionally per
- * the @cto consult (T42 Session A guard #1).
- *
- * F-36 (audit 17): the second branch explicitly excludes `//`-prefixed
- * values. Browsers interpret `//host` as a protocol-relative URL pointing
- * to `host`, not as a relative path. Accepting it would let an admin-side
- * compromise inject `<a href="//attacker.com">` and silently redirect
- * visitors. The single-slash check closes that gap.
- */
-const postUrlSchema = z
-  .string()
-  .trim()
-  .min(1, 'post_url cannot be empty')
-  .max(URL_MAX_LENGTH, `must be at most ${URL_MAX_LENGTH} characters`)
-  .refine(
-    (value): boolean =>
-      value.startsWith('https://') ||
-      (value.startsWith('/') && !value.startsWith('//')),
-    { message: 'must start with https:// or a single /' },
-  );
 
 /**
  * `subtitle` fragment (T46, migration 013). One short line under the card
@@ -124,13 +95,6 @@ export const projectCreateSchema = z.object({
   status: z.enum(['draft', 'published']).default('draft'),
   github_url: httpsUrlSchema.nullable(),
   live_url: httpsUrlSchema.nullable(),
-  post_url: postUrlSchema.nullable(),
-  progress_percent: z
-    .number()
-    .int('progress_percent must be a whole number')
-    .min(PROGRESS_PERCENT_MIN)
-    .max(PROGRESS_PERCENT_MAX)
-    .nullable(),
   subtitle: subtitleSchema.nullable(),
   tags: tagsSchema.nullable(),
   post_id: z.string().uuid('post_id must be a uuid').nullable(),
@@ -156,13 +120,6 @@ export const projectUpdateSchema = z.object({
   image_id: z.string().uuid('image_id must be a uuid').nullable(),
   github_url: httpsUrlSchema.nullable(),
   live_url: httpsUrlSchema.nullable(),
-  post_url: postUrlSchema.nullable(),
-  progress_percent: z
-    .number()
-    .int('progress_percent must be a whole number')
-    .min(PROGRESS_PERCENT_MIN)
-    .max(PROGRESS_PERCENT_MAX)
-    .nullable(),
   subtitle: subtitleSchema.nullable(),
   tags: tagsSchema.nullable(),
   image_after_id: z

@@ -36,7 +36,6 @@ export default function ProjectFormLinks({
 }: ProjectFormLinksProps): React.ReactElement {
   const githubUrlError = state.fieldErrors?.github_url ?? '';
   const liveUrlError = state.fieldErrors?.live_url ?? '';
-  const postUrlError = state.fieldErrors?.post_url ?? '';
 
   return (
     <>
@@ -78,24 +77,6 @@ export default function ProjectFormLinks({
         ) : null}
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="project-post-url">Post URL</Label>
-        <Input
-          id="project-post-url"
-          name="post_url"
-          type="text"
-          defaultValue={project?.post_url ?? ''}
-          aria-invalid={Boolean(postUrlError)}
-          aria-describedby="project-post-url-error"
-          maxLength={URL_INPUT_MAX_LENGTH}
-          placeholder="/writing/some-slug or https://..."
-        />
-        {postUrlError ? (
-          <p id="project-post-url-error" role="alert" className="text-sm text-destructive">
-            {postUrlError}
-          </p>
-        ) : null}
-      </div>
     </>
   );
 }

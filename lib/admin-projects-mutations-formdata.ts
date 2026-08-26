@@ -39,8 +39,6 @@ const ALLOWED_FIELD_KEYS: ReadonlySet<ProjectMutationFieldName> = new Set([
   'status',
   'github_url',
   'live_url',
-  'post_url',
-  'progress_percent',
   'subtitle',
   'tags',
   'image_after_id',
@@ -124,24 +122,6 @@ export function readTagsField(formData: FormData): string[] | null {
 }
 
 /**
- * Read `progress_percent` from FormData. Empty/missing → `null`. A parseable
- * numeric string → `number`. A non-numeric string passes through as the raw
- * trimmed string so the zod number schema rejects with a deterministic
- * message rather than the field being silently nulled.
- *
- * @param formData Raw submitted form data.
- * @returns A number, the raw trimmed string, or `null`.
- */
-export function readPercentField(formData: FormData): unknown {
-  const raw = formData.get('progress_percent');
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  if (trimmed.length === 0) return null;
-  const parsed = Number(trimmed);
-  return Number.isNaN(parsed) ? trimmed : parsed;
-}
-
-/**
  * Read FormData into the raw create payload. The cast is intentional:
  * unknown raw values flow through to the zod parser at the boundary, which
  * is the authoritative validator. Create does NOT carry `image_id` or
@@ -161,8 +141,6 @@ export function readProjectCreateFormData(formData: FormData): unknown {
     status: formData.get('status'),
     github_url: readNullableTrimmed(formData, 'github_url'),
     live_url: readNullableTrimmed(formData, 'live_url'),
-    post_url: readNullableTrimmed(formData, 'post_url'),
-    progress_percent: readPercentField(formData),
     subtitle: readNullableTrimmed(formData, 'subtitle'),
     tags: readTagsField(formData),
     post_id: readNullableTrimmed(formData, 'post_id'),
@@ -188,8 +166,6 @@ export function readProjectUpdateFormData(formData: FormData): unknown {
     image_id: readNullableTrimmed(formData, 'image_id'),
     github_url: readNullableTrimmed(formData, 'github_url'),
     live_url: readNullableTrimmed(formData, 'live_url'),
-    post_url: readNullableTrimmed(formData, 'post_url'),
-    progress_percent: readPercentField(formData),
     subtitle: readNullableTrimmed(formData, 'subtitle'),
     tags: readTagsField(formData),
     image_after_id: readNullableTrimmed(formData, 'image_after_id'),
