@@ -1,5 +1,6 @@
 'use client';
 
+import { CarouselChevron } from './CarouselChevron';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -180,7 +181,7 @@ export function ImageLightbox({
             aria-label={`Previous image of ${label}`}
             onClick={() => show(current - 1)}
           >
-            &lsaquo;
+            <CarouselChevron direction="prev" />
           </button>
           <button
             type="button"
@@ -188,7 +189,7 @@ export function ImageLightbox({
             aria-label={`Next image of ${label}`}
             onClick={() => show(current + 1)}
           >
-            &rsaquo;
+            <CarouselChevron direction="next" />
           </button>
         </>
       )}

@@ -1,5 +1,6 @@
 'use client';
 
+import { CarouselChevron } from './CarouselChevron';
 import Image from 'next/image';
 import { useRef, useState } from 'react';
 import type { PublicProjectMediaItem } from '@/lib/types';
@@ -168,7 +169,7 @@ export function ProjectFrame({
             aria-label={`Previous image of ${title}`}
             onClick={() => go(current - 1)}
           >
-            &lsaquo;
+            <CarouselChevron direction="prev" />
           </button>
           <button
             type="button"
@@ -176,7 +177,7 @@ export function ProjectFrame({
             aria-label={`Next image of ${title}`}
             onClick={() => go(current + 1)}
           >
-            &rsaquo;
+            <CarouselChevron direction="next" />
           </button>
 
           <div className="sb-dots">
