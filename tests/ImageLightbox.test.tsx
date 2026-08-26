@@ -97,11 +97,11 @@ describe('ProjectFrame — full-screen viewer', () => {
     // Paging back from the first image holds there rather than jumping to the
     // last: on a set this small a wrap reads as a glitch, not as navigation.
     fireEvent.keyDown(document, { key: 'ArrowLeft' });
-    expect(screen.getByRole('dialog').textContent).toContain('1 / 2');
+    expect(screen.getByRole('dialog').textContent).toContain('Image 1 of 2');
     // ...and paging forward past the last holds on the last.
     fireEvent.keyDown(document, { key: 'ArrowRight' });
     fireEvent.keyDown(document, { key: 'ArrowRight' });
-    expect(screen.getByRole('dialog').textContent).toContain('2 / 2');
+    expect(screen.getByRole('dialog').textContent).toContain('Image 2 of 2');
   });
 
   it('leaves the carousel on the image the viewer was last showing', () => {
@@ -146,6 +146,6 @@ describe('ProjectFrame — full-screen viewer', () => {
     );
     expect(screen.queryByRole('button', { name: 'Open image 1 of Thing full screen' })).toBeNull();
     fireEvent.click(openControl(2));
-    expect(screen.getByRole('dialog').textContent).not.toContain('/ 2');
+    expect(screen.getByRole('dialog').textContent).not.toContain(' of 2');
   });
 });

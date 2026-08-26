@@ -169,9 +169,6 @@ export function ImageLightbox({
       </button>
       {multi && (
         <>
-          <span className="sb-lb-counter">
-            {current + 1} / {slides.length}
-          </span>
           <span className="sb-live" aria-live="polite" aria-atomic="true">
             {`Image ${current + 1} of ${slides.length}: ${slide.alt}`}
           </span>

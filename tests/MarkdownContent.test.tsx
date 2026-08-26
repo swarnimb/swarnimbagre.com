@@ -18,7 +18,7 @@ describe('MarkdownContent — full-screen viewer', () => {
     render(<MarkdownContent md={'![a chart](/one.png)\n\n![a photo](/two.png)'} imageLabel="A Post" />);
     fireEvent.click(screen.getByAltText('a photo'));
     const dialog = screen.getByRole('dialog', { name: 'Image viewer for A Post' });
-    expect(dialog.textContent).toContain('2 / 2');
+    expect(dialog.textContent).toContain('Image 2 of 2');
   });
 
   it('returns focus to the image that opened it, not to the body', () => {

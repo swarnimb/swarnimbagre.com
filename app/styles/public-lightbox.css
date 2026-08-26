@@ -4,7 +4,7 @@
    CONSTRAINT-05 recorded deviation #10. The export ships no overlay
    pattern, so this composition uses existing tokens only: no new
    hex, no new timing curve, no new breakpoint. The controls reuse
-   the carousel's own classes (.sb-arrow, .sb-counter, .sb-live)
+   the carousel's own classes (.sb-arrow, .sb-live)
    rather than restating their pixels, so the two surfaces cannot
    drift apart.
    ============================================================ */
@@ -62,24 +62,6 @@
   top: 12px;
   right: 12px;
   transform: none;
-}
-
-/* Self-contained since the carousel dropped its own counter: the card shows
-   three or four images at a glance and did not need one, but full screen the
-   viewer has lost that context and a position readout still earns its place.
-   Kept quiet — no plate, matching the arrows. */
-.sb-lb-counter {
-  position: absolute;
-  top: 12px;
-  right: auto;
-  left: 12px;
-  padding: 0;
-  background: none;
-  border: 0;
-  font: var(--meta);
-  letter-spacing: var(--ls-tag);
-  color: var(--fg-muted);
-  filter: drop-shadow(0 1px 2px rgba(244, 241, 234, 0.9));
 }
 
 /* The current carousel slide is activatable, so its image sits inside a
