@@ -3,7 +3,7 @@ import {
   collectPostImages,
   indexOfImage,
   toLightboxSlides,
-  wrapIndex,
+  clampIndex,
 } from '@/lib/lightbox-slides';
 
 function container(html: string): HTMLElement {
@@ -12,17 +12,23 @@ function container(html: string): HTMLElement {
   return element;
 }
 
-describe('wrapIndex', () => {
-  it('wraps at both ends, matching ProjectFrame.go', () => {
-    // ProjectFrame pages with `(next + slides.length) % slides.length`; these
-    // are the only inputs it can produce (current ± 1) and both must agree.
-    expect(wrapIndex(3, 3)).toBe(0);
-    expect(wrapIndex(-1, 3)).toBe(2);
-    expect(wrapIndex(1, 3)).toBe(1);
+describe('clampIndex', () => {
+  it('stops at both ends instead of wrapping', () => {
+    // ProjectFrame and ImageLightbox both page by current ± 1, so these are
+    // the only inputs either can produce and both must agree. Paging past the
+    // last image holds on the last image rather than returning to the first.
+    expect(clampIndex(3, 3)).toBe(2);
+    expect(clampIndex(-1, 3)).toBe(0);
+    expect(clampIndex(1, 3)).toBe(1);
+  });
+
+  it('leaves in-range positions untouched', () => {
+    expect(clampIndex(0, 3)).toBe(0);
+    expect(clampIndex(2, 3)).toBe(2);
   });
 
   it('returns 0 for an empty group rather than NaN', () => {
-    expect(wrapIndex(1, 0)).toBe(0);
+    expect(clampIndex(1, 0)).toBe(0);
   });
 });
 

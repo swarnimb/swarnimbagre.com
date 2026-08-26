@@ -64,9 +64,22 @@
   transform: none;
 }
 
+/* Self-contained since the carousel dropped its own counter: the card shows
+   three or four images at a glance and did not need one, but full screen the
+   viewer has lost that context and a position readout still earns its place.
+   Kept quiet — no plate, matching the arrows. */
 .sb-lb-counter {
+  position: absolute;
+  top: 12px;
   right: auto;
   left: 12px;
+  padding: 0;
+  background: none;
+  border: 0;
+  font: var(--meta);
+  letter-spacing: var(--ls-tag);
+  color: var(--fg-muted);
+  filter: drop-shadow(0 1px 2px rgba(244, 241, 234, 0.9));
 }
 
 /* The current carousel slide is activatable, so its image sits inside a

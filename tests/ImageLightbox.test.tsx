@@ -86,7 +86,7 @@ describe('ProjectFrame — full-screen viewer', () => {
     expect(screen.getByRole('button', { name: 'Close the image viewer for Thing' })).toBeTruthy();
   });
 
-  it('wraps with the arrow keys exactly as the carousel does', () => {
+  it('stops at both ends with the arrow keys exactly as the carousel does', () => {
     render(
       <ProjectFrame
         media={[mediaItem({ imageAfterUrl: 'https://example.com/after.jpg', imageAfterAlt: 'after' })]}
@@ -94,8 +94,13 @@ describe('ProjectFrame — full-screen viewer', () => {
       />,
     );
     fireEvent.click(openControl(1));
+    // Paging back from the first image holds there rather than jumping to the
+    // last: on a set this small a wrap reads as a glitch, not as navigation.
     fireEvent.keyDown(document, { key: 'ArrowLeft' });
-    // Wrapping backwards from the first image lands on the last one.
+    expect(screen.getByRole('dialog').textContent).toContain('1 / 2');
+    // ...and paging forward past the last holds on the last.
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
+    fireEvent.keyDown(document, { key: 'ArrowRight' });
     expect(screen.getByRole('dialog').textContent).toContain('2 / 2');
   });
 
@@ -109,7 +114,9 @@ describe('ProjectFrame — full-screen viewer', () => {
     fireEvent.click(openControl(1));
     fireEvent.keyDown(document, { key: 'ArrowRight' });
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.getByText('2 / 2')).toBeTruthy();
+    // The carousel no longer draws a visible counter, so its position is read
+    // from the live region that announces the same thing to screen readers.
+    expect(screen.getByText(/Image 2 of 2/)).toBeTruthy();
   });
 
   it('does not open the viewer when the click is the tail of a swipe', () => {

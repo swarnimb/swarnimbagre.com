@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   SWIPE_THRESHOLD_PX,
-  wrapIndex,
+  clampIndex,
   type LightboxSlide,
 } from '@/lib/lightbox-slides';
 import { isPinchZoomed, trapTab } from '@/lib/lightbox-dom';
@@ -86,7 +86,7 @@ export function ImageLightbox({
   });
 
   function show(next: number) {
-    const index = wrapIndex(next, slides.length);
+    const index = clampIndex(next, slides.length);
     setCurrent(index);
     onIndexChange?.(index);
   }
@@ -169,7 +169,7 @@ export function ImageLightbox({
       </button>
       {multi && (
         <>
-          <span className="sb-counter sb-lb-counter">
+          <span className="sb-lb-counter">
             {current + 1} / {slides.length}
           </span>
           <span className="sb-live" aria-live="polite" aria-atomic="true">
@@ -180,6 +180,7 @@ export function ImageLightbox({
             className="sb-arrow sb-arrow--prev"
             aria-label={`Previous image of ${label}`}
             onClick={() => show(current - 1)}
+            disabled={current === 0}
           >
             <CarouselChevron direction="prev" />
           </button>
@@ -188,6 +189,7 @@ export function ImageLightbox({
             className="sb-arrow sb-arrow--next"
             aria-label={`Next image of ${label}`}
             onClick={() => show(current + 1)}
+            disabled={current === slides.length - 1}
           >
             <CarouselChevron direction="next" />
           </button>

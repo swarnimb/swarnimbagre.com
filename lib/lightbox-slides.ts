@@ -38,17 +38,24 @@ export interface CarouselSlide {
 }
 
 /**
- * The wrapping bound shared by the carousel and the viewer. Two different
- * bound behaviours on the same set of images would be a defect, not a
- * preference, so `ProjectFrame.go()` calls this too.
+ * The bound shared by the carousel and the viewer. Two different bound
+ * behaviours on the same set of images would be a defect, not a preference,
+ * so `ProjectFrame.go()` calls this too.
+ *
+ * Clamps rather than wraps. Paging past the last image used to land back on
+ * the first, which reads as a glitch on a set of three or four: the viewer
+ * cannot tell whether they reached the end or the thing jumped. Stopping at
+ * the edge lets the arrows go disabled and makes the extent obvious.
  *
  * @param index Requested position, which may sit outside the range.
  * @param count Number of slides in the group.
  * @returns A position inside `[0, count)`; `0` for an empty group.
  */
-export function wrapIndex(index: number, count: number): number {
+export function clampIndex(index: number, count: number): number {
   if (count <= 0) return 0;
-  return ((index % count) + count) % count;
+  if (index < 0) return 0;
+  if (index > count - 1) return count - 1;
+  return index;
 }
 
 /**

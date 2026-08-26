@@ -9,7 +9,7 @@ import {
   SWIPE_THRESHOLD_PX,
   toLightboxSlides,
   toSlides,
-  wrapIndex,
+  clampIndex,
 } from '@/lib/lightbox-slides';
 import { useRestoreFocus } from '@/lib/use-restore-focus';
 
@@ -65,7 +65,9 @@ export function ProjectFrame({
   // `sourceIndex` is what maps one back onto the other.
   const openable = toLightboxSlides(slides);
   const multi = slides.length > 1;
-  const go = (next: number) => setCurrent(wrapIndex(next, slides.length));
+  const go = (next: number) => setCurrent(clampIndex(next, slides.length));
+  const atStart = current === 0;
+  const atEnd = current === slides.length - 1;
 
   function onTouchStart(event: React.TouchEvent) {
     touchStartX.current = event.touches[0]?.clientX ?? null;
@@ -146,10 +148,6 @@ export function ProjectFrame({
 
       {multi && (
         <>
-          <span className="sb-counter">
-            {current + 1} / {slides.length}
-          </span>
-
           {/*
             The counter above is the sighted viewer's position indicator. A
             screen reader gets nothing from it, because paging the track moves
@@ -168,6 +166,7 @@ export function ProjectFrame({
             className="sb-arrow sb-arrow--prev"
             aria-label={`Previous image of ${title}`}
             onClick={() => go(current - 1)}
+            disabled={atStart}
           >
             <CarouselChevron direction="prev" />
           </button>
@@ -176,6 +175,7 @@ export function ProjectFrame({
             className="sb-arrow sb-arrow--next"
             aria-label={`Next image of ${title}`}
             onClick={() => go(current + 1)}
+            disabled={atEnd}
           >
             <CarouselChevron direction="next" />
           </button>
